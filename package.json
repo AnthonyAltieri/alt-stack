@@ -1,5 +1,5 @@
 {
-  "name": "ts-starter",
+  "name": "altstack",
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
@@ -7,14 +7,12 @@
     "dev": "turbo run dev",
     "lint": "oxlint packages apps",
     "lint:fix": "oxlint packages apps --fix",
-    "format": "oxfmt packages apps",
-    "format:check": "oxfmt packages apps --check",
+    "format": "oxlint packages apps --fix",
+    "format:check": "oxlint packages apps",
     "check-types": "turbo run check-types"
   },
   "devDependencies": {
-    "oxfmt": "^0.5.0",
     "oxlint": "^1.24.0",
-    "prettier": "^3.6.2",
     "turbo": "^2.5.8",
     "typescript": "5.9.2"
   },
