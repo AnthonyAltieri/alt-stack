@@ -7,45 +7,55 @@ Follow the tRPC authorization pattern for type-safe protected routes. The middle
 The recommended way to create protected routes is using reusable procedures:
 
 ```typescript
-import { createRouter, createServer } from "@repo/server";
+import { init, createServer } from "@repo/server";
 import { z } from "zod";
 
 interface AppContext {
   user: { id: string; name: string } | null;
 }
 
-const router = createRouter<AppContext>();
+const factory = init<AppContext>();
+const router = factory.router();
 
 // Create reusable procedures
-const publicProcedure = router.procedure;
-const protectedProcedure = router.procedure.use(
-  async function isAuthed(opts) {
-    const { ctx } = opts;
-    if (!ctx.user) {
-      throw ctx.error({
-        error: {
-          code: "UNAUTHORIZED" as const,
-          message: "Authentication required",
+const publicProcedure = factory.procedure;
+const protectedProcedure = factory.procedure
+  .errors({
+    401: z.object({
+      error: z.object({
+        code: z.literal("UNAUTHORIZED"),
+        message: z.string(),
+      }),
+    }),
+  })
+  .use(
+    async function isAuthed(opts) {
+      const { ctx } = opts;
+      if (!ctx.user) {
+        throw ctx.error({
+          error: {
+            code: "UNAUTHORIZED" as const,
+            message: "Authentication required",
+          },
+        });
+      }
+      return opts.next({
+        ctx: {
+          user: ctx.user,
         },
       });
     }
-    return opts.next({
-      ctx: {
-        user: ctx.user,
-      },
-    });
-  }
-);
+  );
 
 // Use procedures to create routes
-publicProcedure
+publicProcedure.on(router)
   .get("/hello", {
     input: {},
     output: z.string(),
   })
   .handler(() => "hello world");
 
-protectedProcedure
+protectedProcedure.on(router)
   .get("/secret", {
     input: {},
     output: z.object({
@@ -66,10 +76,11 @@ See the [Reusable Procedures guide](/core-concepts/reusable-procedures) for more
 The middleware can narrow the context type by passing an updated context to `next()`:
 
 ```typescript
-import { createRouter } from "@repo/server";
+import { init } from "@repo/server";
 import { z } from "zod";
 
-const protectedRouter = createRouter<AppContext>();
+const factory = init<AppContext>();
+const protectedRouter = factory.router();
 
 // You can reuse this middleware pattern for any procedure
 protectedRouter
@@ -154,7 +165,8 @@ const requireAuth = createMiddleware<AppContext>(async ({ ctx, next }) => {
 });
 
 // Use on router level (protects all routes)
-const protectedRouter = createRouter<AppContext>()
+const factory = init<AppContext>();
+const protectedRouter = factory.router()
   .use(requireAuth)
   .get("/profile", {
     input: {},
@@ -181,7 +193,8 @@ const protectedRouter = createRouter<AppContext>()
   });
 
 // Or use on procedure level (protects specific routes)
-const router = createRouter<AppContext>()
+const factory = init<AppContext>();
+const router = factory.router()
   .get("/public", {
     input: {},
     output: z.object({ message: z.string() }),
@@ -296,7 +309,8 @@ const requireRole = (role: "admin" | "user" | "moderator") => {
 };
 
 // Usage
-const adminRouter = createRouter<AppContext>()
+const factory = init<AppContext>();
+const adminRouter = factory.router()
   .use(requireRole("admin"))
   .get("/admin/users", {
     input: {},

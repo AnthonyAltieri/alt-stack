@@ -21,9 +21,7 @@ function normalizePrefix(prefix: string): string {
   return normalized.endsWith("/") ? normalized.slice(0, -1) : normalized;
 }
 
-export class Router<
-  TCustomContext extends Record<string, unknown> = Record<string, never>,
-> {
+export class Router<TCustomContext extends object = Record<string, never>> {
   private procedures: Procedure<
     InputConfig,
     z.ZodTypeAny | undefined,
@@ -194,7 +192,7 @@ export class Router<
 }
 
 export function createRouter<
-  TCustomContext extends Record<string, unknown> = Record<string, never>,
+  TCustomContext extends object = Record<string, never>,
 >(
   config?: Record<string, Router<TCustomContext> | Router<TCustomContext>[]>,
 ): Router<TCustomContext> {
@@ -202,7 +200,7 @@ export function createRouter<
 }
 
 export function mergeRouters<
-  TCustomContext extends Record<string, unknown> = Record<string, never>,
+  TCustomContext extends object = Record<string, never>,
 >(...routers: Router<TCustomContext>[]): Router<TCustomContext> {
   const mergedRouter = new Router<TCustomContext>();
   for (const router of routers) {

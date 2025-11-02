@@ -8,10 +8,11 @@ First, ensure your server generates an OpenAPI spec and Request/Response types:
 
 ```typescript
 // server.ts
-import { createRouter, createServer, generateOpenAPISpec } from "@repo/server";
+import { init, createServer, generateOpenAPISpec } from "@repo/server";
 import { z } from "zod";
 
-const router = createRouter()
+const factory = init();
+const router = factory.router()
   .get("/users/{id}", {
     input: {
       params: z.object({ id: z.string() }),

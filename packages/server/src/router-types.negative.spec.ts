@@ -96,7 +96,7 @@ const testNonExistentProperty = <T extends typeof createRouter>(router: T) => {
     })
     .handler((ctx) => {
       // @ts-expect-error - 'name' doesn't exist in input
-      const name: string = ctx.input.name;
+      const _name: string = ctx.input.name;
       return { id: ctx.input.id };
     });
 };
@@ -114,7 +114,7 @@ const testWrongTypeAssignment = <T extends typeof createRouter>(router: T) => {
     })
     .handler((ctx) => {
       // @ts-expect-error - ctx.input.id is string, not number
-      const id: number = ctx.input.id;
+      const _id: number = ctx.input.id;
       return { id: ctx.input.id };
     });
 };

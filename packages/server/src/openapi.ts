@@ -503,7 +503,7 @@ function convertProceduresToOpenAPIPaths<
 // ============================================================================
 
 export function generateOpenAPISpec<
-  TCustomContext extends Record<string, unknown> = Record<string, never>,
+  TCustomContext extends object = Record<string, never>,
 >(
   config: Record<string, Router<TCustomContext> | Router<TCustomContext>[]>,
   options: GenerateOpenAPISpecOptions = {},
@@ -606,7 +606,7 @@ const SWAGGER_UI_HTML = `<!DOCTYPE html>
 </html>`;
 
 export function createDocsRouter<
-  TCustomContext extends Record<string, unknown> = Record<string, never>,
+  TCustomContext extends object = Record<string, never>,
 >(
   config: Record<string, Router<TCustomContext> | Router<TCustomContext>[]>,
   options: CreateDocsRouterOptions = {},

@@ -5,10 +5,11 @@ Get started with a simple example that demonstrates the core concepts.
 ## Basic Example
 
 ```typescript
-import { createRouter, createServer } from "@repo/server";
+import { init, createServer } from "@repo/server";
 import { z } from "zod";
 
-const router = createRouter()
+const factory = init();
+const router = factory.router()
   .get("/users/{id}", {
     input: {
       params: z.object({

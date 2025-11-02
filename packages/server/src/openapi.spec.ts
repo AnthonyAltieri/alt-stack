@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  createRouter,
+  init,
   generateOpenAPISpec,
   createDocsRouter,
   createServer,
@@ -9,7 +9,8 @@ import { z } from "zod";
 
 describe("generateOpenAPISpec", () => {
   it("should generate OpenAPI spec for a simple GET route", () => {
-    const router = createRouter()
+    const t = init();
+    const router = t.router()
       .get("/test", {
         input: {},
         output: z.object({
@@ -33,7 +34,8 @@ describe("generateOpenAPISpec", () => {
   });
 
   it("should generate OpenAPI spec with custom info", () => {
-    const router = createRouter().get("/test", {
+    const t = init();
+    const router = t.router().get("/test", {
       input: {},
       output: z.string(),
     }).handler(() => "test");
@@ -53,7 +55,8 @@ describe("generateOpenAPISpec", () => {
   });
 
   it("should handle path parameters", () => {
-    const router = createRouter()
+    const t = init();
+    const router = t.router()
       .get("/users/{id}", {
         input: {
           params: z.object({
@@ -81,7 +84,8 @@ describe("generateOpenAPISpec", () => {
   });
 
   it("should handle query parameters", () => {
-    const router = createRouter()
+    const t = init();
+    const router = t.router()
       .get("/search", {
         input: {
           query: z.object({
@@ -104,7 +108,8 @@ describe("generateOpenAPISpec", () => {
   });
 
   it("should handle request body for POST", () => {
-    const router = createRouter()
+    const t = init();
+    const router = t.router()
       .post("/users", {
         input: {
           body: z.object({
@@ -131,7 +136,8 @@ describe("generateOpenAPISpec", () => {
   });
 
   it("should handle request body for PUT", () => {
-    const router = createRouter()
+    const t = init();
+    const router = t.router()
       .put("/users/{id}", {
         input: {
           params: z.object({
@@ -152,7 +158,8 @@ describe("generateOpenAPISpec", () => {
   });
 
   it("should handle request body for PATCH", () => {
-    const router = createRouter()
+    const t = init();
+    const router = t.router()
       .patch("/users/{id}", {
         input: {
           params: z.object({
@@ -173,7 +180,8 @@ describe("generateOpenAPISpec", () => {
   });
 
   it("should handle error responses", () => {
-    const router = createRouter()
+    const t = init();
+    const router = t.router()
       .get("/users/{id}", {
         input: {
           params: z.object({
@@ -209,7 +217,8 @@ describe("generateOpenAPISpec", () => {
   });
 
   it("should handle routes without output schema", () => {
-    const router = createRouter()
+    const t = init();
+    const router = t.router()
       .get("/test", {
         input: {},
       })
@@ -223,7 +232,8 @@ describe("generateOpenAPISpec", () => {
   });
 
   it("should handle routes without input schema", () => {
-    const router = createRouter()
+    const t = init();
+    const router = t.router()
       .get("/test", {
         input: {},
         output: z.string(),
@@ -237,7 +247,8 @@ describe("generateOpenAPISpec", () => {
   });
 
   it("should handle DELETE method", () => {
-    const router = createRouter()
+    const t = init();
+    const router = t.router()
       .delete("/users/{id}", {
         input: {
           params: z.object({
@@ -258,14 +269,15 @@ describe("generateOpenAPISpec", () => {
   });
 
   it("should handle multiple routers with prefixes", () => {
-    const usersRouter = createRouter()
+    const t = init();
+    const usersRouter = t.router()
       .get("/", {
         input: {},
         output: z.array(z.object({ id: z.string() })),
       })
       .handler(() => []);
 
-    const postsRouter = createRouter()
+    const postsRouter = t.router()
       .get("/", {
         input: {},
         output: z.array(z.object({ id: z.string() })),
@@ -282,7 +294,8 @@ describe("generateOpenAPISpec", () => {
   });
 
   it("should handle multiple operations on same path", () => {
-    const router = createRouter()
+    const t = init();
+    const router = t.router()
       .get("/items/{id}", {
         input: {
           params: z.object({
@@ -323,12 +336,13 @@ describe("generateOpenAPISpec", () => {
   });
 
   it("should handle array of routers", () => {
-    const router1 = createRouter().get("/route1", {
+    const t = init();
+    const router1 = t.router().get("/route1", {
       input: {},
       output: z.string(),
     }).handler(() => "test");
 
-    const router2 = createRouter().get("/route2", {
+    const router2 = t.router().get("/route2", {
       input: {},
       output: z.string(),
     }).handler(() => "test");
@@ -342,7 +356,8 @@ describe("generateOpenAPISpec", () => {
   });
 
   it("should handle complex nested object schemas", () => {
-    const router = createRouter()
+    const t = init();
+    const router = t.router()
       .post("/users", {
         input: {
           body: z.object({
@@ -378,7 +393,8 @@ describe("generateOpenAPISpec", () => {
   });
 
   it("should generate named schemas in components with $ref references", () => {
-    const router = createRouter()
+    const t = init();
+    const router = t.router()
       .get("/users/{id}", {
         input: {
           params: z.object({
@@ -431,7 +447,8 @@ describe("generateOpenAPISpec", () => {
   });
 
   it("should handle optional parameters correctly", () => {
-    const router = createRouter()
+    const t = init();
+    const router = t.router()
       .get("/search", {
         input: {
           query: z.object({
@@ -457,7 +474,8 @@ describe("generateOpenAPISpec", () => {
   });
 
   it("should generate correct operation IDs", () => {
-    const router = createRouter()
+    const t = init();
+    const router = t.router()
       .get("/users", {
         input: {},
         output: z.array(z.object({ id: z.string() })),
@@ -490,7 +508,8 @@ describe("generateOpenAPISpec", () => {
   });
 
   it("should handle routes with both params and query", () => {
-    const router = createRouter()
+    const t = init();
+    const router = t.router()
       .get("/users/{id}", {
         input: {
           params: z.object({
@@ -517,7 +536,8 @@ describe("generateOpenAPISpec", () => {
   });
 
   it("should handle empty router", () => {
-    const router = createRouter();
+    const t = init();
+    const router = t.router();
     const spec = generateOpenAPISpec({ api: router });
 
     expect(spec.openapi).toBe("3.0.0");
@@ -527,7 +547,8 @@ describe("generateOpenAPISpec", () => {
 
 describe("createDocsRouter", () => {
   it("should create a router that serves OpenAPI spec as JSON", () => {
-    const router = createRouter()
+    const t = init();
+    const router = t.router()
       .get("/test", {
         input: {},
         output: z.object({ id: z.string() }),
@@ -549,7 +570,8 @@ describe("createDocsRouter", () => {
   });
 
   it("should create a router that serves docs HTML", () => {
-    const router = createRouter()
+    const t = init();
+    const router = t.router()
       .get("/test", {
         input: {},
         output: z.object({ id: z.string() }),
@@ -566,7 +588,8 @@ describe("createDocsRouter", () => {
   });
 
   it("should allow custom OpenAPI path", () => {
-    const router = createRouter()
+    const t = init();
+    const router = t.router()
       .get("/test", {
         input: {},
         output: z.object({ id: z.string() }),
@@ -586,7 +609,8 @@ describe("createDocsRouter", () => {
   });
 
   it("should serve docs at root path (mount prefix determines final path)", () => {
-    const router = createRouter()
+    const t = init();
+    const router = t.router()
       .get("/test", {
         input: {},
         output: z.object({ id: z.string() }),
@@ -602,7 +626,8 @@ describe("createDocsRouter", () => {
   });
 
   it("should disable docs when enableDocs is false", () => {
-    const router = createRouter()
+    const t = init();
+    const router = t.router()
       .get("/test", {
         input: {},
         output: z.object({ id: z.string() }),
@@ -627,7 +652,8 @@ describe("createDocsRouter", () => {
   });
 
   it("should work with createServer integration", () => {
-    const apiRouter = createRouter()
+    const t = init();
+    const apiRouter = t.router()
       .get("/users", {
         input: {},
         output: z.array(z.object({ id: z.string() })),
@@ -651,7 +677,8 @@ describe("createDocsRouter", () => {
   });
 
   it("should generate correct OpenAPI spec in the handler", async () => {
-    const router = createRouter()
+    const t = init();
+    const router = t.router()
       .get("/test/{id}", {
         input: {
           params: z.object({
@@ -696,7 +723,8 @@ describe("createDocsRouter", () => {
   });
 
   it("should use custom title and version in OpenAPI spec", async () => {
-    const router = createRouter()
+    const t = init();
+    const router = t.router()
       .get("/test", {
         input: {},
         output: z.object({ id: z.string() }),

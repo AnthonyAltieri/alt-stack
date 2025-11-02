@@ -7,7 +7,7 @@ Apply middleware at router-level or procedure-level to add cross-cutting concern
 Apply middleware to all routes in a router. Use `createMiddleware` helper to ensure proper context typing:
 
 ```typescript
-import { createRouter, createServer, createMiddleware } from "@repo/server";
+import { init, createServer, createMiddleware } from "@repo/server";
 import { z } from "zod";
 
 interface AppContext {
@@ -24,7 +24,8 @@ const authMiddleware = createMiddleware<AppContext>(async ({ ctx, next }) => {
   return next({ ctx: { user } });
 });
 
-const router = createRouter<AppContext>()
+const factory = init<AppContext>();
+const router = factory.router()
   .use(authMiddleware)
   .get("/profile", {
     input: {},
@@ -51,7 +52,8 @@ const app = createServer({
 Apply middleware to specific routes:
 
 ```typescript
-const router = createRouter()
+const factory = init();
+const router = factory.router()
   .post("/users", {
     input: {
       body: z.object({
@@ -101,7 +103,8 @@ const authMiddleware = createMiddleware<AppContext>(async ({ ctx, next }) => {
 Chain multiple middleware on the same router or procedure:
 
 ```typescript
-const router = createRouter<AppContext>()
+const factory = init<AppContext>();
+const router = factory.router()
   .use(loggerMiddleware)
   .use(authMiddleware)
   .get("/profile", { /* ... */ })
@@ -115,11 +118,12 @@ Middleware executes in the order they're defined.
 Create reusable procedures with middleware to reuse authentication or other middleware across multiple routes. See the [Reusable Procedures guide](/core-concepts/reusable-procedures) for details:
 
 ```typescript
-const router = createRouter<AppContext>();
+const factory = init<AppContext>();
+const router = factory.router();
 
 // Create reusable procedures
-const publicProcedure = router.procedure;
-const protectedProcedure = router.procedure.use(async (opts) => {
+const publicProcedure = factory.procedure;
+const protectedProcedure = factory.procedure.use(async (opts) => {
   // Auth middleware
   if (!opts.ctx.user) {
     return new Response("Unauthorized", { status: 401 });
@@ -128,7 +132,7 @@ const protectedProcedure = router.procedure.use(async (opts) => {
 });
 
 // Use procedures
-publicProcedure.get("/hello", { input: {}, output: z.string() }).handler(() => "hello");
-protectedProcedure.get("/profile", { input: {}, output: UserSchema }).handler((ctx) => ctx.user!);
+publicProcedure.on(router).get("/hello", { input: {}, output: z.string() }).handler(() => "hello");
+protectedProcedure.on(router).get("/profile", { input: {}, output: UserSchema }).handler((ctx) => ctx.user!);
 ```
 

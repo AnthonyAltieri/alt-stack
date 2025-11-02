@@ -1,4 +1,4 @@
-export { createRouter, mergeRouters } from "./router.js";
+export { mergeRouters } from "./router.js";
 export { createServer } from "./server.js";
 export { init } from "./init.js";
 export * from "./errors.js";

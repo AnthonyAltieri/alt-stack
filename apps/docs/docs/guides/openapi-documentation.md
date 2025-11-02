@@ -7,10 +7,11 @@ Automatically generate and serve OpenAPI 3.0 documentation for your API using Zo
 Use `createDocsRouter` to automatically generate and serve OpenAPI documentation:
 
 ```typescript
-import { createRouter, createServer, createDocsRouter } from "@repo/server";
+import { init, createServer, createDocsRouter } from "@repo/server";
 import { z } from "zod";
 
-const apiRouter = createRouter()
+const factory = init();
+const apiRouter = factory.router()
   .get("/users/{id}", {
     input: {
       params: z.object({
@@ -63,17 +64,18 @@ const app = createServer({
 ```
 
 Now you can access:
-- OpenAPI JSON spec at `/docs/openapi.json`
-- Interactive Swagger UI at `/docs`
+- OpenAPI JSON spec at `/docs/openapi.json` (path determined by mount prefix `docs`)
+- Interactive Swagger UI at `/docs` (path determined by mount prefix `docs`)
 
 ## Basic Usage
 
 The `createDocsRouter` function takes the same router configuration as `createServer`, allowing it to automatically discover all your routes and generate complete OpenAPI documentation.
 
 ```typescript
-import { createRouter, createDocsRouter } from "@repo/server";
+import { init, createDocsRouter } from "@repo/server";
 
-const router = createRouter()
+const factory = init();
+const router = factory.router()
   .get("/items", {
     input: {},
     output: z.array(z.object({ id: z.string() })),
@@ -96,9 +98,9 @@ const docsRouter = createDocsRouter(
     version: "2.0.0",
     description: "A simple todo API",
     
-    // Custom paths
-    openapiPath: "/api/openapi.json", // Default: "/openapi.json"
-    docsPath: "/api-docs", // Default: "/docs"
+    // Custom OpenAPI spec path
+    openapiPath: "openapi.json", // Default: "openapi.json"
+    // Note: The docs path is determined by the router prefix when mounting in createServer
     
     // Enable/disable interactive docs
     enableDocs: true, // Default: true
@@ -111,9 +113,10 @@ const docsRouter = createDocsRouter(
 The docs router integrates seamlessly with `createServer`:
 
 ```typescript
-import { createRouter, createServer, createDocsRouter } from "@repo/server";
+import { init, createServer, createDocsRouter } from "@repo/server";
 
-const todosRouter = createRouter()
+const factory = init();
+const todosRouter = factory.router()
   .get("/", {
     input: {},
     output: z.array(z.object({ id: z.string(), title: z.string() })),
@@ -175,10 +178,11 @@ The OpenAPI documentation automatically includes:
 Here's a complete example with multiple route types:
 
 ```typescript
-import { createRouter, createServer, createDocsRouter } from "@repo/server";
+import { init, createServer, createDocsRouter } from "@repo/server";
 import { z } from "zod";
 
-const router = createRouter()
+const factory = init();
+const router = factory.router()
   // GET with path and query params
   .get("/users/{id}", {
     input: {

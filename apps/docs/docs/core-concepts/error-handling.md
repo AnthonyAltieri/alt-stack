@@ -7,7 +7,8 @@ Define error schemas and use type-safe `ctx.error()` for controlled error respon
 Specify error schemas in the route configuration:
 
 ```typescript
-const router = createRouter()
+const factory = init();
+const router = factory.router()
   .get("/users/{id}", {
     input: {
       params: z.object({
@@ -50,7 +51,8 @@ const router = createRouter()
 Define multiple error status codes:
 
 ```typescript
-const router = createRouter()
+const factory = init();
+const router = factory.router()
   .post("/users", {
     input: {
       body: z.object({

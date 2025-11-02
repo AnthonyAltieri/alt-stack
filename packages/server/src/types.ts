@@ -94,7 +94,7 @@ export interface BaseContext {
 export type TypedContext<
   TInput extends InputConfig,
   TErrors extends Record<number, z.ZodTypeAny> | undefined,
-  TCustomContext extends Record<string, unknown> = Record<string, never>,
+  TCustomContext extends object = Record<string, never>,
 > = BaseContext &
   TCustomContext & {
     input: InferInput<TInput>;
@@ -133,7 +133,7 @@ export type Middleware<
  * ```
  */
 export function createMiddleware<
-  TCustomContext extends Record<string, unknown>,
+  TCustomContext extends object,
 >(
   middleware: Middleware<
     BaseContext & TCustomContext,

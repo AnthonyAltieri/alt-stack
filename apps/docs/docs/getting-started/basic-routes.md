@@ -7,7 +7,8 @@ Define routes using the fluent builder API with support for all HTTP methods.
 The router supports all standard HTTP methods:
 
 ```typescript
-const router = createRouter()
+const factory = init();
+const router = factory.router()
   .get("/users", { /* config */ })
   .post("/users", { /* config */ })
   .put("/users/{id}", { /* config */ })
@@ -20,7 +21,8 @@ const router = createRouter()
 Extract parameters from the URL path:
 
 ```typescript
-const router = createRouter()
+const factory = init();
+const router = factory.router()
   .get("/users/{id}", {
     input: {
       params: z.object({
@@ -46,7 +48,8 @@ const router = createRouter()
 Extract query string parameters:
 
 ```typescript
-const router = createRouter()
+const factory = init();
+const router = factory.router()
   .get("/users", {
     input: {
       query: z.object({
@@ -71,7 +74,8 @@ const router = createRouter()
 Handle POST/PUT/PATCH requests with typed request bodies:
 
 ```typescript
-const router = createRouter()
+const factory = init();
+const router = factory.router()
   .post("/users", {
     input: {
       body: z.object({
@@ -98,7 +102,8 @@ const router = createRouter()
 You can combine params, query, and body:
 
 ```typescript
-const router = createRouter()
+const factory = init();
+const router = factory.router()
   .put("/users/{id}", {
     input: {
       params: z.object({

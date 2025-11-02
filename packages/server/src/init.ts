@@ -1,7 +1,7 @@
 import { Router, mergeRouters } from "./router.js";
 import { BaseProcedureBuilder } from "./procedure.js";
 
-export interface InitResult<TCustomContext extends Record<string, unknown> = Record<string, never>> {
+export interface InitResult<TCustomContext extends object = Record<string, never>> {
   router: (
     config?: Record<string, Router<TCustomContext> | Router<TCustomContext>[]>,
   ) => Router<TCustomContext>;
@@ -14,7 +14,7 @@ export interface InitResult<TCustomContext extends Record<string, unknown> = Rec
   >;
 }
 
-export function init<TCustomContext extends Record<string, unknown> = Record<string, never>>(): InitResult<TCustomContext> {
+export function init<TCustomContext extends object = Record<string, never>>(): InitResult<TCustomContext> {
   return {
     router: (
       config?: Record<string, Router<TCustomContext> | Router<TCustomContext>[]>,

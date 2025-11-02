@@ -1,4 +1,4 @@
-import type { z } from "zod";
+import { z } from "zod";
 import type {
   InferOutput,
   InputConfig,
@@ -14,7 +14,7 @@ export interface Procedure<
   TInput extends InputConfig,
   TOutput extends z.ZodTypeAny | undefined,
   TErrors extends Record<number, z.ZodTypeAny> | undefined,
-  TCustomContext extends Record<string, unknown> = Record<string, never>,
+  TCustomContext extends object = Record<string, never>,
 > {
   method: string;
   path: string;
@@ -52,11 +52,32 @@ type MergeInputConfig<
   body: TOverride["body"] extends z.ZodTypeAny ? TOverride["body"] : TBase["body"];
 };
 
+// Helper type to merge error configs - unions schemas when status codes overlap
+// When both procedure and route define the same status code, the schemas are unioned
+// This allows ctx.error() to accept either schema for that status code
+type MergeErrors<
+  TBaseErrors extends Record<number, z.ZodTypeAny> | undefined,
+  TRouteErrors extends Record<number, z.ZodTypeAny> | undefined,
+> = TRouteErrors extends Record<number, z.ZodTypeAny>
+  ? TBaseErrors extends Record<number, z.ZodTypeAny>
+    ? {
+        // Union all keys from both error configs
+        [K in keyof TBaseErrors | keyof TRouteErrors]: K extends keyof TBaseErrors
+          ? K extends keyof TRouteErrors
+            ? TBaseErrors[K] | TRouteErrors[K] // Both define this status code - union the schemas
+            : TBaseErrors[K] // Only base defines this status code
+          : K extends keyof TRouteErrors
+            ? TRouteErrors[K] // Only route defines this status code
+            : never;
+      }
+    : TRouteErrors
+  : TBaseErrors;
+
 export class BaseProcedureBuilder<
   TBaseInput extends InputConfig = { params?: never; query?: never; body?: never },
   TBaseOutput extends z.ZodTypeAny | undefined = undefined,
   TBaseErrors extends Record<number, z.ZodTypeAny> | undefined = undefined,
-  TCustomContext extends Record<string, unknown> = Record<string, never>,
+  TCustomContext extends object = Record<string, never>,
   TRouter = unknown,
 > {
   private _baseConfig: {
@@ -188,6 +209,25 @@ export class BaseProcedureBuilder<
     );
   }
 
+  on<TRouterProvided extends {
+    register: (
+      proc: Procedure<
+        InputConfig,
+        z.ZodTypeAny | undefined,
+        Record<number, z.ZodTypeAny> | undefined,
+        TCustomContext
+      >,
+    ) => void;
+  }>(
+    router: TRouterProvided,
+  ): BaseProcedureBuilder<TBaseInput, TBaseOutput, TBaseErrors, TCustomContext, TRouterProvided> {
+    return new BaseProcedureBuilder<TBaseInput, TBaseOutput, TBaseErrors, TCustomContext, TRouterProvided>(
+      this._baseConfig,
+      this._middleware,
+      router,
+    );
+  }
+
   get<
     TPath extends string,
     TInput extends InputConfig,
@@ -196,40 +236,82 @@ export class BaseProcedureBuilder<
   >(
     path: TPath,
     config: ProcedureConfig<TPath, TInput, TOutput, TErrors>,
+    router?: TRouter & {
+      register: (
+        proc: Procedure<
+          InputConfig,
+          z.ZodTypeAny | undefined,
+          Record<number, z.ZodTypeAny> | undefined,
+          TCustomContext
+        >,
+      ) => void;
+    },
   ): ProcedureBuilder<
     MergeInputConfig<TBaseInput, TInput>,
     TOutput extends z.ZodTypeAny ? TOutput : TBaseOutput,
-    TErrors extends Record<number, z.ZodTypeAny> ? TErrors : TBaseErrors,
+    MergeErrors<TBaseErrors, TErrors>,
     TCustomContext,
     TRouter
   > {
-    if (!this.router) {
-      throw new Error("Procedure must be created from a router");
+    const targetRouter = router ?? this.router;
+    if (!targetRouter) {
+      throw new Error("Procedure must be created from a router or a router must be provided");
     }
+    // Merge errors: union schemas when status codes overlap
+    const mergedErrors = config.errors || this._baseConfig.errors
+      ? (() => {
+          const base = this._baseConfig.errors || {};
+          const route = config.errors || {};
+          const merged: Record<number, z.ZodTypeAny> = {};
+          
+          // Add all base errors
+          for (const [code, schema] of Object.entries(base)) {
+            merged[Number(code)] = schema as z.ZodTypeAny;
+          }
+          
+          // Add route errors, unioning if status code already exists
+          for (const [code, routeSchema] of Object.entries(route)) {
+            const statusCode = Number(code);
+            const baseSchema = merged[statusCode];
+            if (baseSchema) {
+              // Both procedure and route define this status code - union the schemas
+              merged[statusCode] = z.union([
+                baseSchema,
+                routeSchema as z.ZodTypeAny,
+              ]) as z.ZodTypeAny;
+            } else {
+              // Only route defines this status code
+              merged[statusCode] = routeSchema as z.ZodTypeAny;
+            }
+          }
+          
+          return merged;
+        })()
+      : undefined;
     const mergedConfig = {
       input: { ...this._baseConfig.input, ...config.input } as MergeInputConfig<
         TBaseInput,
         TInput
       >,
       output: config.output ?? this._baseConfig.output,
-      errors: config.errors ?? this._baseConfig.errors,
+      errors: mergedErrors,
     };
     // Convert middleware types to match ProcedureBuilder's expected type
     const typedMiddleware = this._middleware.map((mw) =>
       mw as unknown as (opts: {
-        ctx: TypedContext<MergeInputConfig<TBaseInput, TInput>, TErrors extends Record<number, z.ZodTypeAny> ? TErrors : TBaseErrors, TCustomContext>;
+        ctx: TypedContext<MergeInputConfig<TBaseInput, TInput>, MergeErrors<TBaseErrors, TErrors>, TCustomContext>;
         next: (opts?: {
-          ctx: Partial<TypedContext<MergeInputConfig<TBaseInput, TInput>, TErrors extends Record<number, z.ZodTypeAny> ? TErrors : TBaseErrors, TCustomContext>>;
-        }) => Promise<TypedContext<MergeInputConfig<TBaseInput, TInput>, TErrors extends Record<number, z.ZodTypeAny> ? TErrors : TBaseErrors, TCustomContext> | Response>;
-      }) => Promise<TypedContext<MergeInputConfig<TBaseInput, TInput>, TErrors extends Record<number, z.ZodTypeAny> ? TErrors : TBaseErrors, TCustomContext> | Response>
+          ctx: Partial<TypedContext<MergeInputConfig<TBaseInput, TInput>, MergeErrors<TBaseErrors, TErrors>, TCustomContext>>;
+        }) => Promise<TypedContext<MergeInputConfig<TBaseInput, TInput>, MergeErrors<TBaseErrors, TErrors>, TCustomContext> | Response>;
+      }) => Promise<TypedContext<MergeInputConfig<TBaseInput, TInput>, MergeErrors<TBaseErrors, TErrors>, TCustomContext> | Response>
     );
     const builder = new ProcedureBuilder<
       MergeInputConfig<TBaseInput, TInput>,
       TOutput extends z.ZodTypeAny ? TOutput : TBaseOutput,
-      TErrors extends Record<number, z.ZodTypeAny> ? TErrors : TBaseErrors,
+      MergeErrors<TBaseErrors, TErrors>,
       TCustomContext,
       TRouter
-    >("GET", convertPathToHono(path), mergedConfig, this.router, typedMiddleware);
+    >("GET", convertPathToHono(path), mergedConfig, targetRouter, typedMiddleware);
     return builder;
   }
 
@@ -241,39 +323,81 @@ export class BaseProcedureBuilder<
   >(
     path: TPath,
     config: ProcedureConfig<TPath, TInput, TOutput, TErrors>,
+    router?: TRouter & {
+      register: (
+        proc: Procedure<
+          InputConfig,
+          z.ZodTypeAny | undefined,
+          Record<number, z.ZodTypeAny> | undefined,
+          TCustomContext
+        >,
+      ) => void;
+    },
   ): ProcedureBuilder<
     MergeInputConfig<TBaseInput, TInput>,
     TOutput extends z.ZodTypeAny ? TOutput : TBaseOutput,
-    TErrors extends Record<number, z.ZodTypeAny> ? TErrors : TBaseErrors,
+    MergeErrors<TBaseErrors, TErrors>,
     TCustomContext,
     TRouter
   > {
-    if (!this.router) {
-      throw new Error("Procedure must be created from a router");
+    const targetRouter = router ?? this.router;
+    if (!targetRouter) {
+      throw new Error("Procedure must be created from a router or a router must be provided");
     }
+    // Merge errors: union schemas when status codes overlap
+    const mergedErrors = config.errors || this._baseConfig.errors
+      ? (() => {
+          const base = this._baseConfig.errors || {};
+          const route = config.errors || {};
+          const merged: Record<number, z.ZodTypeAny> = {};
+          
+          // Add all base errors
+          for (const [code, schema] of Object.entries(base)) {
+            merged[Number(code)] = schema as z.ZodTypeAny;
+          }
+          
+          // Add route errors, unioning if status code already exists
+          for (const [code, routeSchema] of Object.entries(route)) {
+            const statusCode = Number(code);
+            const baseSchema = merged[statusCode];
+            if (baseSchema) {
+              // Both procedure and route define this status code - union the schemas
+              merged[statusCode] = z.union([
+                baseSchema,
+                routeSchema as z.ZodTypeAny,
+              ]) as z.ZodTypeAny;
+            } else {
+              // Only route defines this status code
+              merged[statusCode] = routeSchema as z.ZodTypeAny;
+            }
+          }
+          
+          return merged;
+        })()
+      : undefined;
     const mergedConfig = {
       input: { ...this._baseConfig.input, ...config.input } as MergeInputConfig<
         TBaseInput,
         TInput
       >,
       output: config.output ?? this._baseConfig.output,
-      errors: config.errors ?? this._baseConfig.errors,
+      errors: mergedErrors,
     };
     const typedMiddleware = this._middleware.map((mw) =>
       mw as unknown as (opts: {
-        ctx: TypedContext<MergeInputConfig<TBaseInput, TInput>, TErrors extends Record<number, z.ZodTypeAny> ? TErrors : TBaseErrors, TCustomContext>;
+        ctx: TypedContext<MergeInputConfig<TBaseInput, TInput>, MergeErrors<TBaseErrors, TErrors>, TCustomContext>;
         next: (opts?: {
-          ctx: Partial<TypedContext<MergeInputConfig<TBaseInput, TInput>, TErrors extends Record<number, z.ZodTypeAny> ? TErrors : TBaseErrors, TCustomContext>>;
-        }) => Promise<TypedContext<MergeInputConfig<TBaseInput, TInput>, TErrors extends Record<number, z.ZodTypeAny> ? TErrors : TBaseErrors, TCustomContext> | Response>;
-      }) => Promise<TypedContext<MergeInputConfig<TBaseInput, TInput>, TErrors extends Record<number, z.ZodTypeAny> ? TErrors : TBaseErrors, TCustomContext> | Response>
+          ctx: Partial<TypedContext<MergeInputConfig<TBaseInput, TInput>, MergeErrors<TBaseErrors, TErrors>, TCustomContext>>;
+        }) => Promise<TypedContext<MergeInputConfig<TBaseInput, TInput>, MergeErrors<TBaseErrors, TErrors>, TCustomContext> | Response>;
+      }) => Promise<TypedContext<MergeInputConfig<TBaseInput, TInput>, MergeErrors<TBaseErrors, TErrors>, TCustomContext> | Response>
     );
     const builder = new ProcedureBuilder<
       MergeInputConfig<TBaseInput, TInput>,
       TOutput extends z.ZodTypeAny ? TOutput : TBaseOutput,
-      TErrors extends Record<number, z.ZodTypeAny> ? TErrors : TBaseErrors,
+      MergeErrors<TBaseErrors, TErrors>,
       TCustomContext,
       TRouter
-    >("POST", convertPathToHono(path), mergedConfig, this.router, typedMiddleware);
+    >("POST", convertPathToHono(path), mergedConfig, targetRouter, typedMiddleware);
     return builder;
   }
 
@@ -285,39 +409,81 @@ export class BaseProcedureBuilder<
   >(
     path: TPath,
     config: ProcedureConfig<TPath, TInput, TOutput, TErrors>,
+    router?: TRouter & {
+      register: (
+        proc: Procedure<
+          InputConfig,
+          z.ZodTypeAny | undefined,
+          Record<number, z.ZodTypeAny> | undefined,
+          TCustomContext
+        >,
+      ) => void;
+    },
   ): ProcedureBuilder<
     MergeInputConfig<TBaseInput, TInput>,
     TOutput extends z.ZodTypeAny ? TOutput : TBaseOutput,
-    TErrors extends Record<number, z.ZodTypeAny> ? TErrors : TBaseErrors,
+    MergeErrors<TBaseErrors, TErrors>,
     TCustomContext,
     TRouter
   > {
-    if (!this.router) {
-      throw new Error("Procedure must be created from a router");
+    const targetRouter = router ?? this.router;
+    if (!targetRouter) {
+      throw new Error("Procedure must be created from a router or a router must be provided");
     }
+    // Merge errors: union schemas when status codes overlap
+    const mergedErrors = config.errors || this._baseConfig.errors
+      ? (() => {
+          const base = this._baseConfig.errors || {};
+          const route = config.errors || {};
+          const merged: Record<number, z.ZodTypeAny> = {};
+          
+          // Add all base errors
+          for (const [code, schema] of Object.entries(base)) {
+            merged[Number(code)] = schema as z.ZodTypeAny;
+          }
+          
+          // Add route errors, unioning if status code already exists
+          for (const [code, routeSchema] of Object.entries(route)) {
+            const statusCode = Number(code);
+            const baseSchema = merged[statusCode];
+            if (baseSchema) {
+              // Both procedure and route define this status code - union the schemas
+              merged[statusCode] = z.union([
+                baseSchema,
+                routeSchema as z.ZodTypeAny,
+              ]) as z.ZodTypeAny;
+            } else {
+              // Only route defines this status code
+              merged[statusCode] = routeSchema as z.ZodTypeAny;
+            }
+          }
+          
+          return merged;
+        })()
+      : undefined;
     const mergedConfig = {
       input: { ...this._baseConfig.input, ...config.input } as MergeInputConfig<
         TBaseInput,
         TInput
       >,
       output: config.output ?? this._baseConfig.output,
-      errors: config.errors ?? this._baseConfig.errors,
+      errors: mergedErrors,
     };
     const typedMiddleware = this._middleware.map((mw) =>
       mw as unknown as (opts: {
-        ctx: TypedContext<MergeInputConfig<TBaseInput, TInput>, TErrors extends Record<number, z.ZodTypeAny> ? TErrors : TBaseErrors, TCustomContext>;
+        ctx: TypedContext<MergeInputConfig<TBaseInput, TInput>, MergeErrors<TBaseErrors, TErrors>, TCustomContext>;
         next: (opts?: {
-          ctx: Partial<TypedContext<MergeInputConfig<TBaseInput, TInput>, TErrors extends Record<number, z.ZodTypeAny> ? TErrors : TBaseErrors, TCustomContext>>;
-        }) => Promise<TypedContext<MergeInputConfig<TBaseInput, TInput>, TErrors extends Record<number, z.ZodTypeAny> ? TErrors : TBaseErrors, TCustomContext> | Response>;
-      }) => Promise<TypedContext<MergeInputConfig<TBaseInput, TInput>, TErrors extends Record<number, z.ZodTypeAny> ? TErrors : TBaseErrors, TCustomContext> | Response>
+          ctx: Partial<TypedContext<MergeInputConfig<TBaseInput, TInput>, MergeErrors<TBaseErrors, TErrors>, TCustomContext>>;
+        }) => Promise<TypedContext<MergeInputConfig<TBaseInput, TInput>, MergeErrors<TBaseErrors, TErrors>, TCustomContext> | Response>;
+      }) => Promise<TypedContext<MergeInputConfig<TBaseInput, TInput>, MergeErrors<TBaseErrors, TErrors>, TCustomContext> | Response>
     );
     const builder = new ProcedureBuilder<
       MergeInputConfig<TBaseInput, TInput>,
       TOutput extends z.ZodTypeAny ? TOutput : TBaseOutput,
-      TErrors extends Record<number, z.ZodTypeAny> ? TErrors : TBaseErrors,
+      MergeErrors<TBaseErrors, TErrors>,
       TCustomContext,
       TRouter
-    >("PUT", convertPathToHono(path), mergedConfig, this.router, typedMiddleware);
+    >("PUT", convertPathToHono(path), mergedConfig, targetRouter, typedMiddleware);
     return builder;
   }
 
@@ -329,39 +495,81 @@ export class BaseProcedureBuilder<
   >(
     path: TPath,
     config: ProcedureConfig<TPath, TInput, TOutput, TErrors>,
+    router?: TRouter & {
+      register: (
+        proc: Procedure<
+          InputConfig,
+          z.ZodTypeAny | undefined,
+          Record<number, z.ZodTypeAny> | undefined,
+          TCustomContext
+        >,
+      ) => void;
+    },
   ): ProcedureBuilder<
     MergeInputConfig<TBaseInput, TInput>,
     TOutput extends z.ZodTypeAny ? TOutput : TBaseOutput,
-    TErrors extends Record<number, z.ZodTypeAny> ? TErrors : TBaseErrors,
+    MergeErrors<TBaseErrors, TErrors>,
     TCustomContext,
     TRouter
   > {
-    if (!this.router) {
-      throw new Error("Procedure must be created from a router");
+    const targetRouter = router ?? this.router;
+    if (!targetRouter) {
+      throw new Error("Procedure must be created from a router or a router must be provided");
     }
+    // Merge errors: union schemas when status codes overlap
+    const mergedErrors = config.errors || this._baseConfig.errors
+      ? (() => {
+          const base = this._baseConfig.errors || {};
+          const route = config.errors || {};
+          const merged: Record<number, z.ZodTypeAny> = {};
+          
+          // Add all base errors
+          for (const [code, schema] of Object.entries(base)) {
+            merged[Number(code)] = schema as z.ZodTypeAny;
+          }
+          
+          // Add route errors, unioning if status code already exists
+          for (const [code, routeSchema] of Object.entries(route)) {
+            const statusCode = Number(code);
+            const baseSchema = merged[statusCode];
+            if (baseSchema) {
+              // Both procedure and route define this status code - union the schemas
+              merged[statusCode] = z.union([
+                baseSchema,
+                routeSchema as z.ZodTypeAny,
+              ]) as z.ZodTypeAny;
+            } else {
+              // Only route defines this status code
+              merged[statusCode] = routeSchema as z.ZodTypeAny;
+            }
+          }
+          
+          return merged;
+        })()
+      : undefined;
     const mergedConfig = {
       input: { ...this._baseConfig.input, ...config.input } as MergeInputConfig<
         TBaseInput,
         TInput
       >,
       output: config.output ?? this._baseConfig.output,
-      errors: config.errors ?? this._baseConfig.errors,
+      errors: mergedErrors,
     };
     const typedMiddleware = this._middleware.map((mw) =>
       mw as unknown as (opts: {
-        ctx: TypedContext<MergeInputConfig<TBaseInput, TInput>, TErrors extends Record<number, z.ZodTypeAny> ? TErrors : TBaseErrors, TCustomContext>;
+        ctx: TypedContext<MergeInputConfig<TBaseInput, TInput>, MergeErrors<TBaseErrors, TErrors>, TCustomContext>;
         next: (opts?: {
-          ctx: Partial<TypedContext<MergeInputConfig<TBaseInput, TInput>, TErrors extends Record<number, z.ZodTypeAny> ? TErrors : TBaseErrors, TCustomContext>>;
-        }) => Promise<TypedContext<MergeInputConfig<TBaseInput, TInput>, TErrors extends Record<number, z.ZodTypeAny> ? TErrors : TBaseErrors, TCustomContext> | Response>;
-      }) => Promise<TypedContext<MergeInputConfig<TBaseInput, TInput>, TErrors extends Record<number, z.ZodTypeAny> ? TErrors : TBaseErrors, TCustomContext> | Response>
+          ctx: Partial<TypedContext<MergeInputConfig<TBaseInput, TInput>, MergeErrors<TBaseErrors, TErrors>, TCustomContext>>;
+        }) => Promise<TypedContext<MergeInputConfig<TBaseInput, TInput>, MergeErrors<TBaseErrors, TErrors>, TCustomContext> | Response>;
+      }) => Promise<TypedContext<MergeInputConfig<TBaseInput, TInput>, MergeErrors<TBaseErrors, TErrors>, TCustomContext> | Response>
     );
     const builder = new ProcedureBuilder<
       MergeInputConfig<TBaseInput, TInput>,
       TOutput extends z.ZodTypeAny ? TOutput : TBaseOutput,
-      TErrors extends Record<number, z.ZodTypeAny> ? TErrors : TBaseErrors,
+      MergeErrors<TBaseErrors, TErrors>,
       TCustomContext,
       TRouter
-    >("PATCH", convertPathToHono(path), mergedConfig, this.router, typedMiddleware);
+    >("PATCH", convertPathToHono(path), mergedConfig, targetRouter, typedMiddleware);
     return builder;
   }
 
@@ -373,39 +581,81 @@ export class BaseProcedureBuilder<
   >(
     path: TPath,
     config: ProcedureConfig<TPath, TInput, TOutput, TErrors>,
+    router?: TRouter & {
+      register: (
+        proc: Procedure<
+          InputConfig,
+          z.ZodTypeAny | undefined,
+          Record<number, z.ZodTypeAny> | undefined,
+          TCustomContext
+        >,
+      ) => void;
+    },
   ): ProcedureBuilder<
     MergeInputConfig<TBaseInput, TInput>,
     TOutput extends z.ZodTypeAny ? TOutput : TBaseOutput,
-    TErrors extends Record<number, z.ZodTypeAny> ? TErrors : TBaseErrors,
+    MergeErrors<TBaseErrors, TErrors>,
     TCustomContext,
     TRouter
   > {
-    if (!this.router) {
-      throw new Error("Procedure must be created from a router");
+    const targetRouter = router ?? this.router;
+    if (!targetRouter) {
+      throw new Error("Procedure must be created from a router or a router must be provided");
     }
+    // Merge errors: union schemas when status codes overlap
+    const mergedErrors = config.errors || this._baseConfig.errors
+      ? (() => {
+          const base = this._baseConfig.errors || {};
+          const route = config.errors || {};
+          const merged: Record<number, z.ZodTypeAny> = {};
+          
+          // Add all base errors
+          for (const [code, schema] of Object.entries(base)) {
+            merged[Number(code)] = schema as z.ZodTypeAny;
+          }
+          
+          // Add route errors, unioning if status code already exists
+          for (const [code, routeSchema] of Object.entries(route)) {
+            const statusCode = Number(code);
+            const baseSchema = merged[statusCode];
+            if (baseSchema) {
+              // Both procedure and route define this status code - union the schemas
+              merged[statusCode] = z.union([
+                baseSchema,
+                routeSchema as z.ZodTypeAny,
+              ]) as z.ZodTypeAny;
+            } else {
+              // Only route defines this status code
+              merged[statusCode] = routeSchema as z.ZodTypeAny;
+            }
+          }
+          
+          return merged;
+        })()
+      : undefined;
     const mergedConfig = {
       input: { ...this._baseConfig.input, ...config.input } as MergeInputConfig<
         TBaseInput,
         TInput
       >,
       output: config.output ?? this._baseConfig.output,
-      errors: config.errors ?? this._baseConfig.errors,
+      errors: mergedErrors,
     };
     const typedMiddleware = this._middleware.map((mw) =>
       mw as unknown as (opts: {
-        ctx: TypedContext<MergeInputConfig<TBaseInput, TInput>, TErrors extends Record<number, z.ZodTypeAny> ? TErrors : TBaseErrors, TCustomContext>;
+        ctx: TypedContext<MergeInputConfig<TBaseInput, TInput>, MergeErrors<TBaseErrors, TErrors>, TCustomContext>;
         next: (opts?: {
-          ctx: Partial<TypedContext<MergeInputConfig<TBaseInput, TInput>, TErrors extends Record<number, z.ZodTypeAny> ? TErrors : TBaseErrors, TCustomContext>>;
-        }) => Promise<TypedContext<MergeInputConfig<TBaseInput, TInput>, TErrors extends Record<number, z.ZodTypeAny> ? TErrors : TBaseErrors, TCustomContext> | Response>;
-      }) => Promise<TypedContext<MergeInputConfig<TBaseInput, TInput>, TErrors extends Record<number, z.ZodTypeAny> ? TErrors : TBaseErrors, TCustomContext> | Response>
+          ctx: Partial<TypedContext<MergeInputConfig<TBaseInput, TInput>, MergeErrors<TBaseErrors, TErrors>, TCustomContext>>;
+        }) => Promise<TypedContext<MergeInputConfig<TBaseInput, TInput>, MergeErrors<TBaseErrors, TErrors>, TCustomContext> | Response>;
+      }) => Promise<TypedContext<MergeInputConfig<TBaseInput, TInput>, MergeErrors<TBaseErrors, TErrors>, TCustomContext> | Response>
     );
     const builder = new ProcedureBuilder<
       MergeInputConfig<TBaseInput, TInput>,
       TOutput extends z.ZodTypeAny ? TOutput : TBaseOutput,
-      TErrors extends Record<number, z.ZodTypeAny> ? TErrors : TBaseErrors,
+      MergeErrors<TBaseErrors, TErrors>,
       TCustomContext,
       TRouter
-    >("DELETE", convertPathToHono(path), mergedConfig, this.router, typedMiddleware);
+    >("DELETE", convertPathToHono(path), mergedConfig, targetRouter, typedMiddleware);
     return builder;
   }
 }
@@ -414,7 +664,7 @@ export class ProcedureBuilder<
   TInput extends InputConfig,
   TOutput extends z.ZodTypeAny | undefined,
   TErrors extends Record<number, z.ZodTypeAny> | undefined,
-  TCustomContext extends Record<string, unknown> = Record<string, never>,
+  TCustomContext extends object = Record<string, never>,
   TRouter = unknown,
 > {
   private _config: {

@@ -1,10 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { createRouter, createServer, init } from "../src/index.js";
+import { createServer, init } from "../src/index.js";
 import { z } from "zod";
 
 describe("server", () => {
   it("should create a router and server", () => {
-    const router = createRouter()
+    const t = init();
+    const router = t
+      .router()
       .get("/test/{id}", {
         input: {
           params: z.object({
@@ -25,7 +27,9 @@ describe("server", () => {
   });
 
   it("should handle errors", () => {
-    const router = createRouter()
+    const t = init();
+    const router = t
+      .router()
       .get("/test/{id}", {
         input: {
           params: z.object({
@@ -61,7 +65,9 @@ describe("server", () => {
   });
 
   it("should combine routers", () => {
-    const userRouter = createRouter()
+    const t = init();
+    const userRouter = t
+      .router()
       .get("/{id}", {
         input: {
           params: z.object({
@@ -76,7 +82,8 @@ describe("server", () => {
         return { id: ctx.input.id };
       });
 
-    const postsRouter = createRouter()
+    const postsRouter = t
+      .router()
       .get("/", {
         input: {},
         output: z.array(z.object({ id: z.string() })),
@@ -97,32 +104,32 @@ describe("server", () => {
       user?: { id: string; name: string };
     }
 
-    const router = createRouter<AppContext>();
+    const t = init<AppContext>();
+    const router = t.router();
 
     // Create a protected procedure with middleware
-    const protectedProcedure = router.procedure.use(
-      async function isAuthed(opts) {
-        const { ctx } = opts;
-        if (!ctx.user) {
-          return new Response("Unauthorized", { status: 401 });
-        }
-        // Narrow context - pass updated context with non-null user
-        return opts.next({
-          ctx: {
-            user: ctx.user,
-          },
-        });
-      },
-    );
+    const protectedProcedure = t.procedure.use(async function isAuthed(opts) {
+      const { ctx } = opts;
+      if (!ctx.user) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+      // Narrow context - pass updated context with non-null user
+      return opts.next({
+        ctx: {
+          user: ctx.user,
+        },
+      });
+    });
 
     protectedProcedure
+      .on(router)
       .get("/secret", {
         input: {},
         output: z.object({
           secret: z.string(),
         }),
       })
-      .handler((ctx) => {
+      .handler((_ctx) => {
         // ctx.user should be available here (though TS may not fully track it)
         return {
           secret: "sauce",
@@ -166,7 +173,7 @@ describe("server", () => {
           secret: z.string(),
         }),
       })
-      .handler((ctx) => {
+      .handler((_ctx) => {
         return {
           secret: "sauce",
         };
@@ -181,28 +188,28 @@ describe("server", () => {
       user?: { id: string; name: string };
     }
 
-    const router = createRouter<AppContext>();
+    const t = init<AppContext>();
+    const router = t.router();
 
     // Public procedure (no middleware)
-    const publicProcedure = router.procedure;
+    const publicProcedure = t.procedure;
 
     // Protected procedure (with auth middleware)
-    const protectedProcedure = router.procedure.use(
-      async function isAuthed(opts) {
-        const { ctx } = opts;
-        if (!ctx.user) {
-          return new Response("Unauthorized", { status: 401 });
-        }
-        return opts.next({
-          ctx: {
-            user: ctx.user,
-          },
-        });
-      },
-    );
+    const protectedProcedure = t.procedure.use(async function isAuthed(opts) {
+      const { ctx } = opts;
+      if (!ctx.user) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+      return opts.next({
+        ctx: {
+          user: ctx.user,
+        },
+      });
+    });
 
     // Use both procedures
     publicProcedure
+      .on(router)
       .get("/hello", {
         input: {},
         output: z.string(),
@@ -212,6 +219,7 @@ describe("server", () => {
       });
 
     protectedProcedure
+      .on(router)
       .get("/profile", {
         input: {},
         output: z.object({
@@ -219,7 +227,7 @@ describe("server", () => {
           name: z.string(),
         }),
       })
-      .handler((ctx) => {
+      .handler((_ctx) => {
         return {
           id: "1",
           name: "Test User",

@@ -7,7 +7,7 @@ Define custom context (similar to tRPC) to pass data like database connections o
 Create a context type and a function to create it:
 
 ```typescript
-import { createRouter, createServer } from "@repo/server";
+import { init, createServer } from "@repo/server";
 import type { Context } from "hono";
 import { z } from "zod";
 
@@ -26,8 +26,9 @@ async function createContext(c: Context): Promise<AppContext> {
   };
 }
 
-// Create router with context type
-const router = createRouter<AppContext>()
+// Create factory and router with context type
+const factory = init<AppContext>();
+const router = factory.router()
   .get("/profile", {
     input: {},
     output: z.object({
@@ -60,7 +61,8 @@ const app = createServer({
 Access the raw Hono context for advanced use cases:
 
 ```typescript
-const router = createRouter()
+const factory = init();
+const router = factory.router()
   .get("/users/{id}", {
     input: {
       params: z.object({

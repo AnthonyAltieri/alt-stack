@@ -136,7 +136,8 @@ async function createContext(c: Context): Promise<AppContext> {
   };
 }
 
-const router = createRouter<AppContext>()
+const factory = init<AppContext>();
+const router = factory.router()
   .get("/profile", {
     input: {},
     output: z.object({

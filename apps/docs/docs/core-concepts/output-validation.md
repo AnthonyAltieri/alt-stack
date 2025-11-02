@@ -5,7 +5,8 @@ Optionally validate response data to ensure handlers return the expected structu
 ## Basic Usage
 
 ```typescript
-const router = createRouter()
+const factory = init();
+const router = factory.router()
   .get("/users/{id}", {
     input: {
       params: z.object({
@@ -37,7 +38,8 @@ const router = createRouter()
 Output validation is optional. If you omit the `output` field, no validation is performed, but you lose type safety for the return value:
 
 ```typescript
-const router = createRouter()
+const factory = init();
+const router = factory.router()
   .get("/users/{id}", {
     input: {
       params: z.object({

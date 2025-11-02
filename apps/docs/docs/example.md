@@ -7,7 +7,7 @@ A complete example demonstrating the full-stack type safety of Altstack. This ex
 Let's build a type-safe Todo API. Notice how TypeScript infers everything from our Zod schemas:
 
 ```typescript
-import { createRouter, createServer } from "@repo/server";
+import { init, createServer } from "@repo/server";
 import { z } from "zod";
 
 // Define app context
@@ -15,7 +15,8 @@ interface AppContext {
   user: User | null;
 }
 
-const router = createRouter<AppContext>()
+const factory = init<AppContext>();
+const router = factory.router()
   // Get all todos with optional filtering
   .get("/", {
     input: {
@@ -127,7 +128,8 @@ The power of Altstack is in the type inference. Let's see what TypeScript knows:
 Altstack supports context narrowing through middleware (tRPC-style pattern):
 
 ```typescript
-const protectedRouter = createRouter<AppContext>()
+const factory = init<AppContext>();
+const protectedRouter = factory.router()
   .get("/profile", {
     input: {},
     output: z.object({

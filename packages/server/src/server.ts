@@ -30,7 +30,7 @@ function normalizePath(prefix: string, path: string): string {
 }
 
 export function createServer<
-  TCustomContext extends Record<string, unknown> = Record<string, never>,
+  TCustomContext extends object = Record<string, never>,
 >(
   config: Record<string, Router<TCustomContext> | Router<TCustomContext>[]>,
   options?: {

@@ -13,7 +13,8 @@ Inputs can be validated from three sources:
 ## Example
 
 ```typescript
-const router = createRouter()
+const factory = init();
+const router = factory.router()
   .get("/users/{id}", {
     input: {
       params: z.object({

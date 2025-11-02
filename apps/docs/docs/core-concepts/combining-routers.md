@@ -5,11 +5,13 @@ Organize your API by combining multiple routers in `createServer`. The object ke
 ## Basic Router Combination
 
 ```typescript
-import { createRouter, createServer } from "@repo/server";
+import { init, createServer } from "@repo/server";
 import { z } from "zod";
 
+const factory = init();
+
 // User routes
-const userRouter = createRouter()
+const userRouter = factory.router()
   .get("/{id}", {
     input: {
       params: z.object({
@@ -39,7 +41,7 @@ const userRouter = createRouter()
   });
 
 // Post routes
-const postsRouter = createRouter()
+const postsRouter = factory.router()
   .get("/", {
     input: {},
     output: z.array(
@@ -79,14 +81,12 @@ This is useful for versioning APIs or organizing routes by feature.
 
 ## Nested Routes
 
-The path prefix system allows natural nesting:
+To achieve nested routes like `/api/v1/*` and `/api/v2/*`, use compound prefixes:
 
 ```typescript
 const app = createServer({
-  api: {
-    v1: v1Router,
-    v2: v2Router,
-  },
+  "api/v1": v1Router,
+  "api/v2": v2Router,
   admin: adminRouter,
 });
 ```
