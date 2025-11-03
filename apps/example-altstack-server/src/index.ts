@@ -1,15 +1,16 @@
-import { cors } from "hono/cors";
 import {
+  createDocsRouter,
   createRouter,
   createServer,
-  createDocsRouter,
-  type TypedContext,
   type BaseContext,
+  createMiddleware,
+  init,
 } from "@repo/server";
-import { z } from "zod";
 import type { Context } from "hono";
-import { todoStore, TodoSchema } from "./store.js";
+import { cors } from "hono/cors";
+import { z } from "zod";
 import { auth, getAuthUser, type User } from "./auth.js";
+import { TodoSchema, todoStore } from "./store.js";
 
 // Define app context with user from Better Auth
 interface AppContext extends Record<string, unknown> {
@@ -24,29 +25,32 @@ async function createContext(c: Context): Promise<AppContext> {
   };
 }
 
+// Middleware for logging requests
+const loggingMiddleware = createMiddleware<AppContext>(
+  async (opts: {
+    ctx: BaseContext & AppContext;
+    next: (opts?: {
+      ctx: Partial<BaseContext & AppContext>;
+    }) => Promise<(BaseContext & AppContext) | Response>;
+  }) => {
+    const { ctx, next } = opts;
+    const start = performance.now();
+    const result = await next();
+    const duration = performance.now() - start;
+    const method = ctx.hono.req.method;
+    let path: string;
+    try {
+      path = new URL(ctx.hono.req.url).pathname;
+    } catch {
+      path = ctx.hono.req.url.split("?")[0] ?? ctx.hono.req.url;
+    }
+    console.log(`[${method}] ${path} - ${duration.toFixed(2)}ms`);
+    return result;
+  },
+);
+
 const router = createRouter<AppContext>()
-  .use(
-    async (opts: {
-      ctx: BaseContext & AppContext;
-      next: (opts?: {
-        ctx: Partial<BaseContext & AppContext>;
-      }) => Promise<(BaseContext & AppContext) | Response>;
-    }) => {
-      const { ctx, next } = opts;
-      const start = performance.now();
-      const result = await next();
-      const duration = performance.now() - start;
-      const method = ctx.hono.req.method;
-      let path: string;
-      try {
-        path = new URL(ctx.hono.req.url).pathname;
-      } catch {
-        path = ctx.hono.req.url.split("?")[0] ?? ctx.hono.req.url;
-      }
-      console.log(`[${method}] ${path} - ${duration.toFixed(2)}ms`);
-      return result;
-    },
-  )
+  .use(loggingMiddleware)
   .get("/", {
     input: {
       query: z.object({
@@ -199,12 +203,49 @@ const router = createRouter<AppContext>()
     return { success: true };
   });
 
-// Create a reusable protected procedure pattern (tRPC style)
-// Following the pattern from https://trpc.io/docs/server/authorization#option-2-authorize-using-middleware
+// Create a factory for reusable procedures with middleware and error composition
+// This demonstrates how middleware errors compose with route errors
+const factory = init<AppContext>();
+
+// Create a protected procedure with authentication middleware that defines 401 errors
+// These errors will be available to all routes using this procedure
+const protectedProcedure = factory.procedure
+  .errors({
+    401: z.object({
+      error: z.object({
+        code: z.literal("UNAUTHORIZED"),
+        message: z.string(),
+      }),
+    }),
+  })
+  .use(async (opts) => {
+    const { ctx, next } = opts;
+    // Middleware can throw errors defined in the procedure's error config
+    if (!ctx.user) {
+      throw ctx.error({
+        error: {
+          code: "UNAUTHORIZED",
+          message: "Authentication required",
+        },
+      });
+    }
+    // Pass updated context where user is non-null
+    return next({
+      ctx: {
+        user: ctx.user, // user is known to be non-null after the check
+      },
+    });
+  });
+
+// Create protected router
 const protectedRouter = createRouter<AppContext>();
 
-// You can reuse this middleware pattern for any procedure
-protectedRouter
+// Example 1: Route that uses the protected procedure and adds its own errors
+// The route has access to both:
+// - 401 UNAUTHORIZED from the middleware/procedure
+// - 404 NOT_FOUND from the route itself
+protectedProcedure
+  .on(protectedRouter)
   .get("/profile", {
     input: {},
     output: z.object({
@@ -212,86 +253,24 @@ protectedRouter
       email: z.string(),
       name: z.string(),
     }),
+    // Route-specific errors are added to procedure errors
+    // Since the procedure already defines 401, both are available
     errors: {
-      401: z.object({
+      404: z.object({
         error: z.object({
-          code: z.literal("UNAUTHORIZED"),
+          code: z.literal("NOT_FOUND"),
           message: z.string(),
         }),
       }),
     },
   })
-  .use(async function isAuthed(opts: {
-    ctx: TypedContext<
-      { params?: never; query?: never; body?: never },
-      {
-        401: z.ZodObject<{
-          error: z.ZodObject<{
-            code: z.ZodLiteral<"UNAUTHORIZED">;
-            message: z.ZodString;
-          }>;
-        }>;
-      },
-      AppContext
-    >;
-    next: (opts?: {
-      ctx: Partial<
-        TypedContext<
-          { params?: never; query?: never; body?: never },
-          {
-            401: z.ZodObject<{
-              error: z.ZodObject<{
-                code: z.ZodLiteral<"UNAUTHORIZED">;
-                message: z.ZodString;
-              }>;
-            }>;
-          },
-          AppContext
-        >
-      >;
-    }) => Promise<
-      | TypedContext<
-          { params?: never; query?: never; body?: never },
-          {
-            401: z.ZodObject<{
-              error: z.ZodObject<{
-                code: z.ZodLiteral<"UNAUTHORIZED">;
-                message: z.ZodString;
-              }>;
-            }>;
-          },
-          AppContext
-        >
-      | Response
-    >;
-  }) {
-    const { ctx } = opts;
-    // `ctx.user` is nullable
-    if (!ctx.user) {
-      throw opts.ctx.error({
-        error: {
-          code: "UNAUTHORIZED" as const,
-          message: "Authentication required",
-        },
-      });
-    }
-    // ✅ Pass updated context where user is non-null
-    // This allows the context to have user as non-null for subsequent middleware/handlers
-    return opts.next({
-      ctx: {
-        user: ctx.user, // ✅ user value is known to be non-null now
-      },
-    });
-  })
   .handler((ctx) => {
-    // ✅ ctx.user is now known to be non-null after the middleware
-    // The next({ ctx: { user: ... } }) pattern ensures the runtime context has user
-    // Type check needed because TypeScript can't track the narrowing through next()
+    // ctx.user is now non-null thanks to the middleware
+    // We have access to both 401 (from procedure) and 404 (from route) errors
     if (!ctx.user) {
-      // This should never happen due to middleware, but TypeScript needs the check
       throw ctx.error({
         error: {
-          code: "UNAUTHORIZED" as const,
+          code: "UNAUTHORIZED",
           message: "Authentication required",
         },
       });
@@ -300,6 +279,80 @@ protectedRouter
       id: ctx.user.id,
       email: ctx.user.email,
       name: ctx.user.name,
+    };
+  });
+
+// Example 2: Route that uses the protected procedure and adds a different 401 error schema
+// When both procedure and route define the same status code, the schemas are unioned
+// This allows ctx.error() to accept either schema for that status code
+protectedProcedure
+  .on(protectedRouter)
+  .get("/settings", {
+    input: {},
+    output: z.object({
+      id: z.string(),
+      email: z.string(),
+      name: z.string(),
+      preferences: z.object({
+        theme: z.string(),
+        notifications: z.boolean(),
+      }),
+    }),
+    // Route defines a different 401 error schema - they will be unioned
+    errors: {
+      401: z.object({
+        error: z.object({
+          code: z.literal("SESSION_EXPIRED"),
+          message: z.string(),
+          redirect: z.string().url(),
+        }),
+      }),
+      403: z.object({
+        error: z.object({
+          code: z.literal("FORBIDDEN"),
+          message: z.string(),
+        }),
+      }),
+    },
+  })
+  .use(async (opts) => {
+    const { ctx, next } = opts;
+    // Additional middleware can also throw errors
+    // This route can throw:
+    // - 401 with either UNAUTHORIZED (from procedure) or SESSION_EXPIRED (from route, unioned)
+    // - 403 FORBIDDEN (from route)
+    // In a real app, you might check session expiration here
+    if (!ctx.user) {
+      throw ctx.error({
+        error: {
+          code: "SESSION_EXPIRED",
+          message: "Your session has expired",
+          redirect: "https://example.com/login",
+        },
+      });
+    }
+    return next();
+  })
+  .handler((ctx) => {
+    // This handler has access to:
+    // - 401 errors: either UNAUTHORIZED (from procedure) or SESSION_EXPIRED (from route, unioned)
+    // - 403 FORBIDDEN (from route)
+    if (!ctx.user) {
+      throw ctx.error({
+        error: {
+          code: "FORBIDDEN",
+          message: "Access denied",
+        },
+      });
+    }
+    return {
+      id: ctx.user.id,
+      email: ctx.user.email,
+      name: ctx.user.name,
+      preferences: {
+        theme: "dark",
+        notifications: true,
+      },
     };
   });
 
@@ -312,7 +365,7 @@ const docsRouter = createDocsRouter(
   {
     title: "Todo API",
     version: "1.0.0",
-    description: "A simple todo API with authentication",
+    description: "A simple todo API with authentication and error composition",
   },
 );
 
@@ -326,8 +379,8 @@ const app = createServer(
   {
     createContext,
     docs: {
-      path: "/docs", // Path where docs are served (determined by mount prefix "docs")
-      openapiPath: "/docs/openapi.json", // Path to OpenAPI spec
+      path: "/docs",
+      openapiPath: "/docs/openapi.json",
     },
     middleware: {
       "*": {
@@ -336,9 +389,9 @@ const app = createServer(
           origin: process.env.CLIENT_URL || "http://localhost:3000",
           allowHeaders: ["Content-Type", "Authorization"],
           allowMethods: ["POST", "GET", "PUT", "PATCH", "DELETE", "OPTIONS"],
-          credentials: true, // Required for Better Auth cookies
+          credentials: true,
           exposeHeaders: ["Set-Cookie"],
-        }) as any, // Type assertion needed because CORS returns middleware, not handler
+        }) as any,
       },
       "/api/auth/*": {
         methods: ["GET", "POST"],
@@ -366,7 +419,10 @@ console.log(`   GET    /todos/{id}`);
 console.log(`   POST   /todos`);
 console.log(`   PATCH  /todos/{id}`);
 console.log(`   DELETE /todos/{id}`);
-console.log(`   GET    /protected/profile (requires auth)`);
+console.log(`   GET    /auth/profile (requires auth)`);
+console.log(
+  `   GET    /auth/settings (requires auth, demonstrates error composition)`,
+);
 console.log(`   Auth routes: /api/auth/*`);
 console.log(`📚 Documentation:`);
 console.log(`   GET    /docs/openapi.json (OpenAPI spec)`);
