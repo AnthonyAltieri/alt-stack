@@ -57,7 +57,7 @@ const config = {
             label: 'Docs',
           },
           {
-            href: 'https://github.com/your-org/server',
+            href: 'https://github.com/AnthonyAltieri/altstack',
             label: 'GitHub',
             position: 'right',
           },
@@ -84,7 +84,7 @@ const config = {
             items: [
               {
                 label: 'GitHub',
-                href: 'https://github.com/your-org/server',
+                href: 'https://github.com/AnthonyAltieri/altstack',
               },
             ],
           },
