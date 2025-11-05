@@ -314,9 +314,11 @@ jobs:
           
           fs.writeFileSync('bump-results.json', JSON.stringify(results, null, 2));
           console.log('Version bump results:', JSON.stringify(results, null, 2));
+          // Write single-line JSON for GitHub Actions output
+          fs.writeFileSync('bump-results-single.json', JSON.stringify(results));
           EOF
           
-          BUMP_RESULTS=$(cat bump-results.json)
+          BUMP_RESULTS=$(cat bump-results-single.json)
           echo "results=$BUMP_RESULTS" >> $GITHUB_OUTPUT
           
           # Extract package names for publishing
