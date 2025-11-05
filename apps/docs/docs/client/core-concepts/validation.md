@@ -25,7 +25,7 @@ const result = await client.post("/users", {
 If validation fails, the client throws a `ValidationError`:
 
 ```typescript
-import { ValidationError } from "@repo/client";
+import { ValidationError } from "@alt-stack/client";
 
 try {
   await client.get("/users/{id}", {

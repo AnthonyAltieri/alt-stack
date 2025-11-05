@@ -5,7 +5,7 @@ Get started with a simple example that demonstrates the core concepts.
 ## Basic Example
 
 ```typescript
-import { createKafkaRouter, createConsumer } from "@repo/kafka";
+import { createKafkaRouter, createConsumer } from "@alt-stack/kafka";
 import { Kafka } from "kafkajs";
 import { z } from "zod";
 

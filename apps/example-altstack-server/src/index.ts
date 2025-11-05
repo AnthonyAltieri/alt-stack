@@ -5,7 +5,7 @@ import {
   type BaseContext,
   createMiddleware,
   init,
-} from "@repo/server";
+} from "@alt-stack/server";
 import type { Context } from "hono";
 import { cors } from "hono/cors";
 import { z } from "zod";

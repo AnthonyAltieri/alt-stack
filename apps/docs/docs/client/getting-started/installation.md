@@ -3,11 +3,11 @@
 Install the client package and its peer dependencies:
 
 ```bash
-pnpm add @repo/client zod
+pnpm add @alt-stack/client zod
 # or
-npm install @repo/client zod
+npm install @alt-stack/client zod
 # or
-yarn add @repo/client zod
+yarn add @alt-stack/client zod
 ```
 
 ## Peer Dependencies
@@ -18,7 +18,7 @@ The client requires:
 ## Requirements
 
 To use the client, you need:
-1. A server built with `@repo/server` that exposes an OpenAPI spec
+1. A server built with `@alt-stack/server` that exposes an OpenAPI spec
 2. Generated `Request` and `Response` types from your server's OpenAPI spec
 3. The OpenAPI spec object from your server
 

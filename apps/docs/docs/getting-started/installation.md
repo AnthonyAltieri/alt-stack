@@ -3,11 +3,11 @@
 Install the server framework and its peer dependencies:
 
 ```bash
-pnpm add @repo/server hono zod
+pnpm add @alt-stack/server hono zod
 # or
-npm install @repo/server hono zod
+npm install @alt-stack/server hono zod
 # or
-yarn add @repo/server hono zod
+yarn add @alt-stack/server hono zod
 ```
 
 ## Peer Dependencies

@@ -7,7 +7,7 @@ Create reusable procedures with middleware to follow the tRPC pattern. This allo
 Use `init()` to create procedures and routers:
 
 ```typescript
-import { init, createServer } from "@repo/server";
+import { init, createServer } from "@alt-stack/server";
 import { z } from "zod";
 
 interface AppContext {

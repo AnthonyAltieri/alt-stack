@@ -9,7 +9,7 @@ For most applications, applying CORS globally with credentials support works bes
 ```typescript
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { createServer } from "@repo/server";
+import { createServer } from "@alt-stack/server";
 import { auth, getAuthUser } from "./auth.js";
 import { todosRouter } from "./routes/todos.js";
 import type { Context } from "hono";
@@ -59,7 +59,7 @@ Use the `middleware` option in `createServer` to apply global middleware like CO
 
 ```typescript
 import { cors } from "hono/cors";
-import { createServer } from "@repo/server";
+import { createServer } from "@alt-stack/server";
 import { auth } from "./auth.js";
 import { todosRouter } from "./routes/todos.js";
 
@@ -107,7 +107,7 @@ If you need more control, you can still apply CORS manually after `createServer`
 ```typescript
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { createServer } from "@repo/server";
+import { createServer } from "@alt-stack/server";
 import { auth } from "./auth.js";
 import { todosRouter } from "./routes/todos.js";
 
@@ -145,7 +145,7 @@ Apply CORS to server framework routes only:
 ```typescript
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { createServer } from "@repo/server";
+import { createServer } from "@alt-stack/server";
 import { auth } from "./auth.js";
 import { todosRouter } from "./routes/todos.js";
 

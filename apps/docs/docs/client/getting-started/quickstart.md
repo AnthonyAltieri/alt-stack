@@ -8,7 +8,7 @@ First, ensure your server generates an OpenAPI spec and Request/Response types:
 
 ```typescript
 // server.ts
-import { init, createServer, generateOpenAPISpec } from "@repo/server";
+import { init, createServer, generateOpenAPISpec } from "@alt-stack/server";
 import { z } from "zod";
 
 const factory = init();
@@ -45,7 +45,7 @@ Then generate Request and Response types from the OpenAPI spec (see [Server Inte
 
 ```typescript
 // client.ts
-import { createApiClient } from "@repo/client";
+import { createApiClient } from "@alt-stack/client";
 import { Request, Response } from "./generated-types.js";
 
 const client = createApiClient({

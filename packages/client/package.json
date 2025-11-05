@@ -1,5 +1,5 @@
 {
-  "name": "@repo/client",
+  "name": "@alt-stack/client",
   "version": "1.0.0",
   "description": "Type-safe API client that integrates with zod-openapi generated Request/Response objects",
   "type": "module",

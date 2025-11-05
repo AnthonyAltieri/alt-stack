@@ -1,4 +1,4 @@
-# @repo/server
+# @alt-stack/server
 
 A lightweight, type-safe server framework built on Hono with Zod validation. Inspired by tRPC's builder pattern, providing full type inference from a central router definition.
 
@@ -16,11 +16,11 @@ The documentation website is the source of truth for all documentation. The docs
 ## Quick Installation
 
 ```bash
-pnpm add @repo/server hono zod
+pnpm add @alt-stack/server hono zod
 # or
-npm install @repo/server hono zod
+npm install @alt-stack/server hono zod
 # or
-yarn add @repo/server hono zod
+yarn add @alt-stack/server hono zod
 ```
 
 ## Features

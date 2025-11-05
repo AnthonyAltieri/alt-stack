@@ -10,8 +10,8 @@ Altstack is a type-safe full-stack framework with separate server and client pac
 
 Altstack consists of two main packages:
 
-- **`@repo/server`**: A lightweight, type-safe server framework for building APIs
-- **`@repo/client`**: A type-safe API client that works seamlessly with server-generated types
+- **`@alt-stack/server`**: A lightweight, type-safe server framework for building APIs
+- **`@alt-stack/client`**: A type-safe API client that works seamlessly with server-generated types
 
 ## Server Features
 

@@ -1,0 +1,551 @@
+name: Publish Packages
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Run in dry-run mode (no publishing, tagging, or committing)'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          registry-url: 'https://registry.npmjs.org/'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+        continue-on-error: true
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Set dry-run mode
+        id: dry-run
+        run: |
+          DRY_RUN="${{ github.event.inputs.dry_run }}"
+          if [ "$DRY_RUN" == "true" ]; then
+            echo "DRY_RUN=true" >> $GITHUB_ENV
+            echo "dry_run=true" >> $GITHUB_OUTPUT
+            echo "🧪 Running in DRY-RUN mode - no packages will be published, tagged, or committed"
+          else
+            echo "DRY_RUN=false" >> $GITHUB_ENV
+            echo "dry_run=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Detect changed packages
+        id: changed-packages
+        shell: bash
+        run: |
+          node << 'EOF'
+          const { execSync } = require('child_process');
+          const fs = require('fs');
+          const path = require('path');
+          
+          // Get all packages and their directories
+          const packageDirs = fs.readdirSync('packages')
+            .map(dir => path.join('packages', dir))
+            .filter(dir => {
+              const pkgPath = path.join(dir, 'package.json');
+              if (!fs.existsSync(pkgPath)) return false;
+              try {
+                const pkgJson = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+                const name = pkgJson.name;
+                return name && name.startsWith('@alt-stack/') && name !== '@alt-stack/typescript-config';
+              } catch {
+                return false;
+              }
+            });
+          
+          // Get changed files
+          let changedFiles = [];
+          try {
+            changedFiles = execSync('git diff --name-only HEAD^1 HEAD', { encoding: 'utf-8' })
+              .trim()
+              .split('\n')
+              .filter(Boolean);
+          } catch {
+            // If HEAD^1 doesn't exist, check all files
+            changedFiles = execSync('git diff --name-only HEAD', { encoding: 'utf-8' })
+              .trim()
+              .split('\n')
+              .filter(Boolean);
+          }
+          
+          // Also use Turbo to detect changed packages
+          let turboPackages = [];
+          try {
+            const turboOutput = execSync('turbo run build --filter="[HEAD^1]" --dry-run=json', { 
+              encoding: 'utf-8',
+              stdio: ['pipe', 'pipe', 'ignore']
+            });
+            const turboData = JSON.parse(turboOutput);
+            if (turboData.tasks) {
+              turboPackages = turboData.tasks
+                .map(task => task.package)
+                .filter(pkg => pkg && pkg.startsWith('@alt-stack/') && pkg !== '@alt-stack/typescript-config');
+            }
+          } catch {
+            // Turbo detection failed, continue with git-based detection
+          }
+          
+          const changedPackages = new Set();
+          
+          // Add packages detected by Turbo
+          turboPackages.forEach(pkg => changedPackages.add(pkg));
+          
+          // Check git changes for each package
+          for (const pkgDir of packageDirs) {
+            const pkgJson = JSON.parse(fs.readFileSync(path.join(pkgDir, 'package.json'), 'utf-8'));
+            const pkgName = pkgJson.name;
+            
+            if (pkgName === '@alt-stack/typescript-config') continue;
+            
+            // Check if any files in this package changed
+            const hasChanges = changedFiles.some(file => file.startsWith(pkgDir + '/'));
+            
+            if (hasChanges) {
+              changedPackages.add(pkgName);
+            }
+          }
+          
+          const result = Array.from(changedPackages);
+          console.log('Changed packages:', JSON.stringify(result, null, 2));
+          fs.writeFileSync('changed-packages.json', JSON.stringify(result, null, 2));
+          EOF
+
+      - name: Analyze commits and bump versions
+        id: version-bump
+        shell: bash
+        run: |
+          node << 'EOF'
+          const { execSync } = require('child_process');
+          const fs = require('fs');
+          const path = require('path');
+          
+          // Read changed packages
+          let packages = [];
+          try {
+            packages = JSON.parse(fs.readFileSync('changed-packages.json', 'utf-8'));
+          } catch {
+            console.log('No changed packages found');
+            process.exit(0);
+          }
+          
+          if (!Array.isArray(packages) || packages.length === 0) {
+            console.log('No packages changed, skipping version bump');
+            fs.writeFileSync('bump-results.json', '[]');
+            process.exit(0);
+          }
+          
+          const results = [];
+          
+          for (const pkgName of packages) {
+            try {
+              // Get package directory - find it by reading package.json files
+              let pkgDir = null;
+              const packageDirs = fs.readdirSync('packages');
+              for (const dir of packageDirs) {
+                const pkgPath = path.join('packages', dir, 'package.json');
+                if (fs.existsSync(pkgPath)) {
+                  const pkgJson = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+                  if (pkgJson.name === pkgName) {
+                    pkgDir = path.join('packages', dir);
+                    break;
+                  }
+                }
+              }
+              
+              if (!pkgDir) {
+                console.error(`Package ${pkgName} not found`);
+                continue;
+              }
+              
+              const pkgPath = path.join(pkgDir, 'package.json');
+              
+              // Get current version
+              const pkgJson = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+              const currentVersion = pkgJson.version;
+              
+              // Get commits affecting this package since last tag
+              // Try to find last tag for this package
+              let lastTag = null;
+              try {
+                const tags = execSync('git tag --sort=-version:refname', { encoding: 'utf-8' })
+                  .trim()
+                  .split('\n')
+                  .filter(Boolean);
+                
+                // Find tag matching package name pattern
+                const pkgTagPattern = pkgName.replace('@alt-stack/', '').replace('@', '');
+                for (const tag of tags) {
+                  if (tag.includes(pkgTagPattern) || tag.startsWith(pkgName + '@')) {
+                    lastTag = tag;
+                    break;
+                  }
+                }
+              } catch (e) {
+                // No tags found
+              }
+              
+              // Determine commit range
+              let sinceRef = 'HEAD^1';
+              try {
+                execSync('git rev-parse HEAD^1', { stdio: 'ignore' });
+              } catch {
+                // HEAD^1 doesn't exist, use first commit
+                sinceRef = execSync('git rev-list --max-parents=0 HEAD', { encoding: 'utf-8' }).trim();
+              }
+              
+              if (lastTag) {
+                sinceRef = lastTag;
+              }
+              
+              // Get commits affecting this package
+              let commits = [];
+              try {
+                const commitOutput = execSync(
+                  `git log ${sinceRef}..HEAD --pretty=format:"%s" -- ${pkgDir}`,
+                  { encoding: 'utf-8', cwd: process.cwd(), stdio: ['pipe', 'pipe', 'ignore'] }
+                );
+                commits = commitOutput.trim().split('\n').filter(Boolean);
+              } catch (e) {
+                // No commits found or error
+                commits = [];
+              }
+              
+              // Analyze commits for version bump type
+              let bumpType = 'patch'; // default
+              let hasBreaking = false;
+              let hasFeature = false;
+              
+              for (const commit of commits) {
+                // Check for breaking changes
+                if (commit.includes('BREAKING CHANGE') || 
+                    commit.includes('BREAKING:') ||
+                    /^[^:]+!:/.test(commit)) {
+                  hasBreaking = true;
+                  break;
+                }
+                
+                // Check for features
+                if (/^(feat|feature)(\(.+\))?:/i.test(commit)) {
+                  hasFeature = true;
+                }
+              }
+              
+              if (hasBreaking) {
+                bumpType = 'major';
+              } else if (hasFeature) {
+                bumpType = 'minor';
+              }
+              
+              // Calculate what the new version would be
+              const versionParts = currentVersion.split('.');
+              let newVersion;
+              if (bumpType === 'major') {
+                newVersion = `${parseInt(versionParts[0]) + 1}.0.0`;
+              } else if (bumpType === 'minor') {
+                newVersion = `${versionParts[0]}.${parseInt(versionParts[1]) + 1}.0`;
+              } else {
+                newVersion = `${versionParts[0]}.${versionParts[1]}.${parseInt(versionParts[2]) + 1}`;
+              }
+              
+              // Only actually bump version if not in dry-run mode
+              if (process.env.DRY_RUN !== 'true') {
+                execSync(`pnpm version ${bumpType} --no-git-tag`, {
+                  cwd: pkgDir,
+                  stdio: 'inherit'
+                });
+              } else {
+                console.log(`[DRY-RUN] Would bump ${pkgName} from ${currentVersion} to ${newVersion} (${bumpType})`);
+              }
+              
+              results.push({
+                name: pkgName,
+                directory: pkgDir,
+                oldVersion: currentVersion,
+                newVersion: newVersion,
+                bumpType: bumpType
+              });
+              
+              console.log(`Bumped ${pkgName} from ${currentVersion} to ${newVersion} (${bumpType})`);
+            } catch (error) {
+              console.error(`Error processing ${pkgName}:`, error.message);
+              console.error(error.stack);
+            }
+          }
+          
+          fs.writeFileSync('bump-results.json', JSON.stringify(results, null, 2));
+          console.log('Version bump results:', JSON.stringify(results, null, 2));
+          EOF
+          
+          BUMP_RESULTS=$(cat bump-results.json)
+          echo "results=$BUMP_RESULTS" >> $GITHUB_OUTPUT
+          
+          # Extract package names for publishing
+          PACKAGES_TO_PUBLISH=$(echo "$BUMP_RESULTS" | node -e "
+            const results = JSON.parse(require('fs').readFileSync(0, 'utf-8'));
+            const packages = results.map(r => r.name).join(' ');
+            console.log(packages || '');
+          ")
+          echo "packages_to_publish=$PACKAGES_TO_PUBLISH" >> $GITHUB_OUTPUT
+
+      - name: Build packages
+        id: build
+        shell: bash
+        run: |
+          if [ ! -f bump-results.json ]; then
+            echo "No packages to build"
+            exit 0
+          fi
+          
+          node << 'EOF'
+          const { execSync } = require('child_process');
+          const fs = require('fs');
+          
+          const results = JSON.parse(fs.readFileSync('bump-results.json', 'utf-8'));
+          
+          if (!Array.isArray(results) || results.length === 0) {
+            console.log('No packages to build');
+            process.exit(0);
+          }
+          
+          for (const result of results) {
+            try {
+              console.log(`Building ${result.name}...`);
+              execSync('pnpm --filter "' + result.name + '" build', {
+                stdio: 'inherit'
+              });
+            } catch (error) {
+              console.log(`No build script for ${result.name}, skipping build`);
+            }
+          }
+          EOF
+
+      - name: Configure npm
+        shell: bash
+        run: |
+          if [ ! -f bump-results.json ]; then
+            echo "No packages to publish, skipping npm config"
+            exit 0
+          fi
+          
+          if [ "${{ env.DRY_RUN }}" == "true" ]; then
+            echo "🧪 DRY-RUN mode: Skipping npm configuration"
+            exit 0
+          fi
+          
+          if [ -z "${{ secrets.NPM_TOKEN }}" ]; then
+            echo "Error: NPM_TOKEN secret is required"
+            exit 1
+          fi
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
+
+      - name: Publish packages
+        id: publish
+        shell: bash
+        run: |
+          if [ ! -f bump-results.json ]; then
+            echo "No packages to publish"
+            exit 0
+          fi
+          
+          node << 'EOF'
+          const { execSync } = require('child_process');
+          const fs = require('fs');
+          
+          const results = JSON.parse(fs.readFileSync('bump-results.json', 'utf-8'));
+          
+          if (!Array.isArray(results) || results.length === 0) {
+            console.log('No packages to publish');
+            process.exit(0);
+          }
+          
+          const published = [];
+          
+          const isDryRun = process.env.DRY_RUN === 'true';
+          
+          if (isDryRun) {
+            console.log('🧪 DRY-RUN mode: Simulating package publishing...');
+          }
+          
+          for (const result of results) {
+            try {
+              if (isDryRun) {
+                console.log(`[DRY-RUN] Would publish ${result.name}@${result.newVersion}`);
+                published.push({
+                  name: result.name,
+                  version: result.newVersion,
+                  tag: `${result.name}@${result.newVersion}`,
+                  dryRun: true
+                });
+              } else {
+                console.log(`Publishing ${result.name}@${result.newVersion}...`);
+                
+                execSync('pnpm publish --access public --no-git-checks', {
+                  cwd: result.directory,
+                  stdio: 'inherit'
+                });
+                
+                published.push({
+                  name: result.name,
+                  version: result.newVersion,
+                  tag: `${result.name}@${result.newVersion}`
+                });
+                
+                console.log(`Successfully published ${result.name}@${result.newVersion}`);
+              }
+            } catch (error) {
+              console.error(`Failed to publish ${result.name}:`, error.message);
+              process.exit(1);
+            }
+          }
+          
+          // Write published packages to output file
+          fs.writeFileSync('published-packages.json', JSON.stringify(published, null, 2));
+          console.log('Published packages:', JSON.stringify(published, null, 2));
+          
+          if (isDryRun) {
+            console.log('🧪 DRY-RUN mode: No packages were actually published');
+          }
+          EOF
+
+      - name: Create and push git tags
+        shell: bash
+        run: |
+          if [ "${{ env.DRY_RUN }}" == "true" ]; then
+            echo "🧪 DRY-RUN mode: Skipping git tag creation"
+            exit 0
+          fi
+          
+          if [ ! -f published-packages.json ]; then
+            echo "No published packages file found"
+            exit 0
+          fi
+          
+          node << 'EOF'
+          const { execSync } = require('child_process');
+          const fs = require('fs');
+          
+          const published = JSON.parse(fs.readFileSync('published-packages.json', 'utf-8'));
+          
+          if (!Array.isArray(published) || published.length === 0) {
+            console.log('No packages to tag');
+            process.exit(0);
+          }
+          
+          for (const pkg of published) {
+            try {
+              const tagName = `${pkg.name}@${pkg.version}`;
+              console.log(`Creating tag: ${tagName}`);
+              
+              execSync(`git tag -a ${tagName} -m "Release ${pkg.name}@${pkg.version}"`, {
+                stdio: 'inherit'
+              });
+            } catch (error) {
+              console.error(`Failed to create tag for ${pkg.name}:`, error.message);
+            }
+          }
+          
+          // Push tags
+          if (published.length > 0) {
+            try {
+              execSync('git push origin --tags', {
+                stdio: 'inherit'
+              });
+              console.log('Tags pushed successfully');
+            } catch (error) {
+              console.error('Failed to push tags:', error.message);
+            }
+          }
+          EOF
+
+      - name: Commit version changes
+        shell: bash
+        run: |
+          if [ "${{ env.DRY_RUN }}" == "true" ]; then
+            echo "🧪 DRY-RUN mode: Skipping version commit"
+            echo "Would commit version changes if not in dry-run mode"
+            exit 0
+          fi
+          
+          if [ ! -f bump-results.json ]; then
+            echo "No version changes to commit"
+            exit 0
+          fi
+          
+          git add packages/*/package.json
+          if git diff --staged --quiet; then
+            echo "No version changes to commit"
+          else
+            git commit -m "chore: bump package versions [skip ci]"
+            git push origin HEAD:${{ github.ref_name }}
+          fi
+
+      - name: Dry-run summary
+        if: env.DRY_RUN == 'true'
+        shell: bash
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "🧪 DRY-RUN SUMMARY"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          
+          if [ -f bump-results.json ]; then
+            echo ""
+            echo "📦 Packages that would be published:"
+            node -e "
+              const fs = require('fs');
+              const results = JSON.parse(fs.readFileSync('bump-results.json', 'utf-8'));
+              results.forEach(r => {
+                console.log(\`  • \${r.name}: \${r.oldVersion} → \${r.newVersion} (\${r.bumpType})\`);
+              });
+            "
+            echo ""
+            echo "✅ All checks passed! This workflow would publish the above packages."
+          else
+            echo ""
+            echo "ℹ️  No packages would be published (no changes detected)"
+          fi
+          
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+

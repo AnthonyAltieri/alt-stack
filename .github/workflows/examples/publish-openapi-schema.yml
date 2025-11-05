@@ -1,0 +1,315 @@
+name: Publish OpenAPI Schema
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+    inputs:
+      openapi_endpoint:
+        description: 'Path to OpenAPI JSON endpoint'
+        required: false
+        default: '/docs/openapi.json'
+        type: string
+      server_start_command:
+        description: 'Command to start server'
+        required: false
+        default: 'npm start'
+        type: string
+      npm_package_name:
+        description: 'NPM package name (defaults to package.json name)'
+        required: false
+        type: string
+      npm_registry:
+        description: 'NPM registry URL'
+        required: false
+        default: 'https://registry.npmjs.org/'
+        type: string
+
+env:
+  OPENAPI_ENDPOINT: ${{ github.event.inputs.openapi_endpoint || '/docs/openapi.json' }}
+  SERVER_START_CMD: ${{ github.event.inputs.server_start_command || 'npm start' }}
+  NPM_PACKAGE_NAME: ${{ github.event.inputs.npm_package_name || '' }}
+  NPM_REGISTRY: ${{ github.event.inputs.npm_registry || 'https://registry.npmjs.org/' }}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          registry-url: ${{ env.NPM_REGISTRY }}
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+        continue-on-error: true
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Read package.json
+        id: package
+        run: |
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          echo "name=$PACKAGE_NAME" >> $GITHUB_OUTPUT
+          echo "version=$PACKAGE_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Set NPM package name
+        id: npm_package
+        run: |
+          if [ -n "${{ env.NPM_PACKAGE_NAME }}" ]; then
+            echo "name=${{ env.NPM_PACKAGE_NAME }}" >> $GITHUB_OUTPUT
+          else
+            echo "name=${{ steps.package.outputs.name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Prepare zod-openapi for type generation
+        run: |
+          if [ -d "packages/zod-openapi" ]; then
+            echo "Using local zod-openapi package"
+          else
+            echo "Installing zod-openapi..."
+            pnpm add -D @alt-stack/zod-openapi || echo "Package manager will handle zod-openapi"
+          fi
+
+      - name: Start server
+        id: server
+        run: |
+          SERVER_START_CMD="${{ env.SERVER_START_CMD }}"
+          OPENAPI_ENDPOINT="${{ env.OPENAPI_ENDPOINT }}"
+          
+          echo "Starting server with: $SERVER_START_CMD"
+          $SERVER_START_CMD > server.log 2>&1 &
+          SERVER_PID=$!
+          echo "pid=$SERVER_PID" >> $GITHUB_OUTPUT
+          
+          # Wait for server to be ready
+          MAX_ATTEMPTS=30
+          ATTEMPT=0
+          
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            sleep 2
+            # Try multiple ports
+            for port in 3000 8000 8080 5000; do
+              if curl -f -s http://localhost:$port$OPENAPI_ENDPOINT > /dev/null 2>&1; then
+                echo "port=$port" >> $GITHUB_OUTPUT
+                echo "Server is ready on port $port"
+                exit 0
+              fi
+            done
+            ATTEMPT=$((ATTEMPT + 1))
+            echo "Waiting for server... attempt $ATTEMPT/$MAX_ATTEMPTS"
+          done
+          
+          echo "Server failed to start or OpenAPI endpoint not available"
+          echo "Server logs:"
+          cat server.log || true
+          kill $SERVER_PID 2>/dev/null || true
+          exit 1
+
+      - name: Fetch OpenAPI schema
+        id: schema
+        run: |
+          OPENAPI_ENDPOINT="${{ env.OPENAPI_ENDPOINT }}"
+          SERVER_PORT="${{ steps.server.outputs.port || '3000' }}"
+          
+          echo "Fetching schema from http://localhost:$SERVER_PORT$OPENAPI_ENDPOINT"
+          if curl -f -s http://localhost:$SERVER_PORT$OPENAPI_ENDPOINT > openapi.json; then
+            echo "Successfully fetched OpenAPI schema"
+            # Validate it's valid JSON
+            node -e "JSON.parse(require('fs').readFileSync('openapi.json', 'utf8'))" || exit 1
+          else
+            echo "Failed to fetch OpenAPI schema"
+            exit 1
+          fi
+
+      - name: Generate TypeScript types
+        run: |
+          cat > generate-types.mjs << 'EOF'
+          import { readFileSync, writeFileSync } from 'fs';
+          import { fileURLToPath } from 'url';
+          import { dirname, join } from 'path';
+          import { createRequire } from 'module';
+          
+          const __filename = fileURLToPath(import.meta.url);
+          const __dirname = dirname(__filename);
+          const require = createRequire(import.meta.url);
+          
+          // Try different import paths for zod-openapi
+          let openApiToZodTsCode;
+          let importError = null;
+          
+          // Try local packages directory first (monorepo)
+          try {
+            const module = await import('./packages/zod-openapi/src/to-typescript.js');
+            openApiToZodTsCode = module.openApiToZodTsCode;
+            console.log('Using local zod-openapi package');
+          } catch (e) {
+            importError = e;
+            // Try node_modules (after pnpm install)
+            try {
+              const module = await import('@alt-stack/zod-openapi/src/to-typescript.js');
+              openApiToZodTsCode = module.openApiToZodTsCode;
+              console.log('Using @alt-stack/zod-openapi from node_modules');
+            } catch (e2) {
+              try {
+                const module = await import('zod-openapi/src/to-typescript.js');
+                openApiToZodTsCode = module.openApiToZodTsCode;
+                console.log('Using zod-openapi from node_modules');
+              } catch (e3) {
+                console.error('Failed to import zod-openapi:', importError?.message || e2?.message || e3?.message);
+                throw new Error('Could not find zod-openapi package. Make sure it is installed or available in packages/zod-openapi');
+              }
+            }
+          }
+          
+          const openApiSpec = JSON.parse(readFileSync('openapi.json', 'utf8'));
+          const tsCode = openApiToZodTsCode(openApiSpec, undefined, { includeRoutes: true });
+          
+          writeFileSync('index.ts', tsCode);
+          console.log('Generated TypeScript types successfully');
+          EOF
+          
+          node generate-types.mjs
+
+      - name: Create package directory
+        run: |
+          mkdir -p openapi-package
+          cp openapi.json openapi-package/
+          cp index.ts openapi-package/
+
+      - name: Create package.json for npm package
+        run: |
+          cat > openapi-package/package.json << EOF
+          {
+            "name": "${{ steps.npm_package.outputs.name }}",
+            "version": "${{ steps.package.outputs.version }}",
+            "description": "OpenAPI schema and TypeScript types generated from server definition",
+            "main": "index.ts",
+            "types": "index.ts",
+            "files": [
+              "openapi.json",
+              "index.ts",
+              "README.md"
+            ],
+            "exports": {
+              ".": {
+                "types": "./index.ts",
+                "default": "./index.ts"
+              },
+              "./schema": "./openapi.json"
+            },
+            "keywords": [
+              "openapi",
+              "openapi-schema",
+              "api-schema"
+            ],
+            "license": "UNLICENSED",
+            "repository": {
+              "type": "git",
+              "url": "${{ github.server_url }}/${{ github.repository }}.git"
+            },
+            "peerDependencies": {
+              "zod": "^4.0.0"
+            }
+          }
+          EOF
+
+      - name: Create README.md
+        run: |
+          cat > openapi-package/README.md << EOF
+          # ${{ steps.npm_package.outputs.name }}
+
+          This package contains the OpenAPI schema and TypeScript types generated from the server definition.
+
+          ## Installation
+
+          \`\`\`bash
+          npm install ${{ steps.npm_package.outputs.name }}
+          \`\`\`
+
+          ## Usage
+
+          ### TypeScript Types
+
+          \`\`\`typescript
+          import { Request, Response } from '${{ steps.npm_package.outputs.name }}';
+
+          // Use Request and Response types for type-safe API calls
+          \`\`\`
+
+          ### OpenAPI Schema
+
+          \`\`\`typescript
+          import schema from '${{ steps.npm_package.outputs.name }}/schema';
+
+          // Use the OpenAPI schema JSON
+          \`\`\`
+
+          ## Generation
+
+          This package is automatically generated from the server definition using GitHub Actions.
+          Do not manually edit the contents of this package.
+
+          Generated from commit: \`${{ github.sha }}\`
+          EOF
+
+      - name: Configure npm
+        run: |
+          if [ -z "${{ secrets.NPM_TOKEN }}" ]; then
+            echo "Error: NPM_TOKEN secret is required"
+            exit 1
+          fi
+          
+          # Extract registry hostname from URL
+          REGISTRY_URL="${{ env.NPM_REGISTRY }}"
+          REGISTRY_HOST=$(echo "$REGISTRY_URL" | sed -e 's|^[^/]*//||' -e 's|/.*$||' -e 's|:.*$||')
+          
+          echo "//$REGISTRY_HOST/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
+          if [ "$REGISTRY_URL" != "https://registry.npmjs.org/" ]; then
+            echo "registry=$REGISTRY_URL" >> .npmrc
+          fi
+
+      - name: Publish to npm
+        working-directory: openapi-package
+        run: |
+          npm publish --access public
+
+      - name: Cleanup
+        if: always()
+        run: |
+          SERVER_PID=${{ steps.server.outputs.pid }}
+          if [ -n "$SERVER_PID" ]; then
+            echo "Stopping server (PID: $SERVER_PID)"
+            kill $SERVER_PID 2>/dev/null || true
+            # Wait a bit for graceful shutdown
+            sleep 2
+            # Force kill if still running
+            kill -9 $SERVER_PID 2>/dev/null || true
+          fi
+          # Kill any remaining node processes that might be the server
+          pkill -f "${{ env.SERVER_START_CMD }}" || true
+          rm -rf openapi-package generate-types.mjs index.ts openapi.json server.log .npmrc || true
+

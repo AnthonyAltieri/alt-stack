@@ -9,13 +9,13 @@
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
-    "@repo/kafka": "workspace:*",
+    "@alt-stack/kafka": "workspace:*",
     "@t3-oss/env-core": "^0.9.0",
     "kafkajs": "^2.2.4",
     "zod": "^4.0.0"
   },
   "devDependencies": {
-    "@repo/typescript-config": "workspace:*",
+    "@alt-stack/typescript-config": "workspace:*",
     "@types/node": "^20.0.0",
     "tsx": "^4.0.0",
     "typescript": "5.9.2"

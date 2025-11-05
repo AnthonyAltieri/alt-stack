@@ -7,7 +7,7 @@ Combine multiple routers to organize your Kafka consumers by domain or feature.
 Use `mergeKafkaRouters` to combine routers:
 
 ```typescript
-import { createKafkaRouter, mergeKafkaRouters } from "@repo/kafka";
+import { createKafkaRouter, mergeKafkaRouters } from "@alt-stack/kafka";
 
 const userRouter = createKafkaRouter()
   .topic("user-created", { /* ... */ })

@@ -7,7 +7,7 @@ Follow the tRPC authorization pattern for type-safe protected routes. The middle
 The recommended way to create protected routes is using reusable procedures:
 
 ```typescript
-import { init, createServer } from "@repo/server";
+import { init, createServer } from "@alt-stack/server";
 import { z } from "zod";
 
 interface AppContext {
@@ -76,7 +76,7 @@ See the [Reusable Procedures guide](/core-concepts/reusable-procedures) for more
 The middleware can narrow the context type by passing an updated context to `next()`:
 
 ```typescript
-import { init } from "@repo/server";
+import { init } from "@alt-stack/server";
 import { z } from "zod";
 
 const factory = init<AppContext>();
@@ -145,7 +145,7 @@ protectedRouter
 You can also use a traditional middleware approach without the context narrowing. Use `createMiddleware` helper to avoid type assertions:
 
 ```typescript
-import { createMiddleware } from "@repo/server";
+import { createMiddleware } from "@alt-stack/server";
 
 // Middleware that requires authentication - no type assertion needed!
 const requireAuth = createMiddleware<AppContext>(async ({ ctx, next }) => {

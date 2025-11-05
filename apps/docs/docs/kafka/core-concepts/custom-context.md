@@ -40,7 +40,7 @@ interface AppContext {
 Provide a `createContext` function when creating the consumer:
 
 ```typescript
-import type { BaseKafkaContext } from "@repo/kafka";
+import type { BaseKafkaContext } from "@alt-stack/kafka";
 
 function createContext(baseCtx: BaseKafkaContext): AppContext {
   return {
@@ -85,7 +85,7 @@ const consumer = await createConsumer(router, {
 For database connections, create them in `createContext` and reuse a connection pool:
 
 ```typescript
-import { createKafkaRouter, createConsumer } from "@repo/kafka";
+import { createKafkaRouter, createConsumer } from "@alt-stack/kafka";
 import { Kafka } from "kafkajs";
 import { z } from "zod";
 import { createPool, Pool } from "your-database-library";

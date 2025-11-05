@@ -71,7 +71,7 @@ import {
   ValidationError,
   UnexpectedApiClientError,
   ApiClientError,
-} from "@repo/client";
+} from "@alt-stack/client";
 
 try {
   await client.get("/users/{id}", {

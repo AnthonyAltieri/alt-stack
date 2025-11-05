@@ -7,7 +7,7 @@ Apply middleware at router-level or procedure-level to add cross-cutting concern
 Apply middleware to all topics in a router:
 
 ```typescript
-import { createKafkaRouter, createMiddleware } from "@repo/kafka";
+import { createKafkaRouter, createMiddleware } from "@alt-stack/kafka";
 import { z } from "zod";
 
 interface AppContext {

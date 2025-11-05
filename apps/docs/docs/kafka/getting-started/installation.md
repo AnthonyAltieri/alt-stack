@@ -3,11 +3,11 @@
 Install the Kafka consumer framework and its peer dependencies:
 
 ```bash
-pnpm add @repo/kafka kafkajs zod
+pnpm add @alt-stack/kafka kafkajs zod
 # or
-npm install @repo/kafka kafkajs zod
+npm install @alt-stack/kafka kafkajs zod
 # or
-yarn add @repo/kafka kafkajs zod
+yarn add @alt-stack/kafka kafkajs zod
 ```
 
 ## Peer Dependencies

@@ -7,7 +7,7 @@ Apply middleware at router-level or procedure-level to add cross-cutting concern
 Apply middleware to all routes in a router. Use `createMiddleware` helper to ensure proper context typing:
 
 ```typescript
-import { init, createServer, createMiddleware } from "@repo/server";
+import { init, createServer, createMiddleware } from "@alt-stack/server";
 import { z } from "zod";
 
 interface AppContext {

@@ -7,7 +7,7 @@ Define Kafka topics and their message handlers with type-safe procedures.
 Use the `topic` method to define a Kafka topic and its message schema:
 
 ```typescript
-import { createKafkaRouter } from "@repo/kafka";
+import { createKafkaRouter } from "@alt-stack/kafka";
 import { z } from "zod";
 
 const router = createKafkaRouter()

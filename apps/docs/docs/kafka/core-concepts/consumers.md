@@ -7,7 +7,7 @@ Create and configure Kafka consumers to process messages from your routers.
 Use `createConsumer` to create a Kafka consumer from a router:
 
 ```typescript
-import { createConsumer, createKafkaRouter } from "@repo/kafka";
+import { createConsumer, createKafkaRouter } from "@alt-stack/kafka";
 import { Kafka } from "kafkajs";
 import { z } from "zod";
 
@@ -78,7 +78,7 @@ const consumer = await createConsumer(router, {
 Handle errors during message processing:
 
 ```typescript
-import { ProcessingError } from "@repo/kafka";
+import { ProcessingError } from "@alt-stack/kafka";
 
 const consumer = await createConsumer(router, {
   kafka: new Kafka({

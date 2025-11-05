@@ -5,7 +5,7 @@ Organize your API by combining multiple routers in `createServer`. The object ke
 ## Basic Router Combination
 
 ```typescript
-import { init, createServer } from "@repo/server";
+import { init, createServer } from "@alt-stack/server";
 import { z } from "zod";
 
 const factory = init();

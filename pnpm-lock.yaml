@@ -159,10 +159,16 @@ importers:
 
   packages/zod-openapi:
     dependencies:
+      tsx:
+        specifier: ^4.19.2
+        version: 4.20.6
       zod:
         specifier: ^4.1.12
         version: 4.1.12
     devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.24
       oxlint:
         specifier: ^1.24.0
         version: 1.24.0

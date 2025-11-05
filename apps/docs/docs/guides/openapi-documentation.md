@@ -7,7 +7,7 @@ Automatically generate and serve OpenAPI 3.0 documentation for your API using Zo
 Use `createDocsRouter` to automatically generate and serve OpenAPI documentation:
 
 ```typescript
-import { init, createServer, createDocsRouter } from "@repo/server";
+import { init, createServer, createDocsRouter } from "@alt-stack/server";
 import { z } from "zod";
 
 const factory = init();
@@ -72,7 +72,7 @@ Now you can access:
 The `createDocsRouter` function takes the same router configuration as `createServer`, allowing it to automatically discover all your routes and generate complete OpenAPI documentation.
 
 ```typescript
-import { init, createDocsRouter } from "@repo/server";
+import { init, createDocsRouter } from "@alt-stack/server";
 
 const factory = init();
 const router = factory.router()
@@ -113,7 +113,7 @@ const docsRouter = createDocsRouter(
 The docs router integrates seamlessly with `createServer`:
 
 ```typescript
-import { init, createServer, createDocsRouter } from "@repo/server";
+import { init, createServer, createDocsRouter } from "@alt-stack/server";
 
 const factory = init();
 const todosRouter = factory.router()
@@ -146,7 +146,7 @@ With this setup:
 If you need the OpenAPI spec object directly (e.g., for external tools or custom documentation), use `generateOpenAPISpec`:
 
 ```typescript
-import { generateOpenAPISpec } from "@repo/server";
+import { generateOpenAPISpec } from "@alt-stack/server";
 
 const spec = generateOpenAPISpec(
   { api: router },
@@ -178,7 +178,7 @@ The OpenAPI documentation automatically includes:
 Here's a complete example with multiple route types:
 
 ```typescript
-import { init, createServer, createDocsRouter } from "@repo/server";
+import { init, createServer, createDocsRouter } from "@alt-stack/server";
 import { z } from "zod";
 
 const factory = init();

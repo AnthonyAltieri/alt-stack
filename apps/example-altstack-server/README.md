@@ -1,6 +1,6 @@
 # Example Todo Server
 
-A complete example todo application built with `@repo/server`, demonstrating type-safe API endpoints with Zod validation.
+A complete example todo application built with `@alt-stack/server`, demonstrating type-safe API endpoints with Zod validation.
 
 ## Features
 

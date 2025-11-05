@@ -8,19 +8,19 @@ This monorepo includes the following packages and apps:
 
 ### Packages
 
-- **`@repo/server`**: A lightweight, type-safe server framework built on Hono with Zod validation. Inspired by tRPC's builder pattern, providing full type inference from a central router definition.
+- **`@alt-stack/server`**: A lightweight, type-safe server framework built on Hono with Zod validation. Inspired by tRPC's builder pattern, providing full type inference from a central router definition.
 
-- **`@repo/client`**: A type-safe API client that integrates with zod-openapi generated Request/Response objects. Provides full type inference, request/response validation, retry logic, and error handling.
+- **`@alt-stack/client`**: A type-safe API client that integrates with zod-openapi generated Request/Response objects. Provides full type inference, request/response validation, retry logic, and error handling.
 
 - **`zod-openapi`**: Convert OpenAPI schemas to Zod schemas with TypeScript code generation. Supports complex types, custom formats, and generates request/response lookup objects.
 
-- **`@repo/typescript-config`**: Shared TypeScript configuration files used throughout the monorepo.
+- **`@alt-stack/typescript-config`**: Shared TypeScript configuration files used throughout the monorepo.
 
 ### Apps
 
-- **`docs`**: Documentation website built with [Docusaurus](https://docusaurus.io/) for the `@repo/server` framework.
+- **`docs`**: Documentation website built with [Docusaurus](https://docusaurus.io/) for the `@alt-stack/server` framework.
 
-- **`example-altstack-server`**: A complete example todo application demonstrating the `@repo/server` framework with full CRUD operations and type-safe error handling.
+- **`example-altstack-server`**: A complete example todo application demonstrating the `@alt-stack/server` framework with full CRUD operations and type-safe error handling.
 
 Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
 
@@ -61,7 +61,7 @@ pnpm build
 To build a specific package:
 
 ```bash
-pnpm --filter=@repo/server build
+pnpm --filter=@alt-stack/server build
 pnpm --filter=docs build
 ```
 

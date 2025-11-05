@@ -3,7 +3,7 @@ import {
   createConsumer,
   createMiddleware,
   type BaseKafkaContext,
-} from "@repo/kafka";
+} from "@alt-stack/kafka";
 import { Kafka } from "kafkajs";
 import { z } from "zod";
 import { env } from "./env.js";

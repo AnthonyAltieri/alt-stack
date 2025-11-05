@@ -16,7 +16,7 @@ On your server, generate the OpenAPI spec:
 
 ```typescript
 // server.ts
-import { init, createServer, generateOpenAPISpec } from "@repo/server";
+import { init, createServer, generateOpenAPISpec } from "@alt-stack/server";
 import { z } from "zod";
 
 const factory = init();
@@ -56,11 +56,11 @@ export default app;
 
 ## Step 2: Generate Request and Response Types
 
-Use the `@repo/zod-openapi` package to generate TypeScript types:
+Use the `@alt-stack/zod-openapi` package to generate TypeScript types:
 
 ```typescript
 // generate-types.ts
-import { openApiToZodTsCode } from "@repo/zod-openapi";
+import { openApiToZodTsCode } from "@alt-stack/zod-openapi";
 import { openApiSpec } from "./server.js";
 import { writeFileSync } from "fs";
 
@@ -123,7 +123,7 @@ Now create the client using the generated types:
 
 ```typescript
 // client.ts
-import { createApiClient } from "@repo/client";
+import { createApiClient } from "@alt-stack/client";
 import { Request, Response } from "./generated-types.js";
 
 const client = createApiClient({

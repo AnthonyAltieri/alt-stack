@@ -1,6 +1,6 @@
 # Example Kafka Consumer
 
-A complete example Kafka consumer application built with `@repo/kafka`, demonstrating type-safe message consumption with Zod validation.
+A complete example Kafka consumer application built with `@alt-stack/kafka`, demonstrating type-safe message consumption with Zod validation.
 
 ## Features
 

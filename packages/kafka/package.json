@@ -1,5 +1,5 @@
 {
-  "name": "@repo/kafka",
+  "name": "@alt-stack/kafka",
   "version": "1.0.0",
   "description": "Type-safe Kafka consumer framework with Zod validation",
   "type": "module",

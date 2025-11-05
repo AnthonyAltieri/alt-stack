@@ -7,7 +7,7 @@ Learn how to use the API client for making type-safe requests.
 Use `createApiClient` to create a client instance:
 
 ```typescript
-import { createApiClient } from "@repo/client";
+import { createApiClient } from "@alt-stack/client";
 import { Request, Response } from "./generated-types.js";
 
 const client = createApiClient({

@@ -7,7 +7,7 @@ A complete example demonstrating the full-stack type safety of Altstack. This ex
 Let's build a type-safe Todo API. Notice how TypeScript infers everything from our Zod schemas:
 
 ```typescript
-import { init, createServer } from "@repo/server";
+import { init, createServer } from "@alt-stack/server";
 import { z } from "zod";
 
 // Define app context
@@ -189,8 +189,8 @@ First, generate Request/Response types from your server (see [Server Integration
 
 ```typescript
 // generate-types.ts
-import { generateOpenAPISpec } from "@repo/server";
-import { openApiToZodTsCode } from "@repo/zod-openapi";
+import { generateOpenAPISpec } from "@alt-stack/server";
+import { openApiToZodTsCode } from "@alt-stack/zod-openapi";
 
 const openApiSpec = generateOpenAPISpec({ todos: router }, {
   title: "Todo API",
@@ -207,7 +207,7 @@ const generatedCode = openApiToZodTsCode(openApiSpec, undefined, {
 ### Step 2: Create Client
 
 ```typescript
-import { createApiClient } from "@repo/client";
+import { createApiClient } from "@alt-stack/client";
 import { Request, Response } from "./generated-types.js";
 
 const client = createApiClient({

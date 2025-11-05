@@ -7,7 +7,7 @@ Handle errors in Kafka message processing with typed error schemas.
 Define error schemas for your procedures:
 
 ```typescript
-import { createKafkaRouter } from "@repo/kafka";
+import { createKafkaRouter } from "@alt-stack/kafka";
 import { z } from "zod";
 
 const router = createKafkaRouter()
@@ -92,7 +92,7 @@ ctx.error({
 Handle errors at the consumer level:
 
 ```typescript
-import { ProcessingError } from "@repo/kafka";
+import { ProcessingError } from "@alt-stack/kafka";
 
 const consumer = await createConsumer(router, {
   kafka: new Kafka({

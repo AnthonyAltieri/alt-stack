@@ -1,20 +1,32 @@
 {
-  "name": "zod-openapi",
+  "name": "@alt-stack/zod-openapi",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Convert OpenAPI schemas to Zod schemas with TypeScript code generation",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "bin": {
+    "zod-openapi": "./bin/zod-openapi.js"
+  },
   "scripts": {
     "test": "vitest",
     "check-types": "tsc --noEmit"
   },
-  "keywords": [],
+  "keywords": [
+    "openapi",
+    "zod",
+    "typescript",
+    "code-generation"
+  ],
   "author": "",
   "license": "UNLICENSED",
   "devDependencies": {
+    "@types/node": "^20.0.0",
     "oxlint": "^1.24.0",
     "vitest": "^4.0.3"
   },
   "dependencies": {
+    "tsx": "^4.19.2",
     "zod": "^4.1.12"
   }
 }
