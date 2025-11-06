@@ -1,6 +1,6 @@
 {
   "name": "@alt-stack/kafka",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Type-safe Kafka consumer framework with Zod validation",
   "type": "module",
   "main": "./src/index.ts",
@@ -30,4 +30,3 @@
     "zod": "^4.0.0"
   }
 }
-
