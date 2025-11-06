@@ -1,7 +1,7 @@
 {
   "name": "altstack",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "MIT",
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",

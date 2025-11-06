@@ -19,7 +19,7 @@
     "code-generation"
   ],
   "author": "",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "devDependencies": {
     "@types/node": "^20.0.0",
     "oxlint": "^1.24.0",

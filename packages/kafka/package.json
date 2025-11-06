@@ -17,7 +17,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "peerDependencies": {
     "kafkajs": "^2.0.0",
     "zod": "^4.0.0"

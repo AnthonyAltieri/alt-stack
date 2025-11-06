@@ -17,7 +17,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "peerDependencies": {
     "zod": "^4.0.0"
   },
