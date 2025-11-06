@@ -6,6 +6,7 @@ import type {
   SuccessResponse,
   ErrorResponse,
   UnexpectedErrorResponse,
+  EndpointsWithMethod,
 } from "./types.js";
 import { UnexpectedApiClientError, ValidationError } from "./errors.js";
 
@@ -111,28 +112,22 @@ export class ApiClient<
   /**
    * Makes a GET request
    */
-  async get<
-    TEndpoint extends keyof TRequest & string,
-    TMethod extends keyof TRequest[TEndpoint] & string,
-  >(
+  async get<TEndpoint extends EndpointsWithMethod<TRequest, "GET">>(
     endpoint: TEndpoint,
-    options: RequestOptions<TRequest, TEndpoint, TMethod>,
-  ): Promise<ApiResponse<TResponse, TEndpoint, TMethod>> {
+    options: RequestOptions<TRequest, TEndpoint, "GET">,
+  ): Promise<ApiResponse<TResponse, TEndpoint, "GET">> {
     return this.request("GET", endpoint as string, options);
   }
 
   /**
    * Makes a POST request
    */
-  async post<
-    TEndpoint extends keyof TRequest & string,
-    TMethod extends keyof TRequest[TEndpoint] & string,
-  >(
+  async post<TEndpoint extends EndpointsWithMethod<TRequest, "POST">>(
     endpoint: TEndpoint,
-    options: RequestOptions<TRequest, TEndpoint, TMethod> & {
-      body: ExtractRequestBody<TRequest, TEndpoint, TMethod>;
+    options: RequestOptions<TRequest, TEndpoint, "POST"> & {
+      body: ExtractRequestBody<TRequest, TEndpoint, "POST">;
     },
-  ): Promise<ApiResponse<TResponse, TEndpoint, TMethod>> {
+  ): Promise<ApiResponse<TResponse, TEndpoint, "POST">> {
     return this.request("POST", endpoint as string, options);
   }
 

@@ -31,8 +31,8 @@ export type ExtractRequestParams<
     ? z.infer<P>
     : never
   : ExtractPathParams<TEndpoint & string> extends never
-    ? {}
-    : never;
+    ? never
+    : Record<ExtractPathParams<TEndpoint & string> & string, string>;
 
 /**
  * Extracts query type from Request object
@@ -44,8 +44,8 @@ export type ExtractRequestQuery<
 > = TRequest[TEndpoint][TMethod] extends { query: infer Q }
   ? Q extends z.ZodTypeAny
     ? z.infer<Q>
-    : {}
-  : {};
+    : never
+  : never;
 
 /**
  * Extracts body type from Request object
@@ -82,6 +82,17 @@ export type BodyRequired<
   TMethod extends keyof TRequest[TEndpoint],
 > = TRequest[TEndpoint][TMethod] extends { body: z.ZodTypeAny } ? true : false;
 
+/**
+ * Extracts endpoints that have a specific HTTP method
+ */
+export type EndpointsWithMethod<
+  TRequest extends Record<string, Record<string, unknown>>,
+  TMethod extends string,
+> = {
+  [K in keyof TRequest]: TMethod extends keyof TRequest[K] ? K : never;
+}[keyof TRequest] &
+  string;
+
 // ============================================================================
 // Response Type Extraction
 // ============================================================================
@@ -90,71 +101,98 @@ export type BodyRequired<
  * Extracts all status codes from Response object for an endpoint/method
  */
 export type ExtractStatusCodes<
-  TResponse extends Record<string, Record<string, Record<string, z.ZodTypeAny>>>,
+  TResponse extends Record<
+    string,
+    Record<string, Record<string, z.ZodTypeAny>>
+  >,
   TEndpoint extends keyof TResponse,
   TMethod extends keyof TResponse[TEndpoint],
-> = TResponse[TEndpoint][TMethod] extends Record<string, z.ZodTypeAny>
-  ? keyof TResponse[TEndpoint][TMethod] & string
-  : never;
+> =
+  TResponse[TEndpoint][TMethod] extends Record<string, z.ZodTypeAny>
+    ? keyof TResponse[TEndpoint][TMethod] & string
+    : never;
 
 /**
  * Extracts success status codes (2xx) from Response object
  */
 export type ExtractSuccessCodes<
-  TResponse extends Record<string, Record<string, Record<string, z.ZodTypeAny>>>,
+  TResponse extends Record<
+    string,
+    Record<string, Record<string, z.ZodTypeAny>>
+  >,
   TEndpoint extends keyof TResponse,
   TMethod extends keyof TResponse[TEndpoint],
-> = ExtractStatusCodes<TResponse, TEndpoint, TMethod> extends infer Codes
-  ? Codes extends string
-    ? Codes extends `2${string}`
-      ? Codes
+> =
+  ExtractStatusCodes<TResponse, TEndpoint, TMethod> extends infer Codes
+    ? Codes extends string
+      ? Codes extends `2${string}`
+        ? Codes
+        : never
       : never
-    : never
-  : never;
+    : never;
 
 /**
  * Extracts error status codes (non-2xx) from Response object
  */
 export type ExtractErrorCodes<
-  TResponse extends Record<string, Record<string, Record<string, z.ZodTypeAny>>>,
+  TResponse extends Record<
+    string,
+    Record<string, Record<string, z.ZodTypeAny>>
+  >,
   TEndpoint extends keyof TResponse,
   TMethod extends keyof TResponse[TEndpoint],
-> = ExtractStatusCodes<TResponse, TEndpoint, TMethod> extends infer Codes
-  ? Codes extends string
-    ? Codes extends `2${string}`
-      ? never
-      : Codes
-    : never
-  : never;
+> =
+  ExtractStatusCodes<TResponse, TEndpoint, TMethod> extends infer Codes
+    ? Codes extends string
+      ? Codes extends `2${string}`
+        ? never
+        : Codes
+      : never
+    : never;
 
 /**
  * Extracts response schema for a specific status code
  */
 export type ExtractResponseSchema<
-  TResponse extends Record<string, Record<string, Record<string, z.ZodTypeAny>>>,
+  TResponse extends Record<
+    string,
+    Record<string, Record<string, z.ZodTypeAny>>
+  >,
   TEndpoint extends keyof TResponse,
   TMethod extends keyof TResponse[TEndpoint],
   TCode extends string,
-> = TResponse[TEndpoint][TMethod] extends Record<string, z.ZodTypeAny>
-  ? TCode extends keyof TResponse[TEndpoint][TMethod]
-    ? TResponse[TEndpoint][TMethod][TCode]
-    : never
-  : never;
+> =
+  TResponse[TEndpoint][TMethod] extends Record<string, z.ZodTypeAny>
+    ? TCode extends keyof TResponse[TEndpoint][TMethod]
+      ? TResponse[TEndpoint][TMethod][TCode]
+      : never
+    : never;
 
 /**
  * Infers the success response body type (uses first success code, typically 200)
  */
 export type ExtractSuccessBody<
-  TResponse extends Record<string, Record<string, Record<string, z.ZodTypeAny>>>,
+  TResponse extends Record<
+    string,
+    Record<string, Record<string, z.ZodTypeAny>>
+  >,
   TEndpoint extends keyof TResponse,
   TMethod extends keyof TResponse[TEndpoint],
-> = ExtractSuccessCodes<TResponse, TEndpoint, TMethod> extends infer SuccessCode
-  ? SuccessCode extends string
-    ? ExtractResponseSchema<TResponse, TEndpoint, TMethod, SuccessCode> extends z.ZodTypeAny
-      ? z.infer<ExtractResponseSchema<TResponse, TEndpoint, TMethod, SuccessCode>>
+> =
+  ExtractSuccessCodes<TResponse, TEndpoint, TMethod> extends infer SuccessCode
+    ? SuccessCode extends string
+      ? ExtractResponseSchema<
+          TResponse,
+          TEndpoint,
+          TMethod,
+          SuccessCode
+        > extends z.ZodTypeAny
+        ? z.infer<
+            ExtractResponseSchema<TResponse, TEndpoint, TMethod, SuccessCode>
+          >
+        : never
       : never
-    : never
-  : never;
+    : never;
 
 // ============================================================================
 // Discriminated Union Response Type
@@ -191,28 +229,63 @@ export type UnexpectedErrorResponse = {
  * Builds the complete discriminated union response type
  */
 export type ApiResponse<
-  TResponse extends Record<string, Record<string, Record<string, z.ZodTypeAny>>>,
+  TResponse extends Record<
+    string,
+    Record<string, Record<string, z.ZodTypeAny>>
+  >,
   TEndpoint extends string,
   TMethod extends string,
 > = TEndpoint extends keyof TResponse
   ? TMethod extends keyof TResponse[TEndpoint]
     ? // Success responses (one per success code)
-        | (ExtractSuccessCodes<TResponse, TEndpoint, TMethod> extends infer SuccessCode
+        | (ExtractSuccessCodes<
+            TResponse,
+            TEndpoint,
+            TMethod
+          > extends infer SuccessCode
             ? SuccessCode extends string
-              ? ExtractResponseSchema<TResponse, TEndpoint, TMethod, SuccessCode> extends z.ZodTypeAny
+              ? ExtractResponseSchema<
+                  TResponse,
+                  TEndpoint,
+                  TMethod,
+                  SuccessCode
+                > extends z.ZodTypeAny
                 ? SuccessResponse<
-                    z.infer<ExtractResponseSchema<TResponse, TEndpoint, TMethod, SuccessCode>>,
+                    z.infer<
+                      ExtractResponseSchema<
+                        TResponse,
+                        TEndpoint,
+                        TMethod,
+                        SuccessCode
+                      >
+                    >,
                     SuccessCode
                   >
                 : never
               : never
             : never)
         // Error responses (one per error code)
-        | (ExtractErrorCodes<TResponse, TEndpoint, TMethod> extends infer ErrorCodes
+        | (ExtractErrorCodes<
+            TResponse,
+            TEndpoint,
+            TMethod
+          > extends infer ErrorCodes
             ? ErrorCodes extends string
-              ? ExtractResponseSchema<TResponse, TEndpoint, TMethod, ErrorCodes> extends z.ZodTypeAny
+              ? ExtractResponseSchema<
+                  TResponse,
+                  TEndpoint,
+                  TMethod,
+                  ErrorCodes
+                > extends z.ZodTypeAny
                 ? ErrorResponse<
-                    z.infer<ExtractResponseSchema<TResponse, TEndpoint, TMethod, ErrorCodes>>,
+                    z.infer<
+                      ExtractResponseSchema<
+                        TResponse,
+                        TEndpoint,
+                        TMethod,
+                        ErrorCodes
+                      >
+                    >,
                     ErrorCodes
                   >
                 : never
@@ -235,14 +308,17 @@ export type RequestOptions<
   TEndpoint extends keyof TRequest,
   TMethod extends keyof TRequest[TEndpoint],
 > = {
-  params?: ParamsRequired<TRequest, TEndpoint, TMethod> extends true
-    ? ExtractRequestParams<TRequest, TEndpoint, TMethod>
-    : ExtractRequestParams<TRequest, TEndpoint, TMethod>;
-  query?: ExtractRequestQuery<TRequest, TEndpoint, TMethod>;
-  body?: BodyRequired<TRequest, TEndpoint, TMethod> extends true
-    ? ExtractRequestBody<TRequest, TEndpoint, TMethod>
-    : ExtractRequestBody<TRequest, TEndpoint, TMethod>;
   timeout?: number;
   retries?: number;
   headers?: Record<string, unknown>;
-};
+} & (ExtractRequestQuery<TRequest, TEndpoint, TMethod> extends never
+  ? { query?: never }
+  : { query?: ExtractRequestQuery<TRequest, TEndpoint, TMethod> }) &
+  (ParamsRequired<TRequest, TEndpoint, TMethod> extends true
+    ? { params: ExtractRequestParams<TRequest, TEndpoint, TMethod> }
+    : ExtractRequestParams<TRequest, TEndpoint, TMethod> extends never
+      ? { params?: never }
+      : { params?: ExtractRequestParams<TRequest, TEndpoint, TMethod> }) &
+  (BodyRequired<TRequest, TEndpoint, TMethod> extends true
+    ? { body: ExtractRequestBody<TRequest, TEndpoint, TMethod> }
+    : { body?: ExtractRequestBody<TRequest, TEndpoint, TMethod> });

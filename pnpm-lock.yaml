@@ -51,6 +51,9 @@ importers:
 
   apps/example-altstack-server:
     dependencies:
+      '@alt-stack/client':
+        specifier: workspace:*
+        version: link:../../packages/client
       '@alt-stack/server':
         specifier: workspace:*
         version: link:../../packages/server
