@@ -1,6 +1,6 @@
 {
   "name": "@alt-stack/zod-openapi",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Convert OpenAPI schemas to Zod schemas with TypeScript code generation",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
