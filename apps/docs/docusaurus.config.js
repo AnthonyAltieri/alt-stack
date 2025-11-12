@@ -9,7 +9,7 @@ const config = {
   title: 'Altstack',
   tagline: 'Type-safe server and client framework built on Hono with Zod validation',
   favicon: 'img/favicon.ico',
-  url: 'https://your-docs-site.com',
+  url: 'https://altstack-docs.vercel.app',
   baseUrl: '/',
   organizationName: 'repo',
   projectName: 'altstack',
