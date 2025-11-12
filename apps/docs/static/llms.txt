@@ -1,0 +1,4189 @@
+// File: client/core-concepts/basic-usage
+
+# Basic Usage
+
+Learn how to use the API client for making type-safe requests.
+
+## Creating a Client
+
+Use `createApiClient` to create a client instance:
+
+```typescript
+import { createApiClient } from "@alt-stack/client";
+import { Request, Response } from "./generated-types.js";
+
+const client = createApiClient({
+  baseUrl: "http://localhost:3000",
+  Request,
+  Response,
+  headers: {
+    Authorization: "Bearer token",
+  },
+});
+```
+
+## Making Requests
+
+The client provides methods for different HTTP methods:
+
+### GET Requests
+
+```typescript
+const result = await client.get("/users/{id}", {
+  params: { id: "123" },
+  query: { include: "profile" },
+});
+```
+
+### POST Requests
+
+```typescript
+const result = await client.post("/users", {
+  body: {
+    name: "Alice",
+    email: "alice@example.com",
+  },
+});
+```
+
+### Other Methods
+
+The client supports all standard HTTP methods:
+- `get()` - GET requests
+- `post()` - POST requests
+- `put()` - PUT requests
+- `patch()` - PATCH requests
+- `delete()` - DELETE requests
+
+## Handling Responses
+
+All methods return a result object that can be either a success or error:
+
+```typescript
+const result = await client.get("/users/{id}", {
+  params: { id: "123" },
+});
+
+if (result.success) {
+  // Type-safe access to response data
+  console.log(result.data);
+} else {
+  // Handle error
+  if (result.error.type === "error") {
+    // Server returned an error response
+    console.error(result.error.code, result.error.message);
+  } else {
+    // Unexpected error (network, validation, etc.)
+    console.error(result.error.message);
+  }
+}
+```
+
+## Request Options
+
+You can pass additional options to requests:
+
+```typescript
+const result = await client.get("/users/{id}", {
+  params: { id: "123" },
+  headers: {
+    "X-Custom-Header": "value",
+  },
+  timeout: 5000, // milliseconds
+  retries: 3, // number of retry attempts
+});
+```
+
+---
+
+// File: client/core-concepts/error-handling
+
+# Error Handling
+
+The client provides comprehensive error handling with typed error responses.
+
+## Response Types
+
+Every request returns a result that can be one of three types:
+
+1. **Success Response** - Request succeeded
+2. **Error Response** - Server returned an error response
+3. **Unexpected Error Response** - Network, validation, or unexpected error
+
+## Success Response
+
+```typescript
+const result = await client.get("/users/{id}", {
+  params: { id: "123" },
+});
+
+if (result.success) {
+  // result.body is typed based on your output schema
+  console.log(result.body);
+  // result.code contains the status code (e.g., "200", "201")
+}
+```
+
+## Error Response
+
+When the server returns an error response (non-2xx status):
+
+```typescript
+const result = await client.post("/users", {
+  body: { name: "Alice" },
+});
+
+if (!result.success && typeof result.code === "string") {
+  // Server error response (typed error from Response schemas)
+  // result.error is typed based on the error schema for this status code
+  console.error(result.code); // HTTP status code (e.g., "404", "500")
+  console.error(result.error); // Typed error body based on schema
+}
+```
+
+## Unexpected Error Response
+
+For network errors, validation errors, or other unexpected issues:
+
+```typescript
+const result = await client.get("/users/{id}", {
+  params: { id: "123" },
+});
+
+if (!result.success && typeof result.code === "number") {
+  // Unexpected error response (not defined in Response schemas)
+  if (result.error instanceof Error) {
+    console.error(result.error.message); // Error message
+    // error may be UnexpectedApiClientError with additional properties
+  } else {
+    console.error("Unexpected error:", result.error);
+  }
+  console.error(result.code); // HTTP status code as number
+}
+```
+
+## Error Classes
+
+The client also throws error classes for programmatic handling:
+
+```typescript
+import {
+  ValidationError,
+  UnexpectedApiClientError,
+  ApiClientError,
+} from "@alt-stack/client";
+
+try {
+  await client.get("/users/{id}", {
+    params: { id: 123 }, // Invalid type
+  });
+} catch (error) {
+  if (error instanceof ValidationError) {
+    // Validation failed
+    console.error("Validation error:", error.details);
+  } else if (error instanceof UnexpectedApiClientError) {
+    // Network or unexpected error
+    console.error("Request failed:", error.message);
+  } else if (error instanceof ApiClientError) {
+    // Base class for all client errors
+    console.error("Client error:", error.message);
+  }
+}
+```
+
+## Retry Logic
+
+The client includes built-in retry logic with exponential backoff:
+
+```typescript
+const result = await client.get("/users/{id}", {
+  params: { id: "123" },
+  retries: 3, // Will retry up to 3 times
+});
+```
+
+Retries are automatically performed for:
+- Network errors
+- Server errors (5xx status codes)
+
+Retries are **not** performed for:
+- Validation errors
+- Client errors (4xx status codes)
+
+## Timeouts
+
+Set a timeout for requests:
+
+```typescript
+const result = await client.get("/users/{id}", {
+  params: { id: "123" },
+  timeout: 5000, // 5 seconds
+});
+```
+
+If the request takes longer than the timeout, it will throw an error.
+
+---
+
+// File: client/core-concepts/validation
+
+# Validation
+
+The client automatically validates request parameters, query strings, and request bodies using Zod schemas.
+
+## Automatic Validation
+
+When you make a request, the client automatically validates:
+
+1. **Path parameters** - Validated against the `params` schema
+2. **Query parameters** - Validated against the `query` schema
+3. **Request body** - Validated against the `body` schema
+4. **Response data** - Validated against the `output` schema
+
+```typescript
+const result = await client.post("/users", {
+  body: {
+    name: "Alice",
+    email: "invalid-email", // ❌ This will throw ValidationError
+  },
+});
+```
+
+## Validation Errors
+
+If validation fails, the client throws a `ValidationError`:
+
+```typescript
+import { ValidationError } from "@alt-stack/client";
+
+try {
+  await client.get("/users/{id}", {
+    params: { id: 123 }, // ❌ Should be string
+  });
+} catch (error) {
+  if (error instanceof ValidationError) {
+    console.error("Validation failed:", error.message);
+    console.error("Details:", error.details);
+  }
+}
+```
+
+The `ValidationError` includes:
+- `message`: Human-readable error message
+- `details`: Validation error details from Zod
+- `endpoint`: The endpoint that failed validation
+- `method`: The HTTP method that failed validation
+
+## Type Safety
+
+TypeScript ensures you pass the correct types at compile time:
+
+```typescript
+// ✅ TypeScript knows this is correct
+await client.get("/users/{id}", {
+  params: { id: "123" },
+});
+
+// ❌ TypeScript error - id must be string
+await client.get("/users/{id}", {
+  params: { id: 123 },
+});
+```
+
+## Response Validation
+
+Response data is automatically validated when received:
+
+```typescript
+const result = await client.get("/users/{id}", {
+  params: { id: "123" },
+});
+
+if (result.success) {
+  // result.data is validated and typed
+  console.log(result.data.name); // ✅ Type-safe
+}
+```
+
+If the response doesn't match the expected schema, an error is returned in the result.
+
+---
+
+// File: client/getting-started/installation
+
+# Installation
+
+Install the client package and its peer dependencies:
+
+```bash
+pnpm add @alt-stack/client zod
+# or
+npm install @alt-stack/client zod
+# or
+yarn add @alt-stack/client zod
+```
+
+## Peer Dependencies
+
+The client requires:
+- **zod**: `^4.0.0` - For schema validation and type inference
+
+## Requirements
+
+To use the client, you need:
+1. A server built with `@alt-stack/server` that exposes an OpenAPI spec
+2. Generated `Request` and `Response` types from your server's OpenAPI spec
+3. The OpenAPI spec object from your server
+
+---
+
+// File: client/getting-started/quickstart
+
+# Quickstart
+
+Get started with a simple example that demonstrates how to use the type-safe API client.
+
+## Basic Example
+
+First, ensure your server generates an OpenAPI spec and Request/Response types:
+
+```typescript
+// server.ts
+import { init, createServer, generateOpenAPISpec } from "@alt-stack/server";
+import { z } from "zod";
+
+const factory = init();
+const router = factory.router()
+  .get("/users/{id}", {
+    input: {
+      params: z.object({ id: z.string() }),
+    },
+    output: z.object({
+      id: z.string(),
+      name: z.string(),
+      email: z.string().email(),
+    }),
+  })
+  .handler((ctx) => {
+    return {
+      id: ctx.input.id,
+      name: "Alice",
+      email: "alice@example.com",
+    };
+  });
+
+const app = createServer({ api: router });
+const openApiSpec = generateOpenAPISpec({ api: router }, {
+  title: "My API",
+  version: "1.0.0",
+});
+
+export { openApiSpec };
+export default app;
+```
+
+Then generate Request and Response types from the OpenAPI spec (see [Server Integration](../guides/server-integration) for details), and use the client:
+
+```typescript
+// client.ts
+import { createApiClient } from "@alt-stack/client";
+import { Request, Response } from "./generated-types.js";
+
+const client = createApiClient({
+  baseUrl: "http://localhost:3000",
+  Request,
+  Response,
+});
+
+// Make a type-safe API call
+const result = await client.get("/users/{id}", {
+  params: { id: "123" },
+});
+
+if (result.success) {
+  // TypeScript knows the shape of result.data
+  console.log(result.data.name); // ✅ Type-safe
+  console.log(result.data.email); // ✅ Type-safe
+} else {
+  // Handle error
+  console.error(result.error);
+}
+```
+
+## Features
+
+- **Type-safe**: Full TypeScript inference from server types
+- **Validation**: Automatic runtime validation using Zod schemas
+- **Error handling**: Typed error responses
+- **Retry logic**: Built-in exponential backoff for failed requests
+- **Path interpolation**: Automatic handling of path parameters
+
+---
+
+// File: client/guides/server-integration
+
+# Server Integration
+
+Learn how to integrate the client with your Altstack server.
+
+## Overview
+
+To use the client with your server, you need:
+
+1. Generate an OpenAPI spec from your server router
+2. Generate `Request` and `Response` types from the OpenAPI spec
+3. Create a client instance with these types
+
+## Step 1: Generate OpenAPI Spec
+
+On your server, generate the OpenAPI spec:
+
+```typescript
+// server.ts
+import { init, createServer, generateOpenAPISpec } from "@alt-stack/server";
+import { z } from "zod";
+
+const factory = init();
+const router = factory.router()
+  .get("/users/{id}", {
+    input: {
+      params: z.object({ id: z.string() }),
+    },
+    output: z.object({
+      id: z.string(),
+      name: z.string(),
+      email: z.string().email(),
+    }),
+  })
+  .handler((ctx) => {
+    return {
+      id: ctx.input.id,
+      name: "Alice",
+      email: "alice@example.com",
+    };
+  });
+
+const app = createServer({ api: router });
+
+// Generate OpenAPI spec
+const openApiSpec = generateOpenAPISpec(
+  { api: router },
+  {
+    title: "My API",
+    version: "1.0.0",
+  }
+);
+
+export { openApiSpec };
+export default app;
+```
+
+## Step 2: Generate Request and Response Types
+
+Use the `@alt-stack/zod-openapi` package to generate TypeScript types:
+
+```typescript
+// generate-types.ts
+import { openApiToZodTsCode } from "@alt-stack/zod-openapi";
+import { openApiSpec } from "./server.js";
+import { writeFileSync } from "fs";
+
+const generatedCode = openApiToZodTsCode(openApiSpec, undefined, {
+  includeRoutes: true,
+});
+
+writeFileSync("./src/generated-types.ts", generatedCode);
+```
+
+This generates a file with:
+- Zod schemas for all request parameters, query strings, bodies, and responses
+- `Request` object with lookup for request schemas
+- `Response` object with lookup for response schemas organized by status code
+
+Example generated output:
+
+```typescript
+// generated-types.ts
+import { z } from "zod";
+
+export const GetUsersIdParamsSchema = z.object({
+  id: z.string(),
+});
+
+export const GetUsersId200ResponseSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  email: z.string().email(),
+});
+
+export const GetUsersId404ErrorResponseSchema = z.object({
+  error: z.object({
+    code: z.literal("NOT_FOUND"),
+    message: z.string(),
+  }),
+});
+
+export const Request = {
+  "/users/{id}": {
+    GET: {
+      params: GetUsersIdParamsSchema,
+    },
+  },
+} as const;
+
+export const Response = {
+  "/users/{id}": {
+    GET: {
+      "200": GetUsersId200ResponseSchema,
+      "404": GetUsersId404ErrorResponseSchema,
+    },
+  },
+} as const;
+```
+
+## Step 3: Create Client
+
+Now create the client using the generated types:
+
+```typescript
+// client.ts
+import { createApiClient } from "@alt-stack/client";
+import { Request, Response } from "./generated-types.js";
+
+const client = createApiClient({
+  baseUrl: "http://localhost:3000",
+  Request,
+  Response,
+});
+
+export { client };
+```
+
+## Step 4: Use the Client
+
+Now you can make type-safe API calls:
+
+```typescript
+import { client } from "./client.js";
+
+// Type-safe GET request
+const result = await client.get("/users/{id}", {
+  params: { id: "123" },
+});
+
+if (result.success) {
+  // result.data is typed based on your output schema
+  console.log(result.data.name); // ✅ Type-safe
+}
+```
+
+## Keeping Types in Sync
+
+It's recommended to regenerate types whenever you change your server routes. You can:
+
+1. **Manual regeneration**: Run your type generation script when routes change
+2. **Watch mode**: Use a file watcher to regenerate on route changes
+3. **Build step**: Include type generation in your build process
+
+## Sharing Types Between Projects
+
+If your client is in a separate project from your server:
+
+1. Export the OpenAPI spec from your server project
+2. Share it via npm package, git submodule, or API endpoint
+3. Generate types in your client project from the shared spec
+
+Example: Export spec as JSON endpoint:
+
+```typescript
+// server.ts
+const docsRouter = createDocsRouter({ api: router });
+app.route("/docs", docsRouter);
+
+// Access at /docs/openapi.json
+```
+
+Then fetch and generate types in client:
+
+```typescript
+// client project
+const response = await fetch("http://localhost:3000/docs/openapi.json");
+const openApiSpec = await response.json();
+const generatedCode = openApiToZodTsCode(openApiSpec, undefined, {
+  includeRoutes: true,
+});
+```
+
+---
+
+// File: core-concepts/combining-routers
+
+# Combining Routers
+
+Organize your API by combining multiple routers in `createServer`. The object keys become path prefixes.
+
+## Basic Router Combination
+
+```typescript
+import { init, createServer } from "@alt-stack/server";
+import { z } from "zod";
+
+const factory = init();
+
+// User routes
+const userRouter = factory.router()
+  .get("/{id}", {
+    input: {
+      params: z.object({
+        id: z.string(),
+      }),
+    },
+    output: z.object({
+      id: z.string(),
+      name: z.string(),
+    }),
+  })
+  .handler((ctx) => {
+    return { id: ctx.input.id, name: "Alice" };
+  })
+  .post("/", {
+    input: {
+      body: z.object({
+        name: z.string(),
+      }),
+    },
+    output: z.object({
+      id: z.string(),
+    }),
+  })
+  .handler((ctx) => {
+    return { id: "1" };
+  });
+
+// Post routes
+const postsRouter = factory.router()
+  .get("/", {
+    input: {},
+    output: z.array(
+      z.object({
+        id: z.string(),
+        title: z.string(),
+      })
+    ),
+  })
+  .handler(() => {
+    return [{ id: "1", title: "Hello World" }];
+  });
+
+// Combine routers - keys become path prefixes
+const app = createServer({
+  users: userRouter,  // Routes prefixed with /users
+  posts: postsRouter, // Routes prefixed with /posts
+});
+
+// Routes available at:
+// - GET /users/{id}
+// - POST /users
+// - GET /posts
+```
+
+## Multiple Routers with Same Prefix
+
+You can pass arrays of routers for the same prefix:
+
+```typescript
+const app = createServer({
+  api: [v1Router, v2Router], // Both routers prefixed with /api
+});
+```
+
+This is useful for versioning APIs or organizing routes by feature.
+
+## Nested Routes
+
+To achieve nested routes like `/api/v1/*` and `/api/v2/*`, use compound prefixes:
+
+```typescript
+const app = createServer({
+  "api/v1": v1Router,
+  "api/v2": v2Router,
+  admin: adminRouter,
+});
+```
+
+Results in routes like:
+- `/api/v1/*` - All v1Router routes
+- `/api/v2/*` - All v2Router routes
+- `/admin/*` - All adminRouter routes
+
+---
+
+// File: core-concepts/custom-context
+
+# Custom Context
+
+Define custom context (similar to tRPC) to pass data like database connections or authentication info.
+
+## Defining Context
+
+Create a context type and a function to create it:
+
+```typescript
+import { init, createServer } from "@alt-stack/server";
+import type { Context } from "hono";
+import { z } from "zod";
+
+// Define your context type
+interface AppContext {
+  db: Database;
+  user: User | null;
+}
+
+// Create context function
+async function createContext(c: Context): Promise<AppContext> {
+  const user = await getAuthenticatedUser(c);
+  return {
+    db: database,
+    user,
+  };
+}
+
+// Create factory and router with context type
+const factory = init<AppContext>();
+const router = factory.router()
+  .get("/profile", {
+    input: {},
+    output: z.object({
+      id: z.string(),
+      name: z.string(),
+    }),
+  })
+  .handler((ctx) => {
+    // ctx.db and ctx.user are typed and available
+    if (!ctx.user) {
+      return ctx.hono.json({ error: "Unauthorized" }, 401);
+    }
+    
+    return {
+      id: ctx.user.id,
+      name: ctx.user.name,
+    };
+  });
+
+// Create server with createContext
+const app = createServer({
+  users: router,
+}, {
+  createContext,
+});
+```
+
+## Accessing Hono Context
+
+Access the raw Hono context for advanced use cases:
+
+```typescript
+const factory = init();
+const router = factory.router()
+  .get("/users/{id}", {
+    input: {
+      params: z.object({
+        id: z.string(),
+      }),
+    },
+    output: z.object({
+      id: z.string(),
+    }),
+  })
+  .handler((ctx) => {
+    // Access raw Hono context
+    const headers = ctx.hono.req.header();
+    const ip = ctx.hono.req.header("x-forwarded-for");
+    
+    return { id: ctx.input.id };
+  });
+```
+
+The `ctx.hono` property gives you full access to the underlying Hono context for headers, cookies, environment variables, and other advanced features.
+
+---
+
+// File: core-concepts/error-handling
+
+# Error Handling
+
+Define error schemas and use type-safe `ctx.error()` for controlled error responses.
+
+## Defining Error Schemas
+
+Specify error schemas in the route configuration:
+
+```typescript
+const factory = init();
+const router = factory.router()
+  .get("/users/{id}", {
+    input: {
+      params: z.object({
+        id: z.string(),
+      }),
+    },
+    output: z.object({
+      id: z.string(),
+      name: z.string(),
+    }),
+    errors: {
+      404: z.object({
+        error: z.object({
+          code: z.literal("NOT_FOUND"),
+          message: z.string(),
+        }),
+      }),
+    },
+  })
+  .handler((ctx) => {
+    const user = findUser(ctx.input.id);
+    
+    if (!user) {
+      // TypeScript knows this must match the 404 error schema
+      // Status code is automatically inferred from the error type
+      throw ctx.error({
+        error: {
+          code: "NOT_FOUND",
+          message: `User ${ctx.input.id} not found`,
+        },
+      });
+    }
+    
+    return user;
+  });
+```
+
+## Multiple Error Types
+
+Define multiple error status codes:
+
+```typescript
+const factory = init();
+const router = factory.router()
+  .post("/users", {
+    input: {
+      body: z.object({
+        name: z.string(),
+      }),
+    },
+    output: z.object({
+      id: z.string(),
+    }),
+    errors: {
+      400: z.object({
+        error: z.object({
+          code: z.literal("VALIDATION_ERROR"),
+          message: z.string(),
+        }),
+      }),
+      409: z.object({
+        error: z.object({
+          code: z.literal("CONFLICT"),
+          message: z.string(),
+        }),
+      }),
+    },
+  })
+  .handler((ctx) => {
+    if (userExists(ctx.input.name)) {
+      throw ctx.error({
+        error: {
+          code: "CONFLICT",
+          message: "User already exists",
+        },
+      });
+    }
+    
+    return { id: "1" };
+  });
+```
+
+## Automatic Status Codes
+
+The status code is automatically inferred from the error type in `ctx.error()`. You don't need to specify it manually - TypeScript ensures you can only throw errors that match your defined schemas. Always use `throw ctx.error(...)` to throw the error.
+
+## Validation Errors
+
+When input validation fails, a `400` response is automatically returned:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Validation failed",
+    "details": [...]
+  }
+}
+```
+
+You don't need to handle validation errors manually - they're caught before your handler runs.
+
+---
+
+// File: core-concepts/input-validation
+
+# Input Validation
+
+Automatic validation of path parameters, query parameters, and request body using Zod schemas.
+
+## Validation Sources
+
+Inputs can be validated from three sources:
+
+- **params**: Path parameters (e.g., `/users/{id}`)
+- **query**: Query string parameters (e.g., `?limit=10&offset=0`)
+- **body**: Request body for POST/PUT/PATCH requests
+
+## Example
+
+```typescript
+const factory = init();
+const router = factory.router()
+  .get("/users/{id}", {
+    input: {
+      params: z.object({
+        id: z.string(),
+      }),
+      query: z.object({
+        limit: z.number().optional(),
+        offset: z.number().optional(),
+      }),
+    },
+    output: z.object({
+      id: z.string(),
+    }),
+  })
+  .handler((ctx) => {
+    // ctx.input.id (from params)
+    // ctx.input.limit (from query)
+    // ctx.input.offset (from query)
+    return { id: ctx.input.id };
+  });
+```
+
+## Validation Errors
+
+When validation fails, a `400` response is automatically returned:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Validation failed",
+    "details": [...]
+  }
+}
+```
+
+The handler is only called if all inputs pass validation, ensuring type safety and runtime safety.
+
+---
+
+// File: core-concepts/middleware
+
+# Middleware
+
+Apply middleware at router-level or procedure-level to add cross-cutting concerns like authentication, logging, or rate limiting.
+
+## Router-Level Middleware
+
+Apply middleware to all routes in a router. Use `createMiddleware` helper to ensure proper context typing:
+
+```typescript
+import { init, createServer, createMiddleware } from "@alt-stack/server";
+import { z } from "zod";
+
+interface AppContext {
+  user: User | null;
+}
+
+const authMiddleware = createMiddleware<AppContext>(async ({ ctx, next }) => {
+  // ctx is automatically typed as BaseContext & AppContext
+  const user = await authenticate(ctx.hono.req);
+  if (!user) {
+    return ctx.hono.json({ error: "Unauthorized" }, 401);
+  }
+  // Extend context with user
+  return next({ ctx: { user } });
+});
+
+const factory = init<AppContext>();
+const router = factory.router()
+  .use(authMiddleware)
+  .get("/profile", {
+    input: {},
+    output: z.object({
+      id: z.string(),
+      name: z.string(),
+    }),
+  })
+  .handler((ctx) => {
+    // ctx.user is typed (from authMiddleware)
+    return {
+      id: ctx.user.id,
+      name: ctx.user.name,
+    };
+  });
+
+const app = createServer({
+  users: router,
+});
+```
+
+## Procedure-Level Middleware
+
+Apply middleware to specific routes:
+
+```typescript
+const factory = init();
+const router = factory.router()
+  .post("/users", {
+    input: {
+      body: z.object({
+        name: z.string(),
+        email: z.string().email(),
+      }),
+    },
+    output: z.object({
+      id: z.string(),
+    }),
+  })
+  .use(async ({ ctx, next }) => {
+    // Log before handler
+    console.log("Creating user:", ctx.input.name);
+    return next();
+  })
+  .handler((ctx) => {
+    return { id: "1" };
+  });
+```
+
+## Context Extension
+
+Middleware can extend the context by passing updated context to `next()`:
+
+```typescript
+const loggerMiddleware = createMiddleware<AppContext>(async ({ ctx, next }) => {
+  const start = Date.now();
+  const result = await next();
+  const duration = Date.now() - start;
+  console.log(`Request took ${duration}ms`);
+  return result;
+});
+
+const authMiddleware = createMiddleware<AppContext>(async ({ ctx, next }) => {
+  const user = await authenticate(ctx.hono.req);
+  if (!user) {
+    return ctx.hono.json({ error: "Unauthorized" }, 401);
+  }
+  // Extend context - user is now non-null in subsequent handlers
+  return next({ ctx: { user } });
+});
+```
+
+## Multiple Middleware
+
+Chain multiple middleware on the same router or procedure:
+
+```typescript
+const factory = init<AppContext>();
+const router = factory.router()
+  .use(loggerMiddleware)
+  .use(authMiddleware)
+  .get("/profile", { /* ... */ })
+  .handler(/* ... */);
+```
+
+Middleware executes in the order they're defined.
+
+## Reusable Procedures
+
+Create reusable procedures with middleware to reuse authentication or other middleware across multiple routes. See the [Reusable Procedures guide](/core-concepts/reusable-procedures) for details:
+
+```typescript
+const factory = init<AppContext>();
+const router = factory.router();
+
+// Create reusable procedures
+const publicProcedure = factory.procedure;
+const protectedProcedure = factory.procedure.use(async (opts) => {
+  // Auth middleware
+  if (!opts.ctx.user) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  return opts.next({ ctx: { user: opts.ctx.user } });
+});
+
+// Use procedures
+publicProcedure.on(router).get("/hello", { input: {}, output: z.string() }).handler(() => "hello");
+protectedProcedure.on(router).get("/profile", { input: {}, output: UserSchema }).handler((ctx) => ctx.user!);
+```
+
+---
+
+// File: core-concepts/output-validation
+
+# Output Validation
+
+Optionally validate response data to ensure handlers return the expected structure.
+
+## Basic Usage
+
+```typescript
+const factory = init();
+const router = factory.router()
+  .get("/users/{id}", {
+    input: {
+      params: z.object({
+        id: z.string(),
+      }),
+    },
+    output: z.object({
+      id: z.string(),
+      name: z.string(),
+    }),
+  })
+  .handler((ctx) => {
+    // Return value is validated against output schema
+    return {
+      id: ctx.input.id,
+      name: "Alice",
+    };
+  });
+```
+
+## Benefits
+
+- **Runtime safety**: Catch bugs during development when handlers return incorrect data
+- **Type safety**: TypeScript ensures your return value matches the schema
+- **Documentation**: Output schemas serve as API documentation
+
+## Optional Output Validation
+
+Output validation is optional. If you omit the `output` field, no validation is performed, but you lose type safety for the return value:
+
+```typescript
+const factory = init();
+const router = factory.router()
+  .get("/users/{id}", {
+    input: {
+      params: z.object({
+        id: z.string(),
+      }),
+    },
+    // No output validation
+  })
+  .handler((ctx) => {
+    return { id: ctx.input.id };
+  });
+```
+
+---
+
+// File: core-concepts/reusable-procedures
+
+# Reusable Procedures
+
+Create reusable procedures with middleware to follow the tRPC pattern. This allows you to define common authentication, validation, or other middleware once and reuse it across multiple routes.
+
+## Basic Pattern
+
+Use `init()` to create procedures and routers:
+
+```typescript
+import { init, createServer } from "@alt-stack/server";
+import { z } from "zod";
+
+interface AppContext {
+  user: { id: string; name: string } | null;
+}
+
+const factory = init<AppContext>();
+
+// Create reusable procedures from init()
+const publicProcedure = factory.procedure;
+const protectedProcedure = factory.procedure
+  .errors({
+    401: z.object({
+      error: z.object({
+        code: z.literal("UNAUTHORIZED"),
+        message: z.string(),
+      }),
+    }),
+  })
+  .use(
+  async function isAuthed(opts) {
+    const { ctx } = opts;
+    // `ctx.user` is nullable
+    if (!ctx.user) {
+      throw ctx.error({
+        error: {
+          code: "UNAUTHORIZED" as const,
+          message: "Authentication required",
+        },
+      });
+    }
+    // ✅ Pass updated context where user is non-null
+    return opts.next({
+      ctx: {
+        user: ctx.user, // ✅ user value is known to be non-null now
+      },
+    });
+  }
+);
+
+// Create a router
+const router = factory.router();
+
+// Use procedures to create routes
+publicProcedure.on(router)
+  .get("/hello", {
+    input: {},
+    output: z.string(),
+  })
+  .handler(() => {
+    return "hello world";
+  });
+
+protectedProcedure.on(router)
+  .get("/profile", {
+    input: {},
+    output: z.object({
+      id: z.string(),
+      name: z.string(),
+    }),
+  })
+  .handler((ctx) => {
+    // ctx.user is guaranteed to be non-null after middleware
+    return {
+      id: ctx.user!.id,
+      name: ctx.user!.name,
+    };
+  });
+
+protectedProcedure.on(router)
+  .get("/secret", {
+    input: {},
+    output: z.object({
+      secret: z.string(),
+    }),
+  })
+  .handler(() => {
+    return { secret: "sauce" };
+  });
+```
+
+## Configuring Procedures
+
+Procedures support the same configuration methods as regular routes:
+
+### Setting Default Input
+
+```typescript
+const factory = init();
+const router = factory.router();
+
+const validatedProcedure = factory.procedure.input({
+  query: z.object({
+    apiKey: z.string().min(1),
+  }),
+});
+
+// All routes using this procedure will require apiKey in query
+validatedProcedure.on(router)
+  .get("/data", {
+    input: {
+      body: z.object({ filter: z.string() }), // Additional input
+    },
+    output: z.array(z.any()),
+  })
+  .handler((ctx) => {
+    // ctx.input.apiKey is available (from procedure)
+    // ctx.input.filter is available (from route)
+    return [];
+  });
+```
+
+### Setting Default Output
+
+```typescript
+const factory = init();
+const router = factory.router();
+
+const jsonProcedure = factory.procedure.output(
+  z.object({
+    success: z.boolean(),
+  })
+);
+
+jsonProcedure.on(router)
+  .post("/action", {
+    input: {
+      body: z.object({ action: z.string() }),
+    },
+    // output is automatically set from procedure
+  })
+  .handler(() => {
+    return { success: true };
+  });
+```
+
+### Setting Default Errors
+
+```typescript
+const factory = init();
+const router = factory.router();
+
+const errorProcedure = factory.procedure.errors({
+  401: z.object({
+    error: z.object({
+      code: z.literal("UNAUTHORIZED"),
+      message: z.string(),
+    }),
+  }),
+});
+
+errorProcedure.on(router)
+  .get("/protected", {
+    input: {},
+    output: z.string(),
+    // errors are automatically set from procedure
+  })
+  .handler((ctx) => {
+    if (someCondition) {
+      throw ctx.error({
+        error: {
+          code: "UNAUTHORIZED",
+          message: "Not authorized",
+        },
+      });
+    }
+    return "success";
+  });
+```
+
+### Combining Procedure and Route Errors
+
+Errors defined on procedures are automatically merged with errors defined on routes. Route errors take precedence when the same status code is defined in both:
+
+```typescript
+const factory = init();
+const router = factory.router();
+
+// Procedure defines common authentication error
+const apiProcedure = factory.procedure.errors({
+  401: z.object({
+    error: z.object({
+      code: z.literal("UNAUTHORIZED"),
+      message: z.string(),
+    }),
+  }),
+});
+
+// Route adds route-specific errors
+apiProcedure.on(router)
+  .get("/users/{id}", {
+    input: {
+      params: z.object({ id: z.string() }),
+    },
+    output: z.object({ id: z.string(), name: z.string() }),
+    errors: {
+      // 401 is inherited from procedure
+      // Add additional route-specific errors
+      404: z.object({
+        error: z.object({
+          code: z.literal("NOT_FOUND"),
+          message: z.string(),
+        }),
+      }),
+      403: z.object({
+        error: z.object({
+          code: z.literal("FORBIDDEN"),
+          message: z.string(),
+        }),
+      }),
+    },
+  })
+  .handler((ctx) => {
+    const user = findUser(ctx.input.id);
+    
+    if (!user) {
+      // Can throw 404 error (defined on route)
+      throw ctx.error({
+        error: {
+          code: "NOT_FOUND",
+          message: "User not found",
+        },
+      });
+    }
+    
+    if (!canAccessUser(user)) {
+      // Can throw 403 error (defined on route)
+      throw ctx.error({
+        error: {
+          code: "FORBIDDEN",
+          message: "Access denied",
+        },
+      });
+    }
+    
+    if (!isAuthenticated()) {
+      // Can throw 401 error (inherited from procedure)
+      throw ctx.error({
+        error: {
+          code: "UNAUTHORIZED",
+          message: "Authentication required",
+        },
+      });
+    }
+    
+    return user;
+  });
+```
+
+In this example, the route has access to all three error types:
+- `401 UNAUTHORIZED` from the procedure
+- `404 NOT_FOUND` from the route
+- `403 FORBIDDEN` from the route
+
+**Union of Error Schemas**: If both the procedure and route define an error with the same status code, the schemas are unioned. This means `ctx.error()` can accept either schema for that status code:
+
+```typescript
+const apiProcedure = factory.procedure.errors({
+  401: z.object({
+    error: z.object({
+      code: z.literal("UNAUTHORIZED"),
+      message: z.string(),
+    }),
+  }),
+});
+
+apiProcedure.on(router)
+  .get("/users/{id}", {
+    input: {
+      params: z.object({ id: z.string() }),
+    },
+    output: z.object({ id: z.string() }),
+    errors: {
+      // 401 error schema is unioned with procedure's 401
+      401: z.object({
+        error: z.object({
+          code: z.literal("AUTH_REQUIRED"),
+          message: z.string(),
+          redirect: z.string().url(), // Additional field in route's 401
+        }),
+      }),
+      404: z.object({
+        error: z.object({
+          code: z.literal("NOT_FOUND"),
+          message: z.string(),
+        }),
+      }),
+    },
+  })
+  .handler((ctx) => {
+    if (!isAuthenticated()) {
+      // Can throw either procedure's 401 schema or route's 401 schema
+      throw ctx.error({
+        error: {
+          code: "UNAUTHORIZED", // From procedure
+          message: "Please log in",
+        },
+      });
+      // OR
+      throw ctx.error({
+        error: {
+          code: "AUTH_REQUIRED", // From route
+          message: "Authentication required",
+          redirect: "https://example.com/login",
+        },
+      });
+    }
+    
+    if (!user) {
+      throw ctx.error({
+        error: {
+          code: "NOT_FOUND",
+          message: "User not found",
+        },
+      });
+    }
+    
+    return user;
+  });
+```
+
+Both 401 error schemas are valid because they're unioned together. This allows flexibility while maintaining type safety.
+
+## Chaining Middleware
+
+You can chain multiple middleware on procedures:
+
+```typescript
+const factory = init();
+const loggedProcedure = factory.procedure.use(async (opts) => {
+  console.log("Request started");
+  return opts.next();
+});
+
+const authenticatedProcedure = loggedProcedure.use(async (opts) => {
+  if (!opts.ctx.user) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  return opts.next({ ctx: { user: opts.ctx.user } });
+});
+```
+
+## Combining Configuration and Middleware
+
+You can combine configuration methods with middleware:
+
+```typescript
+const factory = init();
+const apiProcedure = factory.procedure
+  .input({
+    query: z.object({
+      version: z.string(),
+    }),
+  })
+  .use(async (opts) => {
+    // Validate API version
+    if (opts.ctx.input.version !== "v1") {
+      return new Response("Unsupported version", { status: 400 });
+    }
+    return opts.next();
+  });
+```
+
+## Context Narrowing
+
+When middleware calls `next({ ctx: {...} })`, the context is updated at runtime. TypeScript cannot fully track this narrowing through function calls, but the runtime behavior is correct:
+
+```typescript
+const factory = init<AppContext>();
+const router = factory.router();
+
+const protectedProcedure = factory.procedure
+  .errors({
+    401: z.object({
+      error: z.object({
+        code: z.literal("UNAUTHORIZED"),
+        message: z.string(),
+      }),
+    }),
+  })
+  .use(
+  async function isAuthed(opts) {
+    const { ctx } = opts;
+    if (!ctx.user) {
+      throw ctx.error({
+        error: {
+          code: "UNAUTHORIZED" as const,
+          message: "Authentication required",
+        },
+      });
+    }
+    // Runtime: ctx.user is now non-null
+    return opts.next({
+      ctx: {
+        user: ctx.user,
+      },
+    });
+  }
+);
+
+protectedProcedure.on(router)
+  .get("/profile", {
+    input: {},
+    output: z.object({ id: z.string() }),
+    // errors are inherited from protectedProcedure
+  })
+  .handler((ctx) => {
+    // Runtime: ctx.user is non-null
+    // TypeScript: may need type assertion or null check for full type safety
+    if (!ctx.user) {
+      // This should never happen at runtime due to middleware
+      throw ctx.error({
+        error: {
+          code: "UNAUTHORIZED" as const,
+          message: "Authentication required",
+        },
+      });
+    }
+    return { id: ctx.user.id };
+  });
+```
+
+## Common Patterns
+
+### Public and Protected Routes
+
+```typescript
+const factory = init<AppContext>();
+const router = factory.router();
+
+const publicProcedure = factory.procedure;
+const protectedProcedure = factory.procedure.use(authMiddleware);
+
+// Public route
+publicProcedure.on(router).get("/hello", { input: {}, output: z.string() }).handler(() => "hello");
+
+// Protected route
+protectedProcedure.on(router).get("/profile", { input: {}, output: UserSchema }).handler((ctx) => {
+  return ctx.user!; // Non-null due to middleware
+});
+```
+
+### Role-Based Procedures
+
+```typescript
+const factory = init<AppContext>();
+
+const requireRole = (role: string) =>
+  factory.procedure.use(async (opts) => {
+    if (!opts.ctx.user || opts.ctx.user.role !== role) {
+      return new Response("Forbidden", { status: 403 });
+    }
+    return opts.next();
+  });
+
+const adminProcedure = requireRole("admin");
+const moderatorProcedure = requireRole("moderator");
+```
+
+### Rate Limited Procedures
+
+```typescript
+const factory = init();
+
+const rateLimitedProcedure = factory.procedure.use(async (opts) => {
+  const rateLimitKey = getRateLimitKey(opts.ctx);
+  if (await isRateLimited(rateLimitKey)) {
+    return new Response("Too many requests", { status: 429 });
+  }
+  await incrementRateLimit(rateLimitKey);
+  return opts.next();
+});
+```
+
+---
+
+// File: example
+
+# Example
+
+A complete example demonstrating the full-stack type safety of Altstack. This example shows a Todo API server and how to consume it with zero boilerplate and full type inference.
+
+## Server Implementation
+
+Let's build a type-safe Todo API. Notice how TypeScript infers everything from our Zod schemas:
+
+```typescript
+import { init, createServer } from "@alt-stack/server";
+import { z } from "zod";
+
+// Define app context
+interface AppContext {
+  user: User | null;
+}
+
+const factory = init<AppContext>();
+const router = factory.router()
+  // Get all todos with optional filtering
+  .get("/", {
+    input: {
+      query: z.object({
+        completed: z.enum(["true", "false"]).optional(),
+      }),
+    },
+    output: z.array(TodoSchema),
+  })
+  .handler((ctx) => {
+    // ✅ ctx.input.completed is typed as "true" | "false" | undefined
+    // ✅ Return type is automatically inferred from output schema
+    let todos = todoStore.getAll();
+    
+    if (ctx.input.completed === "true") {
+      todos = todos.filter((t) => t.completed);
+    }
+    
+    return todos; // TypeScript knows this matches z.array(TodoSchema)
+  })
+  
+  // Get single todo
+  .get("/{id}", {
+    input: {
+      params: z.object({
+        id: z.string(),
+      }),
+    },
+    output: TodoSchema,
+    errors: {
+      404: z.object({
+        error: z.object({
+          code: z.literal("NOT_FOUND"),
+          message: z.string(),
+        }),
+      }),
+    },
+  })
+  .handler((ctx) => {
+    // ✅ ctx.input.id is typed as string (from params)
+    // ✅ ctx.error() only accepts the 404 error schema
+    const todo = todoStore.getById(ctx.input.id);
+    
+    if (!todo) {
+      throw ctx.error({
+        // ✅ TypeScript ensures code is "NOT_FOUND"
+        // ✅ Status code (404) is automatically inferred!
+        error: {
+          code: "NOT_FOUND",
+          message: `Todo with id ${ctx.input.id} not found`,
+        },
+      });
+    }
+    
+    return todo; // ✅ Return type matches TodoSchema
+  })
+  
+  // Create todo
+  .post("/", {
+    input: {
+      body: z.object({
+        title: z.string().min(1),
+        description: z.string().optional(),
+      }),
+    },
+    output: TodoSchema,
+  })
+  .handler((ctx) => {
+    // ✅ ctx.input.title is string
+    // ✅ ctx.input.description is string | undefined
+    return todoStore.create({
+      title: ctx.input.title,
+      description: ctx.input.description,
+    });
+  });
+
+const app = createServer(
+  { todos: router },
+  { createContext }
+);
+```
+
+**Notice what we didn't write:**
+- No type definitions for request/response
+- No manual validation code
+- No error response type definitions
+- No status code mappings
+
+TypeScript infers everything from the Zod schemas!
+
+## Type Inference in Action
+
+The power of Altstack is in the type inference. Let's see what TypeScript knows:
+
+```typescript
+.handler((ctx) => {
+  // ✅ ctx.input.id - string (from params)
+  // ✅ ctx.input.title - string (from body)
+  // ✅ ctx.input.description - string | undefined (from body)
+  // ✅ ctx.input.completed - "true" | "false" | undefined (from query)
+  
+  // ✅ Return type is inferred from output schema
+  // ✅ TypeScript will error if return doesn't match TodoSchema
+});
+```
+
+## Middleware and Type Narrowing
+
+Altstack supports context narrowing through middleware (tRPC-style pattern):
+
+```typescript
+const factory = init<AppContext>();
+const protectedRouter = factory.router()
+  .get("/profile", {
+    input: {},
+    output: z.object({
+      id: z.string(),
+      email: z.string(),
+      name: z.string(),
+    }),
+    errors: {
+      401: z.object({
+        error: z.object({
+          code: z.literal("UNAUTHORIZED"),
+          message: z.string(),
+        }),
+      }),
+    },
+  })
+  .use(async function isAuthed(opts) {
+    const { ctx } = opts;
+    
+    // ctx.user is nullable here
+    if (!ctx.user) {
+      throw opts.ctx.error({
+        error: {
+          code: "UNAUTHORIZED",
+          message: "Authentication required",
+        },
+      });
+    }
+    
+    // ✅ Pass updated context - TypeScript narrows user to non-null
+    return opts.next({
+      ctx: {
+        user: ctx.user, // Now known to be non-null
+      },
+    });
+  })
+  .handler((ctx) => {
+    // ✅ After middleware, ctx.user is guaranteed non-null
+    // TypeScript can infer this even though it can't track through next()
+    return {
+      id: ctx.user.id,     // ✅ TypeScript knows user exists
+      email: ctx.user.email,
+      name: ctx.user.name,
+    };
+  });
+```
+
+The `next({ ctx: { user } })` pattern ensures both runtime safety and TypeScript type narrowing.
+
+## Client Consumption
+
+Consume the API with full type safety using the generated types:
+
+### Step 1: Generate Types
+
+First, generate Request/Response types from your server (see [Server Integration](/client/guides/server-integration)):
+
+```typescript
+// generate-types.ts
+import { generateOpenAPISpec } from "@alt-stack/server";
+import { openApiToZodTsCode } from "@alt-stack/zod-openapi";
+
+const openApiSpec = generateOpenAPISpec({ todos: router }, {
+  title: "Todo API",
+  version: "1.0.0",
+});
+
+const generatedCode = openApiToZodTsCode(openApiSpec, undefined, {
+  includeRoutes: true,
+});
+
+// This creates Request and Response objects with Zod schemas
+```
+
+### Step 2: Create Client
+
+```typescript
+import { createApiClient } from "@alt-stack/client";
+import { Request, Response } from "./generated-types.js";
+
+const client = createApiClient({
+  baseUrl: "http://localhost:3000",
+  Request,  // ✅ Type-safe request schemas
+  Response, // ✅ Type-safe response schemas
+});
+```
+
+### Step 3: Make Type-Safe API Calls
+
+```typescript
+// Get all todos
+const result = await client.get("/todos/", {
+  query: {
+    completed: "true", // ✅ TypeScript knows this is "true" | "false" | undefined
+  },
+});
+
+if (result.success) {
+  // ✅ result.data is typed as Todo[]
+  result.data.forEach(todo => {
+    console.log(todo.title);      // ✅ TypeScript autocomplete
+    console.log(todo.completed);  // ✅ TypeScript knows this exists
+  });
+} else {
+  // ✅ result.error is typed based on possible error responses
+  if (result.error.type === "error") {
+    console.error(result.error.code, result.error.message);
+  }
+}
+
+// Get single todo
+const todoResult = await client.get("/todos/{id}", {
+  params: {
+    id: "123", // ✅ TypeScript knows this must be a string
+  },
+});
+
+if (todoResult.success) {
+  // ✅ todoResult.data is typed as Todo
+  console.log(todoResult.data.title);
+  console.log(todoResult.data.description); // ✅ Optional, typed as string | undefined
+} else {
+  // ✅ todoResult.error is typed based on error schemas
+  // TypeScript knows it could be 404 NOT_FOUND error
+  if (todoResult.code === "404") {
+    console.error(todoResult.error.error.message); // ✅ Typed!
+  }
+}
+
+// Create todo
+const createResult = await client.post("/todos/", {
+  body: {
+    title: "Buy groceries", // ✅ TypeScript requires string, min length 1
+    description: "Milk and eggs", // ✅ Optional string
+  },
+});
+
+if (createResult.success) {
+  // ✅ createResult.data is typed as Todo
+  console.log(createResult.data.id);
+}
+```
+
+## Key Takeaways
+
+### Zero Boilerplate
+- No manual type definitions - Zod schemas are the source of truth
+- No validation code - automatic runtime validation
+- No error response types - inferred from error schemas
+
+### Full Type Safety
+- `ctx.input` is fully typed based on your schemas
+- Return types are validated and inferred
+- Error handling is type-safe with status code inference
+
+### Type Narrowing
+- Middleware can narrow context types
+- `next({ ctx })` pattern enables type narrowing
+- TypeScript tracks types through the request lifecycle
+
+### End-to-End Types
+- Server types flow to client via OpenAPI generation
+- Client has the same type safety as server
+- Single source of truth (Zod schemas)
+
+## Try It Yourself
+
+The complete example server is available in the repository:
+- **Server**: `apps/example-altstack-server/`
+- Run it: `pnpm --filter example-altstack-server dev`
+
+The server demonstrates:
+- Full CRUD operations
+- Query parameter filtering
+- Error handling
+- Protected routes with authentication
+- Middleware with type narrowing
+
+See the [Installation Guide](/getting-started/installation) to get started building your own type-safe API!
+
+---
+
+// File: getting-started/basic-routes
+
+# Basic Routes
+
+Define routes using the fluent builder API with support for all HTTP methods.
+
+## Route Methods
+
+The router supports all standard HTTP methods:
+
+```typescript
+const factory = init();
+const router = factory.router()
+  .get("/users", { /* config */ })
+  .post("/users", { /* config */ })
+  .put("/users/{id}", { /* config */ })
+  .patch("/users/{id}", { /* config */ })
+  .delete("/users/{id}", { /* config */ });
+```
+
+## Path Parameters
+
+Extract parameters from the URL path:
+
+```typescript
+const factory = init();
+const router = factory.router()
+  .get("/users/{id}", {
+    input: {
+      params: z.object({
+        id: z.string(),
+      }),
+    },
+    output: z.object({
+      id: z.string(),
+      name: z.string(),
+    }),
+  })
+  .handler((ctx) => {
+    // ctx.input.id is typed as string
+    return {
+      id: ctx.input.id,
+      name: "Alice",
+    };
+  });
+```
+
+## Query Parameters
+
+Extract query string parameters:
+
+```typescript
+const factory = init();
+const router = factory.router()
+  .get("/users", {
+    input: {
+      query: z.object({
+        limit: z.number().optional(),
+        offset: z.number().optional(),
+        search: z.string().optional(),
+      }),
+    },
+    output: z.array(z.object({
+      id: z.string(),
+      name: z.string(),
+    })),
+  })
+  .handler((ctx) => {
+    // ctx.input.limit, ctx.input.offset, ctx.input.search are typed
+    return [];
+  });
+```
+
+## Request Body
+
+Handle POST/PUT/PATCH requests with typed request bodies:
+
+```typescript
+const factory = init();
+const router = factory.router()
+  .post("/users", {
+    input: {
+      body: z.object({
+        name: z.string(),
+        email: z.string().email(),
+      }),
+    },
+    output: z.object({
+      id: z.string(),
+      name: z.string(),
+    }),
+  })
+  .handler((ctx) => {
+    // ctx.input.name and ctx.input.email are typed
+    return {
+      id: "1",
+      name: ctx.input.name,
+    };
+  });
+```
+
+## Combining Input Sources
+
+You can combine params, query, and body:
+
+```typescript
+const factory = init();
+const router = factory.router()
+  .put("/users/{id}", {
+    input: {
+      params: z.object({
+        id: z.string(),
+      }),
+      query: z.object({
+        notify: z.boolean().optional(),
+      }),
+      body: z.object({
+        name: z.string(),
+        email: z.string().email(),
+      }),
+    },
+    output: z.object({
+      id: z.string(),
+    }),
+  })
+  .handler((ctx) => {
+    // All inputs are available and typed
+    // ctx.input.id (from params)
+    // ctx.input.notify (from query)
+    // ctx.input.name, ctx.input.email (from body)
+    return { id: ctx.input.id };
+  });
+```
+
+---
+
+// File: getting-started/installation
+
+# Installation
+
+Install the server framework and its peer dependencies:
+
+```bash
+pnpm add @alt-stack/server hono zod
+# or
+npm install @alt-stack/server hono zod
+# or
+yarn add @alt-stack/server hono zod
+```
+
+## Peer Dependencies
+
+The framework requires:
+- **hono**: `^4.0.0` - The underlying HTTP framework
+- **zod**: `^4.0.0` - For schema validation and type inference
+
+---
+
+// File: getting-started/quickstart
+
+# Quickstart
+
+Get started with a simple example that demonstrates the core concepts.
+
+## Basic Example
+
+```typescript
+import { init, createServer } from "@alt-stack/server";
+import { z } from "zod";
+
+const factory = init();
+const router = factory.router()
+  .get("/users/{id}", {
+    input: {
+      params: z.object({
+        id: z.string(),
+      }),
+    },
+    output: z.object({
+      id: z.string(),
+      name: z.string(),
+      email: z.string().email(),
+    }),
+  })
+  .handler((ctx) => {
+    // ctx.input.id is typed as string (from params)
+    return {
+      id: ctx.input.id,
+      name: "Alice",
+      email: "alice@example.com",
+    };
+  })
+  .post("/users", {
+    input: {
+      body: z.object({
+        name: z.string(),
+        email: z.string().email(),
+      }),
+    },
+    output: z.object({
+      id: z.string(),
+      name: z.string(),
+    }),
+  })
+  .handler((ctx) => {
+    // ctx.input.name and ctx.input.email are typed (from body)
+    return {
+      id: "1",
+      name: ctx.input.name,
+    };
+  });
+
+const app = createServer({
+  api: router,
+});
+
+// Use with your favorite Hono adapter
+export default app;
+```
+
+This example shows:
+- Type-safe route definitions with Zod schemas
+- Automatic input validation from params, query, and body
+- Type inference in handlers
+- Combining routes into a server
+
+---
+
+// File: guides/better-auth-integration
+
+# Better Auth Integration
+
+Integrate Better Auth for authentication with your server framework. Better Auth handles session management, authentication flows, and user management.
+
+## Setup
+
+First, install Better Auth:
+
+```bash
+pnpm add better-auth
+# or
+npm install better-auth
+# or
+yarn add better-auth
+```
+
+Create your Better Auth configuration:
+
+```typescript
+// src/auth.ts
+import { betterAuth } from "better-auth";
+import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { z } from "zod";
+
+export const auth = betterAuth({
+  database: drizzleAdapter(db, {
+    provider: "pg", // or your database provider
+  }),
+  emailAndPassword: {
+    enabled: true,
+  },
+  // Add other auth providers as needed
+});
+```
+
+## Validating User Session with Zod
+
+Better Auth returns session data that should be validated. Use Zod to ensure type safety and validate the user structure:
+
+```typescript
+import { z } from "zod";
+import { auth } from "./auth.js";
+
+// Define your user schema
+const UserSchema = z.object({
+  id: z.string(),
+  email: z.string().email(),
+  name: z.string(),
+  // Add other user fields as needed
+});
+
+// Schema for Better Auth session
+const SessionSchema = z.object({
+  user: UserSchema,
+  session: z.object({
+    id: z.string(),
+    userId: z.string(),
+    expiresAt: z.date(),
+  }),
+});
+
+// Infer TypeScript types from Zod schemas
+export type User = z.infer<typeof UserSchema>;
+export type Session = z.infer<typeof SessionSchema>;
+
+export async function getAuthSession(request: Request): Promise<Session | null> {
+  const session = await auth.api.getSession({ headers: request.headers });
+  
+  // Validate and parse the session with safeParse for optional validation
+  const result = SessionSchema.safeParse(session);
+  
+  if (!result.success) {
+    // Log validation errors in development
+    if (process.env.NODE_ENV === "development") {
+      console.warn("Session validation failed:", result.error);
+    }
+    return null;
+  }
+  
+  return result.data;
+}
+
+// Or if you only need the user:
+export async function getAuthUser(request: Request): Promise<User | null> {
+  const session = await getAuthSession(request);
+  return session?.user ?? null;
+}
+```
+
+## Mounting Better Auth Routes
+
+Mount Better Auth routes alongside your server framework routes. Better Auth handles all `/api/auth/*` routes:
+
+```typescript
+import { Hono } from "hono";
+import { createServer } from "@alt-stack/server";
+import { auth } from "./auth.js";
+import { todosRouter } from "./routes/todos.js";
+
+// Create base Hono app
+const app = new Hono();
+
+// Mount Better Auth routes
+app.on(["GET", "POST"], "/api/auth/*", async (c) => {
+  return auth.handler(c.req.raw);
+});
+
+// Mount your server framework routes
+const serverApp = createServer({
+  todos: todosRouter,
+});
+
+app.route("/", serverApp);
+
+export default app;
+```
+
+## Adding User to Context
+
+Add the authenticated user to your custom context so it's available in all handlers. Use Zod validation to ensure type safety:
+
+```typescript
+import { createServer } from "@alt-stack/server";
+import { getAuthUser, type User } from "./auth.js";
+import type { Context } from "hono";
+import { z } from "zod";
+
+interface AppContext extends Record<string, unknown> {
+  user: User | null;
+}
+
+async function createContext(c: Context): Promise<AppContext> {
+  const user = await getAuthUser(c.req.raw);
+  return {
+    user,
+  };
+}
+
+const factory = init<AppContext>();
+const router = factory.router()
+  .get("/profile", {
+    input: {},
+    output: z.object({
+      id: z.string(),
+      email: z.string(),
+      name: z.string(),
+    }),
+  })
+  .handler((ctx) => {
+    if (!ctx.user) {
+      return ctx.hono.json({ error: "Unauthorized" }, 401);
+    }
+    
+    // ctx.user is fully typed based on UserSchema
+    return {
+      id: ctx.user.id,
+      email: ctx.user.email,
+      name: ctx.user.name,
+    };
+  });
+
+const app = createServer({
+  users: router,
+}, {
+  createContext,
+});
+```
+
+---
+
+// File: guides/client-side-usage
+
+# Client-Side Usage
+
+When making requests from the client, include credentials to support authentication cookies.
+
+## Using Hono Client
+
+Use the Hono client (`hc`) for type-safe API calls:
+
+```typescript
+import { hc } from "hono/client";
+
+const client = hc("http://localhost:3000", {
+  init: {
+    credentials: "include", // Required for auth cookies
+  },
+});
+
+// Make authenticated requests
+const response = await client.api.users.profile.$get();
+```
+
+## Fetch with Credentials
+
+When using standard `fetch`, ensure credentials are included:
+
+```typescript
+const response = await fetch("http://localhost:3000/api/users/profile", {
+  method: "GET",
+  credentials: "include", // Required for auth cookies
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
+
+const data = await response.json();
+```
+
+## Type-Safe API Calls
+
+The Hono client provides type inference from your router definitions. The client automatically knows:
+
+- Available routes
+- Request methods
+- Input types (params, query, body)
+- Output types
+- Error types
+
+```typescript
+// TypeScript knows this route exists and what it expects
+const response = await client.api.users["{id}"].$get({
+  param: {
+    id: "123",
+  },
+  query: {
+    include: "profile",
+  },
+});
+
+// response.data is typed based on your output schema
+console.log(response.data.name); // ✅ TypeScript knows this exists
+```
+
+## Error Handling
+
+Handle errors type-safely:
+
+```typescript
+try {
+  const response = await client.api.users["{id}"].$get({
+    param: { id: "123" },
+  });
+  
+  if (!response.ok) {
+    // Handle error response
+    const error = await response.json();
+    console.error(error);
+  }
+} catch (error) {
+  // Handle network errors
+  console.error("Request failed:", error);
+}
+```
+
+---
+
+// File: guides/cors-configuration
+
+# CORS Configuration
+
+Use the `middleware` option in `createServer` to apply global middleware like CORS and mount external routes like Better Auth, all in one call.
+
+## Recommended: Global CORS with Better Auth
+
+For most applications, applying CORS globally with credentials support works best:
+
+```typescript
+import { Hono } from "hono";
+import { cors } from "hono/cors";
+import { createServer } from "@alt-stack/server";
+import { auth, getAuthUser } from "./auth.js";
+import { todosRouter } from "./routes/todos.js";
+import type { Context } from "hono";
+
+// Create base app
+const app = new Hono();
+
+// Apply CORS globally (must be before routes)
+app.use("*", cors({
+  origin: process.env.CLIENT_URL || "http://localhost:3000",
+  allowHeaders: ["Content-Type", "Authorization"],
+  allowMethods: ["POST", "GET", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  credentials: true, // Required for Better Auth cookies
+  exposeHeaders: ["Set-Cookie"],
+}));
+
+// Mount Better Auth routes
+app.on(["GET", "POST"], "/api/auth/*", async (c) => {
+  return auth.handler(c.req.raw);
+});
+
+// Create server framework app with context
+interface AppContext extends Record<string, unknown> {
+  user: User | null;
+}
+
+async function createContext(c: Context): Promise<AppContext> {
+  const user = await getAuthUser(c.req.raw);
+  return { user };
+}
+
+const serverApp = createServer({
+  todos: todosRouter,
+}, {
+  createContext,
+});
+
+// Mount server framework routes
+app.route("/", serverApp);
+
+export default app;
+```
+
+## Using Middleware Option
+
+Use the `middleware` option in `createServer` to apply global middleware like CORS and mount external routes like Better Auth, all in one call:
+
+```typescript
+import { cors } from "hono/cors";
+import { createServer } from "@alt-stack/server";
+import { auth } from "./auth.js";
+import { todosRouter } from "./routes/todos.js";
+
+// Create server with CORS and Better Auth routes
+const app = createServer(
+  {
+    todos: todosRouter,
+  },
+  {
+    createContext,
+    middleware: {
+      // Apply CORS globally
+      "*": {
+        methods: ["OPTIONS", "GET", "POST", "PUT", "PATCH", "DELETE"],
+        handler: cors({
+          origin: process.env.CLIENT_URL || "http://localhost:3000",
+          allowHeaders: ["Content-Type", "Authorization"],
+          allowMethods: ["POST", "GET", "PUT", "PATCH", "DELETE", "OPTIONS"],
+          credentials: true, // Required for Better Auth cookies
+          exposeHeaders: ["Set-Cookie"],
+        }) as any, // Type assertion for CORS middleware
+      },
+      // Mount Better Auth routes
+      "/api/auth/*": {
+        methods: ["GET", "POST"],
+        handler: async (c) => auth.handler(c.req.raw),
+      },
+    },
+  },
+);
+
+export default app;
+```
+
+**Key Points:**
+- The `"*"` path applies middleware globally to all routes (framework and mounted routes)
+- For `"*"` paths, the handler can be a Hono middleware function (like `cors()`) or a regular handler
+- Other paths mount specific route handlers (like Better Auth)
+- Middleware is applied before framework routes, ensuring CORS headers are set correctly
+
+## Manual Setup
+
+If you need more control, you can still apply CORS manually after `createServer`:
+
+```typescript
+import { Hono } from "hono";
+import { cors } from "hono/cors";
+import { createServer } from "@alt-stack/server";
+import { auth } from "./auth.js";
+import { todosRouter } from "./routes/todos.js";
+
+const app = new Hono();
+
+// Apply CORS specifically to Better Auth routes
+app.use("/api/auth/*", cors({
+  origin: process.env.CLIENT_URL || "http://localhost:3000",
+  allowHeaders: ["Content-Type", "Authorization"],
+  allowMethods: ["POST", "GET", "OPTIONS"],
+  credentials: true,
+}));
+
+// Mount Better Auth routes
+app.on(["GET", "POST"], "/api/auth/*", async (c) => {
+  return auth.handler(c.req.raw);
+});
+
+// Create and mount server framework routes
+const serverApp = createServer({
+  todos: todosRouter,
+}, {
+  createContext,
+});
+
+app.route("/", serverApp);
+
+export default app;
+```
+
+## CORS Only for Server Framework Routes
+
+Apply CORS to server framework routes only:
+
+```typescript
+import { Hono } from "hono";
+import { cors } from "hono/cors";
+import { createServer } from "@alt-stack/server";
+import { auth } from "./auth.js";
+import { todosRouter } from "./routes/todos.js";
+
+// Create server framework app
+const serverApp = createServer({
+  todos: todosRouter,
+}, {
+  createContext,
+});
+
+// Apply CORS to server framework routes
+serverApp.use("*", cors({
+  origin: process.env.CLIENT_URL || "http://localhost:3000",
+  allowHeaders: ["Content-Type", "Authorization"],
+  allowMethods: ["POST", "GET", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  credentials: true,
+}));
+
+const app = new Hono();
+
+// Mount Better Auth routes (no CORS needed if same origin)
+app.on(["GET", "POST"], "/api/auth/*", async (c) => {
+  return auth.handler(c.req.raw);
+});
+
+// Mount server framework routes with CORS
+app.route("/", serverApp);
+
+export default app;
+```
+
+---
+
+// File: guides/openapi-documentation
+
+# OpenAPI Documentation
+
+Automatically generate and serve OpenAPI 3.0 documentation for your API using Zod 4's native `toJSONSchema()` function.
+
+## Quick Start
+
+Use `createDocsRouter` to automatically generate and serve OpenAPI documentation:
+
+```typescript
+import { init, createServer, createDocsRouter } from "@alt-stack/server";
+import { z } from "zod";
+
+const factory = init();
+const apiRouter = factory.router()
+  .get("/users/{id}", {
+    input: {
+      params: z.object({
+        id: z.string(),
+      }),
+    },
+    output: z.object({
+      id: z.string(),
+      name: z.string(),
+      email: z.string().email(),
+    }),
+  })
+  .handler((ctx) => ({
+    id: ctx.input.id,
+    name: "Alice",
+    email: "alice@example.com",
+  }))
+  .post("/users", {
+    input: {
+      body: z.object({
+        name: z.string(),
+        email: z.string().email(),
+      }),
+    },
+    output: z.object({
+      id: z.string(),
+      name: z.string(),
+    }),
+  })
+  .handler((ctx) => ({
+    id: "1",
+    name: ctx.input.name,
+  }));
+
+// Create docs router
+const docsRouter = createDocsRouter(
+  { api: apiRouter },
+  {
+    title: "My API",
+    version: "1.0.0",
+    description: "API documentation",
+  }
+);
+
+// Mount both routers
+const app = createServer({
+  api: apiRouter,
+  docs: docsRouter,
+});
+```
+
+Now you can access:
+- OpenAPI JSON spec at `/docs/openapi.json` (path determined by mount prefix `docs`)
+- Interactive Swagger UI at `/docs` (path determined by mount prefix `docs`)
+
+## Basic Usage
+
+The `createDocsRouter` function takes the same router configuration as `createServer`, allowing it to automatically discover all your routes and generate complete OpenAPI documentation.
+
+```typescript
+import { init, createDocsRouter } from "@alt-stack/server";
+
+const factory = init();
+const router = factory.router()
+  .get("/items", {
+    input: {},
+    output: z.array(z.object({ id: z.string() })),
+  })
+  .handler(() => []);
+
+const docsRouter = createDocsRouter({ api: router });
+```
+
+## Customization Options
+
+Customize paths, metadata, and enable/disable features:
+
+```typescript
+const docsRouter = createDocsRouter(
+  { api: router },
+  {
+    // OpenAPI metadata
+    title: "Todo API",
+    version: "2.0.0",
+    description: "A simple todo API",
+    
+    // Custom OpenAPI spec path
+    openapiPath: "openapi.json", // Default: "openapi.json"
+    // Note: The docs path is determined by the router prefix when mounting in createServer
+    
+    // Enable/disable interactive docs
+    enableDocs: true, // Default: true
+  }
+);
+```
+
+## Integration with createServer
+
+The docs router integrates seamlessly with `createServer`:
+
+```typescript
+import { init, createServer, createDocsRouter } from "@alt-stack/server";
+
+const factory = init();
+const todosRouter = factory.router()
+  .get("/", {
+    input: {},
+    output: z.array(z.object({ id: z.string(), title: z.string() })),
+  })
+  .handler(() => []);
+
+const docsRouter = createDocsRouter(
+  { todos: todosRouter },
+  {
+    title: "Todo API",
+    version: "1.0.0",
+  }
+);
+
+const app = createServer({
+  todos: todosRouter,
+  docs: docsRouter,
+});
+```
+
+With this setup:
+- API routes are available at `/todos/*`
+- Documentation is available at `/docs/*`
+
+## Manual OpenAPI Spec Generation
+
+If you need the OpenAPI spec object directly (e.g., for external tools or custom documentation), use `generateOpenAPISpec`:
+
+```typescript
+import { generateOpenAPISpec } from "@alt-stack/server";
+
+const spec = generateOpenAPISpec(
+  { api: router },
+  {
+    title: "My API",
+    version: "1.0.0",
+    description: "API documentation",
+  }
+);
+
+// Use the spec with external tools
+console.log(JSON.stringify(spec, null, 2));
+```
+
+## What Gets Documented
+
+The OpenAPI documentation automatically includes:
+
+- **All routes** from your routers
+- **Path parameters** (e.g., `/{id}`)
+- **Query parameters** from query schemas
+- **Request bodies** for POST/PUT/PATCH operations
+- **Response schemas** from output schemas
+- **Error responses** from error schemas
+- **Operation IDs** automatically generated from route paths
+
+## Example: Complete API Documentation
+
+Here's a complete example with multiple route types:
+
+```typescript
+import { init, createServer, createDocsRouter } from "@alt-stack/server";
+import { z } from "zod";
+
+const factory = init();
+const router = factory.router()
+  // GET with path and query params
+  .get("/users/{id}", {
+    input: {
+      params: z.object({
+        id: z.string(),
+      }),
+      query: z.object({
+        include: z.string().optional(),
+      }),
+    },
+    output: z.object({
+      id: z.string(),
+      name: z.string(),
+      email: z.string(),
+    }),
+    errors: {
+      404: z.object({
+        error: z.object({
+          code: z.literal("NOT_FOUND"),
+          message: z.string(),
+        }),
+      }),
+    },
+  })
+  .handler((ctx) => ({
+    id: ctx.input.id,
+    name: "John",
+    email: "john@example.com",
+  }))
+  
+  // POST with body
+  .post("/users", {
+    input: {
+      body: z.object({
+        name: z.string().min(1),
+        email: z.string().email(),
+      }),
+    },
+    output: z.object({
+      id: z.string(),
+      name: z.string(),
+      email: z.string(),
+    }),
+    errors: {
+      400: z.object({
+        error: z.object({
+          code: z.literal("VALIDATION_ERROR"),
+          message: z.string(),
+        }),
+      }),
+    },
+  })
+  .handler((ctx) => ({
+    id: "1",
+    name: ctx.input.name,
+    email: ctx.input.email,
+  }))
+  
+  // PATCH with path params and body
+  .patch("/users/{id}", {
+    input: {
+      params: z.object({
+        id: z.string(),
+      }),
+      body: z.object({
+        name: z.string().optional(),
+        email: z.string().email().optional(),
+      }),
+    },
+    output: z.object({
+      id: z.string(),
+      name: z.string(),
+      email: z.string(),
+    }),
+  })
+  .handler((ctx) => ({
+    id: ctx.input.id,
+    name: ctx.input.name || "John",
+    email: ctx.input.email || "john@example.com",
+  }))
+  
+  // DELETE
+  .delete("/users/{id}", {
+    input: {
+      params: z.object({
+        id: z.string(),
+      }),
+    },
+    output: z.object({
+      success: z.boolean(),
+    }),
+  })
+  .handler(() => ({ success: true }));
+
+const docsRouter = createDocsRouter({ api: router });
+const app = createServer({ api: router, docs: docsRouter });
+```
+
+All routes are automatically documented with proper OpenAPI 3.0 schemas.
+
+## Disabling Interactive Docs
+
+If you only need the JSON spec (e.g., for external tools), disable the HTML docs:
+
+```typescript
+const docsRouter = createDocsRouter(
+  { api: router },
+  {
+    enableDocs: false, // Only serve /openapi.json, not /docs
+  }
+);
+```
+
+## How It Works
+
+The OpenAPI generation uses Zod 4's native `toJSONSchema()` function with the `openapi-3.0` target. This means:
+
+- All Zod schemas are automatically converted to JSON Schema
+- Complex types (objects, arrays, unions, etc.) are properly documented
+- String formats (email, UUID, URL, etc.) are recognized
+- Validation constraints are included in the schema
+
+The generated OpenAPI spec is fully compliant with OpenAPI 3.0 specification and can be used with any OpenAPI-compatible tools.
+
+---
+
+// File: guides/protected-routes
+
+# Protected Routes
+
+Follow the tRPC authorization pattern for type-safe protected routes. The middleware can pass an updated context to `next()` to narrow types.
+
+## Reusable Procedures Pattern (Recommended)
+
+The recommended way to create protected routes is using reusable procedures:
+
+```typescript
+import { init, createServer } from "@alt-stack/server";
+import { z } from "zod";
+
+interface AppContext {
+  user: { id: string; name: string } | null;
+}
+
+const factory = init<AppContext>();
+const router = factory.router();
+
+// Create reusable procedures
+const publicProcedure = factory.procedure;
+const protectedProcedure = factory.procedure
+  .errors({
+    401: z.object({
+      error: z.object({
+        code: z.literal("UNAUTHORIZED"),
+        message: z.string(),
+      }),
+    }),
+  })
+  .use(
+    async function isAuthed(opts) {
+      const { ctx } = opts;
+      if (!ctx.user) {
+        throw ctx.error({
+          error: {
+            code: "UNAUTHORIZED" as const,
+            message: "Authentication required",
+          },
+        });
+      }
+      return opts.next({
+        ctx: {
+          user: ctx.user,
+        },
+      });
+    }
+  );
+
+// Use procedures to create routes
+publicProcedure.on(router)
+  .get("/hello", {
+    input: {},
+    output: z.string(),
+  })
+  .handler(() => "hello world");
+
+protectedProcedure.on(router)
+  .get("/secret", {
+    input: {},
+    output: z.object({
+      secret: z.string(),
+    }),
+  })
+  .handler(() => ({
+    secret: "sauce",
+  }));
+
+const app = createServer({ api: router });
+```
+
+See the [Reusable Procedures guide](/core-concepts/reusable-procedures) for more details.
+
+## Procedure-Level Middleware Pattern
+
+The middleware can narrow the context type by passing an updated context to `next()`:
+
+```typescript
+import { init } from "@alt-stack/server";
+import { z } from "zod";
+
+const factory = init<AppContext>();
+const protectedRouter = factory.router();
+
+// You can reuse this middleware pattern for any procedure
+protectedRouter
+  .get("/profile", {
+    input: {},
+    output: z.object({
+      id: z.string(),
+      email: z.string(),
+      name: z.string(),
+    }),
+    errors: {
+      401: z.object({
+        error: z.object({
+          code: z.literal("UNAUTHORIZED"),
+          message: z.string(),
+        }),
+      }),
+    },
+  })
+  .use(async function isAuthed(opts) {
+    const { ctx } = opts;
+    // `ctx.user` is nullable
+    if (!ctx.user) {
+      throw opts.ctx.error({
+        error: {
+          code: "UNAUTHORIZED" as const,
+          message: "Authentication required",
+        },
+      });
+    }
+    // ✅ Pass updated context where user is non-null (tRPC pattern)
+    // This allows the context to have user as non-null for subsequent handlers
+    return opts.next({
+      ctx: {
+        user: ctx.user, // ✅ user value is known to be non-null now
+      },
+    });
+  })
+  .handler((ctx) => {
+    // ✅ ctx.user is now guaranteed to be non-null after the middleware
+    // The next({ ctx: { user: ... } }) pattern ensures the runtime context has user
+    // Type check needed because TypeScript can't track the narrowing through next()
+    if (!ctx.user) {
+      // This should never happen due to middleware, but TypeScript needs the check
+      throw ctx.error({
+        error: {
+          code: "UNAUTHORIZED" as const,
+          message: "Authentication required",
+        },
+      });
+    }
+    return {
+      id: ctx.user.id,
+      email: ctx.user.email,
+      name: ctx.user.name,
+    };
+  });
+```
+
+## Traditional Middleware Pattern
+
+You can also use a traditional middleware approach without the context narrowing. Use `createMiddleware` helper to avoid type assertions:
+
+```typescript
+import { createMiddleware } from "@alt-stack/server";
+
+// Middleware that requires authentication - no type assertion needed!
+const requireAuth = createMiddleware<AppContext>(async ({ ctx, next }) => {
+  // ctx is automatically typed as BaseContext & AppContext
+  if (!ctx.user) {
+    return ctx.hono.json(
+      {
+        error: {
+          code: "UNAUTHORIZED",
+          message: "Authentication required",
+        },
+      },
+      401
+    ) as Response;
+  }
+  return next();
+});
+
+// Use on router level (protects all routes)
+const factory = init<AppContext>();
+const protectedRouter = factory.router()
+  .use(requireAuth)
+  .get("/profile", {
+    input: {},
+    output: z.object({
+      id: z.string(),
+      email: z.string(),
+    }),
+  })
+  .handler((ctx) => {
+    // Additional null check recommended for type safety
+    if (!ctx.user) {
+      throw ctx.error({
+        error: {
+          code: "UNAUTHORIZED" as const,
+          message: "Authentication required",
+        },
+      });
+    }
+    
+    return {
+      id: ctx.user.id,
+      email: ctx.user.email,
+    };
+  });
+
+// Or use on procedure level (protects specific routes)
+const factory = init<AppContext>();
+const router = factory.router()
+  .get("/public", {
+    input: {},
+    output: z.object({ message: z.string() }),
+  })
+  .handler(() => {
+    return { message: "Public content" };
+  })
+  .get("/private", {
+    input: {},
+    output: z.object({
+      id: z.string(),
+      email: z.string(),
+    }),
+  })
+  .use(requireAuth) // Protect only this route
+  .handler((ctx) => {
+    if (!ctx.user) {
+      throw ctx.error({
+        error: {
+          code: "UNAUTHORIZED" as const,
+          message: "Authentication required",
+        },
+      });
+    }
+    
+    return {
+      id: ctx.user.id,
+      email: ctx.user.email,
+    };
+  });
+```
+
+## Type-Safe User Context with Zod
+
+For better type safety, use Zod's type inference to create authenticated context types:
+
+```typescript
+import { z } from "zod";
+
+// Your validated user schema
+const UserSchema = z.object({
+  id: z.string(),
+  email: z.string().email(),
+  name: z.string(),
+});
+
+type User = z.infer<typeof UserSchema>;
+
+interface AppContext extends Record<string, unknown> {
+  user: User | null;
+}
+
+interface AuthenticatedContext extends AppContext {
+  user: User; // Non-nullable after requireAuth middleware
+}
+
+const requireAuth = async ({ ctx, next }): Promise<AuthenticatedContext | Response> => {
+  const appCtx = ctx as typeof ctx & AppContext;
+  
+  // Validate user with Zod if not already validated
+  if (!appCtx.user) {
+    return appCtx.hono.json(
+      {
+        error: {
+          code: "UNAUTHORIZED",
+          message: "Authentication required",
+        },
+      },
+      401
+    ) as Response;
+  }
+  
+  // Optionally re-validate to ensure type safety
+  const validatedUser = UserSchema.parse(appCtx.user);
+  
+  // Return context with validated, non-nullable user
+  return next() as Promise<AuthenticatedContext>;
+};
+```
+
+## Role-Based Access Control
+
+You can also validate user roles, permissions, or other attributes using Zod:
+
+```typescript
+import { z } from "zod";
+
+const UserWithRoleSchema = UserSchema.extend({
+  role: z.enum(["admin", "user", "moderator"]),
+  permissions: z.array(z.string()),
+});
+
+type UserWithRole = z.infer<typeof UserWithRoleSchema>;
+
+// Middleware that requires specific role
+const requireRole = (role: "admin" | "user" | "moderator") => {
+  return async ({ ctx, next }) => {
+    const appCtx = ctx as typeof ctx & AppContext;
+    
+    if (!appCtx.user) {
+      return appCtx.hono.json({ error: "Unauthorized" }, 401) as Response;
+    }
+    
+    // Validate user has required role
+    const validatedUser = UserWithRoleSchema.safeParse(appCtx.user);
+    if (!validatedUser.success || validatedUser.data.role !== role) {
+      return appCtx.hono.json({ error: "Forbidden" }, 403) as Response;
+    }
+    
+    return next();
+  };
+};
+
+// Usage
+const factory = init<AppContext>();
+const adminRouter = factory.router()
+  .use(requireRole("admin"))
+  .get("/admin/users", {
+    input: {},
+    output: z.array(UserSchema),
+  })
+  .handler(async (ctx) => {
+    // ctx.user is validated as admin
+    return getAllUsers();
+  });
+```
+
+---
+
+// File: intro
+
+# Introduction
+
+Altstack is a type-safe full-stack framework with separate server and client packages, built on Hono with Zod validation. Inspired by tRPC's builder pattern, providing full type inference from a central router definition.
+
+## Architecture
+
+Altstack consists of two main packages:
+
+- **`@alt-stack/server`**: A lightweight, type-safe server framework for building APIs
+- **`@alt-stack/client`**: A type-safe API client that works seamlessly with server-generated types
+
+## Server Features
+
+- **Type-safe routes**: Full TypeScript inference from Zod schemas
+- **Builder pattern**: Fluent API for defining routes with `.get()`, `.post()`, etc.
+- **Type-safe errors**: `ctx.error()` with automatic status code inference from error schemas
+- **Reusable procedures**: Create reusable procedures with middleware (tRPC-style pattern)
+- **Middleware support**: Router-level and procedure-level middleware with context extension
+- **Router combination**: Merge multiple routers with `.merge()`
+- **Validation**: Automatic Zod validation for inputs and optional outputs
+- **OpenAPI generation**: Generate OpenAPI specs and type-safe Request/Response objects
+- **Lightweight**: Minimal abstraction over Hono - easy to audit and understand
+
+## Client Features
+
+- **Type-safe API calls**: Full TypeScript inference from server-generated types
+- **Automatic validation**: Runtime validation using Zod schemas
+- **Retry logic**: Built-in exponential backoff for failed requests
+- **Path interpolation**: Automatic handling of path parameters
+- **Error handling**: Typed error responses with detailed error information
+
+---
+
+// File: kafka/core-concepts/combining-routers
+
+# Combining Routers
+
+Combine multiple routers to organize your Kafka consumers by domain or feature.
+
+## Basic Router Combination
+
+Use `mergeKafkaRouters` to combine routers:
+
+```typescript
+import { createKafkaRouter, mergeKafkaRouters } from "@alt-stack/kafka";
+
+const userRouter = createKafkaRouter()
+  .topic("user-created", { /* ... */ })
+  .handler(handleUserCreated)
+  .topic("user-updated", { /* ... */ })
+  .handler(handleUserUpdated);
+
+const orderRouter = createKafkaRouter()
+  .topic("order-created", { /* ... */ })
+  .handler(handleOrderCreated)
+  .topic("order-cancelled", { /* ... */ })
+  .handler(handleOrderCancelled);
+
+// Combine routers
+const mainRouter = mergeKafkaRouters({
+  users: userRouter,
+  orders: orderRouter,
+});
+
+const consumer = await createConsumer(mainRouter, {
+  kafka: new Kafka({
+    brokers: ["localhost:9092"],
+  }),
+  groupId: "my-consumer-group",
+});
+```
+
+## Router Constructor
+
+You can also combine routers using the router constructor:
+
+```typescript
+const mainRouter = createKafkaRouter({
+  users: userRouter,
+  orders: orderRouter,
+});
+```
+
+## Multiple Routers with Same Prefix
+
+Combine multiple routers under the same prefix:
+
+```typescript
+const v1Router = createKafkaRouter()
+  .topic("user-events-v1", { /* ... */ })
+  .handler(handleV1);
+
+const v2Router = createKafkaRouter()
+  .topic("user-events-v2", { /* ... */ })
+  .handler(handleV2);
+
+const mainRouter = createKafkaRouter({
+  users: [v1Router, v2Router],
+});
+```
+
+## Shared Context
+
+All routers share the same context type:
+
+```typescript
+interface AppContext {
+  logger: Logger;
+  db: Database;
+}
+
+const userRouter = createKafkaRouter<AppContext>()
+  .topic("user-events", { /* ... */ })
+  .handler((ctx) => {
+    ctx.logger.log("Processing user event");
+    // ctx.input is the parsed message
+    ctx.db.save(ctx.input);
+  });
+
+const orderRouter = createKafkaRouter<AppContext>()
+  .topic("order-events", { /* ... */ })
+  .handler((ctx) => {
+    ctx.logger.log("Processing order event");
+    // ctx.input is the parsed message
+    ctx.db.save(ctx.input);
+  });
+
+const mainRouter = mergeKafkaRouters({
+  users: userRouter,
+  orders: orderRouter,
+});
+
+const consumer = await createConsumer(mainRouter, {
+  kafka: new Kafka({
+    brokers: ["localhost:9092"],
+  }),
+  groupId: "my-consumer-group",
+  createContext: (baseCtx) => ({
+    logger: getLogger(),
+    db: getDatabase(),
+  }),
+});
+```
+
+---
+
+// File: kafka/core-concepts/consumers
+
+# Consumers
+
+Create and configure Kafka consumers to process messages from your routers.
+
+## Basic Consumer Setup
+
+Use `createConsumer` to create a Kafka consumer from a router:
+
+```typescript
+import { createConsumer, createKafkaRouter } from "@alt-stack/kafka";
+import { Kafka } from "kafkajs";
+import { z } from "zod";
+
+const router = createKafkaRouter()
+  .topic("user-events", {
+    input: {
+      message: z.object({
+        userId: z.string(),
+      }),
+    },
+  })
+  .handler((ctx) => {
+    console.log(ctx.input.message.userId);
+  });
+
+const consumer = await createConsumer(router, {
+  kafka: new Kafka({
+    clientId: "my-app",
+    brokers: ["localhost:9092"],
+  }),
+  groupId: "my-consumer-group",
+});
+
+// Consumer is automatically connected and started
+// Messages are automatically validated and routed to handlers
+```
+
+## Kafka Configuration
+
+Pass Kafka configuration directly:
+
+```typescript
+const consumer = await createConsumer(router, {
+  kafka: {
+    clientId: "my-app",
+    brokers: ["localhost:9092"],
+    ssl: true,
+    sasl: {
+      mechanism: "plain",
+      username: "user",
+      password: "pass",
+    },
+  },
+  groupId: "my-consumer-group",
+});
+```
+
+## Consumer Configuration
+
+Customize consumer behavior:
+
+```typescript
+const consumer = await createConsumer(router, {
+  kafka: new Kafka({
+    brokers: ["localhost:9092"],
+  }),
+  groupId: "my-consumer-group",
+  consumerConfig: {
+    sessionTimeout: 30000,
+    heartbeatInterval: 3000,
+    maxBytesPerPartition: 1048576,
+  },
+});
+```
+
+## Error Handling
+
+Handle errors during message processing:
+
+```typescript
+import { ProcessingError } from "@alt-stack/kafka";
+
+const consumer = await createConsumer(router, {
+  kafka: new Kafka({
+    brokers: ["localhost:9092"],
+  }),
+  groupId: "my-consumer-group",
+  onError: (error) => {
+    if (error instanceof ProcessingError) {
+      // Handle processing errors
+      console.error("Processing error:", error.code, error.data);
+    } else {
+      // Handle other errors
+      console.error("Consumer error:", error);
+    }
+    // Implement retry logic or alerting
+  },
+});
+```
+
+Note: The consumer automatically connects and starts consuming messages when created. No manual `connect()` or `run()` calls are needed.
+
+---
+
+// File: kafka/core-concepts/custom-context
+
+# Custom Context
+
+Extend the base Kafka context with custom properties for your application.
+
+## Base Context
+
+Every handler receives a base context with Kafka-specific properties:
+
+```typescript
+interface BaseKafkaContext {
+  message: KafkaMessage; // Full Kafka message from kafkajs
+  topic: string;
+  partition: number;
+  offset: string;
+}
+```
+
+The `message` property contains the full Kafka message object, which includes:
+- `value`: The message payload (Buffer)
+- `key`: Message key (`Buffer | null`)
+- `headers`: Message headers (`Record<string, Buffer | undefined>`)
+- `timestamp`: Message timestamp (string)
+
+## Custom Context Types
+
+Define your custom context type:
+
+```typescript
+interface AppContext {
+  logger: {
+    log: (message: string) => void;
+  };
+  db: Database;
+  metrics: MetricsCollector;
+}
+```
+
+## Creating Context
+
+Provide a `createContext` function when creating the consumer:
+
+```typescript
+import type { BaseKafkaContext } from "@alt-stack/kafka";
+
+function createContext(baseCtx: BaseKafkaContext): AppContext {
+  return {
+    logger: {
+      log: (message: string) => {
+        console.log(
+          `[${baseCtx.topic}:${baseCtx.partition}:${baseCtx.offset}] ${message}`,
+        );
+      },
+    },
+    db: getDatabase(),
+    metrics: getMetricsCollector(),
+  };
+}
+
+const router = createKafkaRouter<AppContext>()
+  .topic("user-events", {
+    input: {
+      message: UserEventSchema,
+    },
+  })
+  .handler((ctx) => {
+    // ctx.logger, ctx.db, ctx.metrics are typed
+    // ctx.input is the parsed message
+    ctx.logger.log("Processing event");
+    ctx.db.save(ctx.input);
+    ctx.metrics.increment("events.processed");
+  });
+
+const consumer = await createConsumer(router, {
+  kafka: new Kafka({
+    brokers: ["localhost:9092"],
+  }),
+  groupId: "my-consumer-group",
+  createContext,
+});
+```
+
+## Async Context Creation
+### Example: Creating Database Connections in Context
+
+For database connections, create them in `createContext` and reuse a connection pool:
+
+```typescript
+import { createKafkaRouter, createConsumer } from "@alt-stack/kafka";
+import { Kafka } from "kafkajs";
+import { z } from "zod";
+import { createPool, Pool } from "your-database-library";
+
+interface AppContext {
+  db: Pool;
+  logger: Logger;
+}
+
+// Create connection pool that will be reused
+let dbPool: Pool | null = null;
+
+async function createContext(
+  baseCtx: BaseKafkaContext,
+): Promise<AppContext> {
+  // Create connection pool on first call, reuse afterwards
+  if (!dbPool) {
+    dbPool = createPool({
+      host: process.env.DB_HOST,
+      port: process.env.DB_PORT,
+      database: process.env.DB_NAME,
+      min: 2, // Minimum connections
+      max: 10, // Maximum connections
+    });
+
+    // Test the connection
+    await dbPool.query("SELECT 1");
+    console.log("Database connection pool established");
+  }
+
+  return {
+    db: dbPool, // Reuse the shared connection pool
+    logger: getLogger(),
+  };
+}
+
+const router = createKafkaRouter<AppContext>()
+  .topic("user-events", {
+    input: {
+      message: z.object({
+        userId: z.string(),
+        eventType: z.string(),
+      }),
+    },
+  })
+  .handler(async (ctx) => {
+    // Use the database connection pool
+    const user = await ctx.db.query("SELECT * FROM users WHERE id = ?", [
+      ctx.input.userId,
+    ]);
+    ctx.logger.log(`Processing ${ctx.input.eventType} for user ${user.name}`);
+  });
+
+// Main application setup
+async function main() {
+  const consumer = await createConsumer(router, {
+    kafka: new Kafka({
+      brokers: ["localhost:9092"],
+    }),
+    groupId: "my-consumer-group",
+    createContext,
+  });
+
+  console.log("Consumer started and listening for messages...");
+
+  // Handle graceful shutdown
+  const shutdown = async () => {
+    console.log("Shutting down...");
+    await consumer.disconnect();
+    if (dbPool) {
+      await dbPool.end(); // Close all connections in pool
+    }
+    process.exit(0);
+  };
+
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+}
+
+main().catch((error) => {
+  console.error("Failed to start application:", error);
+  process.exit(1);
+});
+```
+
+This pattern ensures:
+- Database connection pool is created in `createContext` when first needed
+- Connection pool is reused across all message processing
+- Proper cleanup on application shutdown
+- Better performance with connection pooling for concurrent messages
+
+## Middleware Context Extension
+
+Middleware can also extend context:
+
+```typescript
+const userMiddleware = createMiddleware<AppContext>(
+  async ({ ctx, next }) => {
+    // ctx.input is the parsed message
+    const user = await getUserFromMessage(ctx.input);
+    return next({ ctx: { user } });
+  },
+);
+```
+
+---
+
+// File: kafka/core-concepts/error-handling
+
+# Error Handling
+
+Handle errors in Kafka message processing with typed error schemas.
+
+## Error Schemas
+
+Define error schemas for your procedures:
+
+```typescript
+import { createKafkaRouter } from "@alt-stack/kafka";
+import { z } from "zod";
+
+const router = createKafkaRouter()
+  .topic("process-order", {
+    input: {
+      message: z.object({
+        orderId: z.string(),
+        amount: z.number(),
+      }),
+    },
+    errors: {
+      INVALID_ORDER: z.object({
+        error: z.object({
+          code: z.literal("INVALID_ORDER"),
+          message: z.string(),
+          orderId: z.string(),
+        }),
+      }),
+      INSUFFICIENT_FUNDS: z.object({
+        error: z.object({
+          code: z.literal("INSUFFICIENT_FUNDS"),
+          message: z.string(),
+          required: z.number(),
+          available: z.number(),
+        }),
+      }),
+    },
+  })
+  .handler((ctx) => {
+    if (!isValidOrder(ctx.input.orderId)) {
+      throw ctx.error({
+        error: {
+          code: "INVALID_ORDER",
+          message: "Order not found",
+          orderId: ctx.input.orderId,
+        },
+      });
+    }
+    
+    if (ctx.input.amount > getAvailableFunds()) {
+      throw ctx.error({
+        error: {
+          code: "INSUFFICIENT_FUNDS",
+          message: "Insufficient funds",
+          required: ctx.input.amount,
+          available: getAvailableFunds(),
+        },
+      });
+    }
+    
+    processOrder(ctx.input);
+  });
+```
+
+## Error Types
+
+The `ctx.error()` method accepts a union of all error schemas:
+
+```typescript
+// TypeScript knows the available error schemas
+ctx.error({
+  error: {
+    code: "INVALID_ORDER",
+    message: "Order not found",
+    orderId: "123",
+  },
+});
+
+// TypeScript validates the error data matches one of the schemas
+ctx.error({
+  error: {
+    code: "INVALID_ORDER",
+    message: "Order not found",
+    orderId: "123",
+    // extra: "field", // Error: Type error
+  },
+});
+```
+
+## Consumer Error Handling
+
+Handle errors at the consumer level:
+
+```typescript
+import { ProcessingError } from "@alt-stack/kafka";
+
+const consumer = await createConsumer(router, {
+  kafka: new Kafka({
+    brokers: ["localhost:9092"],
+  }),
+  groupId: "my-consumer-group",
+  onError: (error) => {
+    if (error instanceof ProcessingError) {
+      // Handle processing errors
+      console.error("Processing error:", error.code, error.data);
+      sendToDeadLetterQueue(error);
+    } else {
+      // Handle other errors
+      console.error("Unexpected error:", error);
+    }
+  },
+});
+```
+
+## Processing Errors
+
+Errors thrown in handlers are automatically caught and passed to `onError`:
+
+```typescript
+const router = createKafkaRouter()
+  .topic("user-events", {
+    input: {
+      message: z.object({
+        userId: z.string(),
+      }),
+    },
+    errors: {
+      USER_NOT_FOUND: z.object({
+        error: z.object({
+          code: z.literal("USER_NOT_FOUND"),
+          userId: z.string(),
+        }),
+      }),
+    },
+  })
+  .handler(async (ctx) => {
+    const user = await db.findUser(ctx.input.userId);
+    if (!user) {
+      throw ctx.error({
+        error: {
+          code: "USER_NOT_FOUND",
+          userId: ctx.input.userId,
+        },
+      });
+    }
+    // Process user...
+  });
+```
+
+---
+
+// File: kafka/core-concepts/middleware
+
+# Middleware
+
+Apply middleware at router-level or procedure-level to add cross-cutting concerns like logging, metrics, or error handling.
+
+## Router-Level Middleware
+
+Apply middleware to all topics in a router:
+
+```typescript
+import { createKafkaRouter, createMiddleware } from "@alt-stack/kafka";
+import { z } from "zod";
+
+interface AppContext {
+  logger: {
+    log: (message: string) => void;
+  };
+}
+
+const loggingMiddleware = createMiddleware<AppContext>(
+  async ({ ctx, next }) => {
+    ctx.logger.log(`Processing message from topic ${ctx.topic}`);
+    const result = await next();
+    ctx.logger.log(`Completed processing message from topic ${ctx.topic}`);
+    return result;
+  },
+);
+
+const router = createKafkaRouter<AppContext>()
+  .use(loggingMiddleware)
+  .topic("user-events", {
+    input: {
+      message: z.object({
+        userId: z.string(),
+      }),
+    },
+  })
+  .handler((ctx) => {
+    // ctx.logger is available from middleware
+    // ctx.input is the parsed message
+    ctx.logger.log(`Processing user ${ctx.input.userId}`);
+  });
+```
+
+## Procedure-Level Middleware
+
+Apply middleware to specific topics:
+
+```typescript
+const router = createKafkaRouter()
+  .topic("sensitive-events", {
+    input: {
+      message: z.object({
+        data: z.string(),
+      }),
+    },
+  })
+  .use(async ({ ctx, next }) => {
+    // Log before handler
+    console.log(`Processing sensitive event from partition ${ctx.partition}`);
+    return next();
+  })
+  .handler((ctx) => {
+    // ctx.input is the parsed message
+    processSensitiveData(ctx.input);
+  });
+```
+
+## Context Extension
+
+Middleware can extend the context by passing updated context to `next()`:
+
+```typescript
+const metricsMiddleware = createMiddleware<AppContext>(
+  async ({ ctx, next }) => {
+    const start = Date.now();
+    const result = await next();
+    const duration = Date.now() - start;
+    metrics.recordDuration(ctx.topic, duration);
+    return result;
+  },
+);
+
+const userMiddleware = createMiddleware<AppContext>(
+  async ({ ctx, next }) => {
+    const user = await getUserFromMessage(ctx.input.message);
+    return next({ ctx: { user } });
+  },
+);
+```
+
+## Multiple Middleware
+
+Chain multiple middleware on the same router or procedure:
+
+```typescript
+const router = createKafkaRouter<AppContext>()
+  .use(loggingMiddleware)
+  .use(metricsMiddleware)
+  .topic("user-events", {
+    input: {
+      message: UserEventSchema,
+    },
+  })
+  .handler(/* ... */);
+```
+
+Middleware executes in the order they're defined.
+
+---
+
+// File: kafka/core-concepts/topics-and-procedures
+
+# Topics and Procedures
+
+Define Kafka topics and their message handlers with type-safe procedures.
+
+## Basic Topic Definition
+
+Use the `topic` method to define a Kafka topic and its message schema:
+
+```typescript
+import { createKafkaRouter } from "@alt-stack/kafka";
+import { z } from "zod";
+
+const router = createKafkaRouter()
+  .topic("user-events", {
+    input: {
+      message: z.object({
+        userId: z.string(),
+        eventType: z.string(),
+      }),
+    },
+  })
+  .handler((ctx) => {
+    // ctx.input is typed based on the schema (not ctx.input.message)
+    console.log(ctx.input.userId);
+  });
+```
+
+## Message Validation
+
+Messages are automatically validated against the schema before the handler is called:
+
+```typescript
+const router = createKafkaRouter()
+  .topic("orders", {
+    input: {
+      message: z.object({
+        orderId: z.string().uuid(),
+        amount: z.number().positive(),
+        currency: z.string().length(3),
+      }),
+    },
+  })
+  .handler((ctx) => {
+    // Only called if message matches schema
+    // ctx.input is the parsed message (not ctx.input.message)
+    processOrder(ctx.input);
+  });
+```
+
+## Multiple Topics
+
+Define multiple topics in a single router:
+
+```typescript
+const router = createKafkaRouter()
+  .topic("user-events", {
+    input: {
+      message: UserEventSchema,
+    },
+  })
+  .handler(handleUserEvent)
+  .topic("order-events", {
+    input: {
+      message: OrderEventSchema,
+    },
+  })
+  .handler(handleOrderEvent);
+```
+
+## Output Validation
+
+Optionally validate handler output:
+
+```typescript
+const router = createKafkaRouter()
+  .topic("process-data", {
+    input: {
+      message: z.object({
+        data: z.string(),
+      }),
+    },
+    output: z.object({
+      processed: z.boolean(),
+      result: z.string(),
+    }),
+  })
+  .handler((ctx) => {
+    // ctx.input is the parsed message
+    return {
+      processed: true,
+      result: ctx.input.data.toUpperCase(),
+    };
+  });
+```
+
+---
+
+// File: kafka/getting-started/installation
+
+# Installation
+
+Install the Kafka consumer framework and its peer dependencies:
+
+```bash
+pnpm add @alt-stack/kafka kafkajs zod
+# or
+npm install @alt-stack/kafka kafkajs zod
+# or
+yarn add @alt-stack/kafka kafkajs zod
+```
+
+## Peer Dependencies
+
+The framework requires:
+- **kafkajs**: `^2.0.0` - The underlying Kafka client library
+- **zod**: `^4.0.0` - For schema validation and type inference
+
+---
+
+// File: kafka/getting-started/quickstart
+
+# Quickstart
+
+Get started with a simple example that demonstrates the core concepts.
+
+## Basic Example
+
+```typescript
+import { createKafkaRouter, createConsumer } from "@alt-stack/kafka";
+import { Kafka } from "kafkajs";
+import { z } from "zod";
+
+// Define message schema
+const UserEventSchema = z.object({
+  userId: z.string(),
+  eventType: z.enum(["created", "updated", "deleted"]),
+  timestamp: z.number(),
+});
+
+// Create router
+const router = createKafkaRouter()
+  .topic("user-events", {
+    input: {
+      message: UserEventSchema,
+    },
+  })
+  .handler((ctx) => {
+    // ctx.input is typed based on UserEventSchema
+    console.log(`Processing ${ctx.input.eventType} for user ${ctx.input.userId}`);
+  });
+
+// Create consumer (automatically starts consuming messages)
+const consumer = await createConsumer(router, {
+  kafka: new Kafka({
+    clientId: "my-app",
+    brokers: ["localhost:9092"],
+  }),
+  groupId: "my-consumer-group",
+});
+
+// Consumer is now running and processing messages automatically
+// Messages are validated and routed to the appropriate handlers
+```
+
+This example shows:
+- Type-safe topic definitions with Zod schemas
+- Automatic message validation
+- Type inference in handlers
+- Simple consumer setup
