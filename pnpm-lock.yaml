@@ -32,6 +32,9 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
+      docusaurus-plugin-generate-llms-txt:
+        specifier: ^0.0.1
+        version: 0.0.1(@docusaurus/core@3.9.2(@mdx-js/react@3.1.1(@types/react@19.2.2)(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.2))
       prism-react-renderer:
         specifier: ^2.3.1
         version: 2.4.1(react@18.3.1)
@@ -3055,6 +3058,12 @@ packages:
   dockerode@4.0.9:
     resolution: {integrity: sha512-iND4mcOWhPaCNh54WmK/KoSb35AFqPAUWFMffTQcp52uQt36b5uNwEJTSXntJZBbeGad72Crbi/hvDIv6us/6Q==}
     engines: {node: '>= 8.0'}
+
+  docusaurus-plugin-generate-llms-txt@0.0.1:
+    resolution: {integrity: sha512-XlUeQ23anYc85I1k9pO61fWcMWcUs8Tx7n3zqIus/1wjZ1mjezm0lOX9jymu9Y2MAi3/YQbDxsfo4kZrMf5q6A==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@docusaurus/core': '>=2.0.0'
 
   dom-converter@0.2.0:
     resolution: {integrity: sha512-gd3ypIPfOMr9h5jIKq8E3sHOTCjeirnl0WK5ZdS1AW0Odt0b1PaWaHdJ4Qk4klv+YB9aJBS7mESXjFoDQPu6DA==}
@@ -9902,6 +9911,11 @@ snapshots:
       uuid: 10.0.0
     transitivePeerDependencies:
       - supports-color
+
+  docusaurus-plugin-generate-llms-txt@0.0.1(@docusaurus/core@3.9.2(@mdx-js/react@3.1.1(@types/react@19.2.2)(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.2)):
+    dependencies:
+      '@docusaurus/core': 3.9.2(@mdx-js/react@3.1.1(@types/react@19.2.2)(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.2)
+      js-yaml: 4.1.0
 
   dom-converter@0.2.0:
     dependencies:
