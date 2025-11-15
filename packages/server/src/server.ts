@@ -1,11 +1,14 @@
 import type { Context, Hono } from "hono";
 import { Hono as HonoClass } from "hono";
 import type { z } from "zod";
-import type { TypedContext, InputConfig, BaseContext } from "./types.js";
-import type { Procedure } from "./procedure.js";
+import type { ZodError } from "zod";
+import type { TypedContext, InputConfig, BaseContext } from "./types/index.js";
+import type { Procedure } from "./types/procedure.js";
 import type { Router } from "./router.js";
 import { validateInput } from "./validation.js";
-import { ServerError } from "./errors.js";
+import { ServerError, ValidationError } from "./errors.js";
+import { middlewareMarker } from "./middleware.js";
+import type { MiddlewareResult } from "./middleware.js";
 
 function normalizePrefix(prefix: string): string {
   // Remove trailing slash if present, ensure leading slash
@@ -44,6 +47,18 @@ export function createServer<
     docs?: {
       path?: string;
       openapiPath?: string;
+    };
+    defaultErrorHandlers?: {
+      default400Error: (
+        errors: Array<
+          [error: ZodError, variant: "body" | "param" | "query", value: unknown]
+        >,
+      ) => [z.ZodObject<any>, z.infer<z.ZodObject<any>>];
+      default500Error: (
+        error: unknown,
+      ) => [z.ZodObject<any>, z.infer<z.ZodObject<any>>];
+      default400ErrorSchema?: z.ZodObject<any>;
+      default500ErrorSchema?: z.ZodObject<any>;
     };
   },
 ): Hono {
@@ -233,22 +248,44 @@ export function createServer<
           }
           const result = await middleware({
             ctx: currentCtx,
-            next: async (opts?: { ctx: Partial<ProcedureContext> }) => {
-              // Merge context updates if provided (tRPC pattern)
+            next: async (
+              opts?: { ctx?: Partial<ProcedureContext> },
+            ): Promise<MiddlewareResult<Partial<ProcedureContext>>> => {
+              // Merge context updates if provided
               if (opts?.ctx) {
                 currentCtx = { ...currentCtx, ...opts.ctx } as ProcedureContext;
               }
               const nextResult = await runMiddleware();
-              if (nextResult instanceof Response) {
-                return nextResult;
-              }
-              currentCtx = nextResult as ProcedureContext;
-              return currentCtx;
+              // Return MiddlewareResult wrapper for type safety
+              return {
+                marker: middlewareMarker,
+                ok: true as const,
+                data: nextResult,
+              };
             },
           });
+
+          // Handle both legacy middleware (returns context/Response) and new middleware (returns MiddlewareResult)
           if (result instanceof Response) {
             return result;
           }
+
+          // Check if it's a MiddlewareResult wrapper
+          if (
+            result &&
+            typeof result === "object" &&
+            "marker" in result &&
+            "ok" in result
+          ) {
+            const data = (result as any).data;
+            if (data instanceof Response) {
+              return data;
+            }
+            currentCtx = data as ProcedureContext;
+            return currentCtx;
+          }
+
+          // Legacy middleware - direct context return
           currentCtx = result as ProcedureContext;
           return currentCtx;
         };
@@ -273,14 +310,58 @@ export function createServer<
 
         return c.json(response);
       } catch (error) {
+        if (error instanceof ValidationError) {
+          // Use default 400 error handler if available
+          if (
+            options?.defaultErrorHandlers &&
+            error.details &&
+            typeof error.details === "object" &&
+            "errors" in error.details &&
+            Array.isArray(error.details.errors)
+          ) {
+            const errors = error.details.errors as Array<
+              [ZodError, "body" | "param" | "query", unknown]
+            >;
+            const [_schema, instance] =
+              options.defaultErrorHandlers.default400Error(errors);
+            return c.json({ error: instance }, 400);
+          }
+          // Fallback to default validation error format
+          return c.json(
+            {
+              error: {
+                code: "VALIDATION_ERROR",
+                message: error.message,
+                details: error.details
+                  ? Array.isArray(error.details)
+                    ? error.details
+                    : [String(error.details)]
+                  : [],
+              },
+            },
+            400,
+          );
+        }
         if (error instanceof ServerError) {
           return c.json(error.toJSON(), error.statusCode as any);
         }
+        // Use default 500 error handler if available
+        if (options?.defaultErrorHandlers) {
+          const [_schema, instance] =
+            options.defaultErrorHandlers.default500Error(error);
+          return c.json({ error: instance }, 500);
+        }
+        // Fallback to default 500 error format
         return c.json(
           {
             error: {
               code: "INTERNAL_SERVER_ERROR",
-              message: "Internal server error",
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Internal server error",
+              details:
+                error instanceof Error && error.stack ? [error.stack] : [],
             },
           },
           500,

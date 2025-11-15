@@ -1,5 +1,5 @@
-import type { z } from "zod";
-import type { InputConfig } from "./types.js";
+import { z } from "zod";
+import type { InputConfig } from "./types/index.js";
 import { ValidationError } from "./errors.js";
 
 export interface ParseResult<T> {
@@ -24,7 +24,7 @@ export async function parseSchema<T extends z.ZodTypeAny>(
         success: false,
         error: {
           message: "Validation failed",
-          details: (result.error as any).errors,
+          details: result.error, // Return full ZodError
         },
       };
   } catch (error) {
@@ -58,42 +58,56 @@ export async function validateInput<T extends InputConfig>(
   body: unknown,
 ): Promise<Record<string, unknown>> {
   const validated: Record<string, unknown> = {};
+  const validationErrors: Array<[z.ZodError, "body" | "param" | "query", unknown]> = [];
 
   if (config.params) {
     const result = await parseSchema(config.params, params);
     if (!result.success) {
-      throw new ValidationError(
-        result.error?.message || "Params validation failed",
-        result.error?.details,
-      );
+      const zodError = result.error?.details as z.ZodError;
+      if (zodError) {
+        validationErrors.push([zodError, "param", params]);
+      }
+    } else {
+      Object.assign(validated, result.data);
     }
-    Object.assign(validated, result.data);
   }
 
   if (config.query) {
     const result = await parseSchema(config.query, query);
     if (!result.success) {
-      throw new ValidationError(
-        result.error?.message || "Query validation failed",
-        result.error?.details,
-      );
+      const zodError = result.error?.details as z.ZodError;
+      if (zodError) {
+        validationErrors.push([zodError, "query", query]);
+      }
+    } else {
+      Object.assign(validated, result.data);
     }
-    Object.assign(validated, result.data);
   }
 
   if (config.body) {
     const result = await parseSchema(config.body, body);
     if (!result.success) {
-      throw new ValidationError(
-        result.error?.message || "Body validation failed",
-        result.error?.details,
-      );
-    }
-    if (result.data && typeof result.data === "object" && !Array.isArray(result.data)) {
-      Object.assign(validated, result.data);
+      const zodError = result.error?.details as z.ZodError;
+      if (zodError) {
+        validationErrors.push([zodError, "body", body]);
+      }
     } else {
-      validated.body = result.data;
+      if (result.data && typeof result.data === "object" && !Array.isArray(result.data)) {
+        Object.assign(validated, result.data);
+      } else {
+        validated.body = result.data;
+      }
     }
+  }
+
+  // Throw with all accumulated errors if any validation failed
+  if (validationErrors.length > 0) {
+    throw new ValidationError(
+      "Validation failed",
+      {
+        errors: validationErrors,
+      },
+    );
   }
 
   return validated;

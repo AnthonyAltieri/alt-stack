@@ -2,6 +2,7 @@
   "oxc.fmt.experimental": true,
   "editor.defaultFormatter": "oxc.oxc-vscode",
   "oxc.lint.run": "onSave",
+  "biome.enabled": false,
   "editor.formatOnSave": true,
   "[typescript]": {
     "editor.defaultFormatter": "oxc.oxc-vscode"

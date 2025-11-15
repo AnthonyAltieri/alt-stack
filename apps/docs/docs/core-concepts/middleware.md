@@ -4,14 +4,14 @@ Apply middleware at router-level or procedure-level to add cross-cutting concern
 
 ## Router-Level Middleware
 
-Apply middleware to all routes in a router. Use `createMiddleware` helper to ensure proper context typing:
+Apply middleware to all routes in a router using the `.use()` method:
 
 ```typescript
-import { init, createServer, createMiddleware } from "@alt-stack/server";
+import { router, publicProcedure, createMiddleware } from "@alt-stack/server";
 import { z } from "zod";
 
 interface AppContext {
-  user: User | null;
+  user: { id: string; name: string } | null;
 }
 
 const authMiddleware = createMiddleware<AppContext>(async ({ ctx, next }) => {
@@ -24,91 +24,152 @@ const authMiddleware = createMiddleware<AppContext>(async ({ ctx, next }) => {
   return next({ ctx: { user } });
 });
 
-const factory = init<AppContext>();
-const router = factory.router()
-  .use(authMiddleware)
-  .get("/profile", {
-    input: {},
-    output: z.object({
-      id: z.string(),
-      name: z.string(),
+export const userRouter = router({
+  profile: publicProcedure
+    .input({})
+    .output(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+      })
+    )
+    .get((opts) => {
+      // opts.ctx.user is typed (from authMiddleware)
+      const { ctx } = opts;
+      return {
+        id: ctx.user!.id,
+        name: ctx.user!.name,
+      };
     }),
-  })
-  .handler((ctx) => {
-    // ctx.user is typed (from authMiddleware)
-    return {
-      id: ctx.user.id,
-      name: ctx.user.name,
-    };
-  });
-
-const app = createServer({
-  users: router,
-});
+}).use(authMiddleware);
 ```
 
 ## Procedure-Level Middleware
 
-Apply middleware to specific routes:
+Apply middleware to specific procedures using `.use()`:
 
 ```typescript
-const factory = init();
-const router = factory.router()
-  .post("/users", {
-    input: {
+import { router, publicProcedure } from "@alt-stack/server";
+import { z } from "zod";
+
+export const userRouter = router({
+  create: publicProcedure
+    .input({
       body: z.object({
         name: z.string(),
         email: z.string().email(),
       }),
-    },
-    output: z.object({
-      id: z.string(),
+    })
+    .output(
+      z.object({
+        id: z.string(),
+      })
+    )
+    .use(async (opts) => {
+      // Log before handler
+      const { ctx, next } = opts;
+      console.log("Creating user:", ctx.input.name);
+      return next();
+    })
+    .post((opts) => {
+      return { id: "1" };
     }),
-  })
-  .use(async ({ ctx, next }) => {
-    // Log before handler
-    console.log("Creating user:", ctx.input.name);
-    return next();
-  })
-  .handler((ctx) => {
-    return { id: "1" };
-  });
+});
 ```
 
 ## Context Extension
 
-Middleware can extend the context by passing updated context to `next()`:
+Middleware can extend the context by passing updated context to `next()`. This follows the tRPC pattern:
 
 ```typescript
-const loggerMiddleware = createMiddleware<AppContext>(async ({ ctx, next }) => {
+import { router, publicProcedure, init } from "@alt-stack/server";
+
+interface AppContext {
+  user: { id: string; name: string } | null;
+}
+
+const factory = init<AppContext>();
+
+const loggerMiddleware = async (opts: {
+  ctx: any;
+  next: (opts?: { ctx: Partial<any> }) => Promise<any>;
+}) => {
+  const { ctx, next } = opts;
   const start = Date.now();
   const result = await next();
   const duration = Date.now() - start;
   console.log(`Request took ${duration}ms`);
   return result;
-});
+};
 
-const authMiddleware = createMiddleware<AppContext>(async ({ ctx, next }) => {
+const authMiddleware = async (opts: {
+  ctx: any;
+  next: (opts?: { ctx: Partial<any> }) => Promise<any>;
+}) => {
+  const { ctx, next } = opts;
   const user = await authenticate(ctx.hono.req);
   if (!user) {
     return ctx.hono.json({ error: "Unauthorized" }, 401);
   }
   // Extend context - user is now non-null in subsequent handlers
   return next({ ctx: { user } });
+};
+
+const protectedProcedure = factory.procedure
+  .use(loggerMiddleware)
+  .use(authMiddleware);
+
+export const appRouter = router({
+  profile: protectedProcedure
+    .input({})
+    .get((opts) => {
+      // opts.ctx.user is guaranteed to be non-null
+      const { ctx } = opts;
+      return { id: ctx.user!.id, name: ctx.user!.name };
+    }),
 });
 ```
 
 ## Multiple Middleware
 
-Chain multiple middleware on the same router or procedure:
+Chain multiple middleware on the same procedure:
 
 ```typescript
+import { router, publicProcedure, init } from "@alt-stack/server";
+
+interface AppContext {
+  user: { id: string; role: string } | null;
+}
+
 const factory = init<AppContext>();
-const router = factory.router()
+
+const loggerMiddleware = async (opts: any) => {
+  console.log("Request started");
+  return opts.next();
+};
+
+const authMiddleware = async (opts: any) => {
+  const user = await getUser(opts.ctx);
+  return opts.next({ ctx: { user } });
+};
+
+const adminMiddleware = async (opts: any) => {
+  if (opts.ctx.user?.role !== "admin") {
+    return new Response("Forbidden", { status: 403 });
+  }
+  return opts.next();
+};
+
+const adminProcedure = factory.procedure
   .use(loggerMiddleware)
   .use(authMiddleware)
-  .get("/profile", { /* ... */ })
-  .handler(/* ... */);
+  .use(adminMiddleware);
+
+export const adminRouter = router({
+  settings: adminProcedure.get(() => {
+    return { admin: true };
+  }),
+});
 ```
 
 Middleware executes in the order they're defined.
@@ -118,21 +179,92 @@ Middleware executes in the order they're defined.
 Create reusable procedures with middleware to reuse authentication or other middleware across multiple routes. See the [Reusable Procedures guide](/core-concepts/reusable-procedures) for details:
 
 ```typescript
+import { router, publicProcedure, init } from "@alt-stack/server";
+import { z } from "zod";
+
+interface AppContext {
+  user: { id: string; name: string } | null;
+}
+
 const factory = init<AppContext>();
-const router = factory.router();
 
 // Create reusable procedures
-const publicProcedure = factory.procedure;
+const publicProc = publicProcedure;
 const protectedProcedure = factory.procedure.use(async (opts) => {
   // Auth middleware
-  if (!opts.ctx.user) {
+  const { ctx, next } = opts;
+  if (!ctx.user) {
     return new Response("Unauthorized", { status: 401 });
   }
-  return opts.next({ ctx: { user: opts.ctx.user } });
+  return next({ ctx: { user: ctx.user } });
 });
 
 // Use procedures
-publicProcedure.on(router).get("/hello", { input: {}, output: z.string() }).handler(() => "hello");
-protectedProcedure.on(router).get("/profile", { input: {}, output: UserSchema }).handler((ctx) => ctx.user!);
+export const appRouter = router({
+  hello: publicProc.get(() => "hello"),
+  profile: protectedProcedure
+    .input({})
+    .output(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+      })
+    )
+    .get((opts) => {
+      return opts.ctx.user!;
+    }),
+});
 ```
 
+## Middleware Chaining and Context Flow
+
+Middleware can chain together, with each middleware able to extend the context:
+
+```typescript
+import { router, publicProcedure, init } from "@alt-stack/server";
+
+interface AppContext {
+  user: { id: string; role: string } | null;
+  requestId: string;
+  isAdmin: boolean;
+}
+
+const factory = init<AppContext>();
+
+// First middleware adds requestId
+const requestIdMiddleware = async (opts: any) => {
+  const requestId = crypto.randomUUID();
+  return opts.next({ ctx: { requestId } });
+};
+
+// Second middleware adds user
+const authMiddleware = async (opts: any) => {
+  const user = await getUser(opts.ctx);
+  return opts.next({ ctx: { user } });
+};
+
+// Third middleware adds isAdmin based on user role
+const adminCheckMiddleware = async (opts: any) => {
+  const isAdmin = opts.ctx.user?.role === "admin";
+  return opts.next({ ctx: { isAdmin } });
+};
+
+const adminProcedure = factory.procedure
+  .use(requestIdMiddleware)
+  .use(authMiddleware)
+  .use(adminCheckMiddleware);
+
+export const adminRouter = router({
+  dashboard: adminProcedure
+    .input({})
+    .get((opts) => {
+      // All context extensions are available
+      const { ctx } = opts;
+      return {
+        requestId: ctx.requestId,
+        userId: ctx.user!.id,
+        isAdmin: ctx.isAdmin,
+      };
+    }),
+});
+```

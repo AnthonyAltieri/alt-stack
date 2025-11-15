@@ -2,14 +2,15 @@ import type { z } from "zod";
 import type {
   ProcedureConfig,
   BaseContext,
-  Middleware,
   InputConfig,
-} from "./types.js";
-import {
-  ProcedureBuilder,
-  BaseProcedureBuilder,
-  type Procedure,
-} from "./procedure.js";
+  ExtractPathParams,
+  RequireParamsForPath,
+  Procedure,
+  ReadyProcedure,
+  PendingProcedure,
+} from "./types/index.js";
+import { ProcedureBuilder, BaseProcedureBuilder } from "./procedure-builder.js";
+import type { Middleware } from "./middleware.js";
 
 function convertPathToHono(path: string): string {
   return path.replace(/\{([^}]+)\}/g, ":$1");
@@ -19,6 +20,11 @@ function normalizePrefix(prefix: string): string {
   // Remove trailing slash if present, ensure leading slash
   const normalized = prefix.startsWith("/") ? prefix : `/${prefix}`;
   return normalized.endsWith("/") ? normalized.slice(0, -1) : normalized;
+}
+
+function normalizePath(path: string): string {
+  // Ensure path starts with /
+  return path.startsWith("/") ? path : `/${path}`;
 }
 
 export class Router<TCustomContext extends object = Record<string, never>> {
@@ -53,89 +59,85 @@ export class Router<TCustomContext extends object = Record<string, never>> {
     return this;
   }
 
-  get<
-    TPath extends string,
-    TInput extends InputConfig,
-    TOutput extends z.ZodTypeAny | undefined,
-    TErrors extends Record<number, z.ZodTypeAny> | undefined,
-  >(
+  // Helper method to register a ReadyProcedure with a path
+  registerProcedure<TPath extends string, TInput extends InputConfig>(
     path: TPath,
-    config: ProcedureConfig<TPath, TInput, TOutput, TErrors>,
-  ): ProcedureBuilder<TInput, TOutput, TErrors, TCustomContext, this> {
-    return new ProcedureBuilder<TInput, TOutput, TErrors, TCustomContext, this>(
-      "GET",
-      convertPathToHono(path),
-      config,
-      this,
+    readyProcedure: ReadyProcedure<
+      TInput,
+      z.ZodTypeAny | undefined,
+      Record<number, z.ZodTypeAny> | undefined,
+      TCustomContext
+    >,
+  ): this {
+    const honoPath = convertPathToHono(normalizePath(path));
+    const procedure: Procedure<
+      TInput,
+      z.ZodTypeAny | undefined,
+      Record<number, z.ZodTypeAny> | undefined,
+      TCustomContext
+    > = {
+      method: readyProcedure.method,
+      path: honoPath,
+      config: readyProcedure.config,
+      handler: (ctx) => {
+        // Convert from TypedContext to tRPC-style opts
+        return readyProcedure.handler({
+          input: ctx.input,
+          ctx,
+        });
+      },
+      middleware: readyProcedure.middleware,
+    };
+    this.procedures.push(
+      procedure as unknown as Procedure<
+        InputConfig,
+        z.ZodTypeAny | undefined,
+        Record<number, z.ZodTypeAny> | undefined,
+        TCustomContext
+      >,
     );
+    return this;
   }
 
-  post<
-    TPath extends string,
-    TInput extends InputConfig,
-    TOutput extends z.ZodTypeAny | undefined,
-    TErrors extends Record<number, z.ZodTypeAny> | undefined,
-  >(
+  // Helper method to register a PendingProcedure with a path and inferred HTTP method
+  registerPendingProcedure<TPath extends string, TInput extends InputConfig>(
     path: TPath,
-    config: ProcedureConfig<TPath, TInput, TOutput, TErrors>,
-  ): ProcedureBuilder<TInput, TOutput, TErrors, TCustomContext, this> {
-    return new ProcedureBuilder<TInput, TOutput, TErrors, TCustomContext, this>(
-      "POST",
-      convertPathToHono(path),
-      config,
-      this,
+    method: string,
+    pendingProcedure: PendingProcedure<
+      TInput,
+      z.ZodTypeAny | undefined,
+      Record<number, z.ZodTypeAny> | undefined,
+      TCustomContext
+    >,
+  ): this {
+    const honoPath = convertPathToHono(normalizePath(path));
+    const procedure: Procedure<
+      TInput,
+      z.ZodTypeAny | undefined,
+      Record<number, z.ZodTypeAny> | undefined,
+      TCustomContext
+    > = {
+      method: method.toUpperCase(),
+      path: honoPath,
+      config: pendingProcedure.config,
+      handler: (ctx) => {
+        // Convert from TypedContext to tRPC-style opts
+        return pendingProcedure.handler({
+          input: ctx.input,
+          ctx,
+        });
+      },
+      middleware: pendingProcedure.middleware,
+    };
+    this.procedures.push(
+      procedure as unknown as Procedure<
+        InputConfig,
+        z.ZodTypeAny | undefined,
+        Record<number, z.ZodTypeAny> | undefined,
+        TCustomContext
+      >,
     );
-  }
-
-  put<
-    TPath extends string,
-    TInput extends InputConfig,
-    TOutput extends z.ZodTypeAny | undefined,
-    TErrors extends Record<number, z.ZodTypeAny> | undefined,
-  >(
-    path: TPath,
-    config: ProcedureConfig<TPath, TInput, TOutput, TErrors>,
-  ): ProcedureBuilder<TInput, TOutput, TErrors, TCustomContext, this> {
-    return new ProcedureBuilder<TInput, TOutput, TErrors, TCustomContext, this>(
-      "PUT",
-      convertPathToHono(path),
-      config,
-      this,
-    );
-  }
-
-  patch<
-    TPath extends string,
-    TInput extends InputConfig,
-    TOutput extends z.ZodTypeAny | undefined,
-    TErrors extends Record<number, z.ZodTypeAny> | undefined,
-  >(
-    path: TPath,
-    config: ProcedureConfig<TPath, TInput, TOutput, TErrors>,
-  ): ProcedureBuilder<TInput, TOutput, TErrors, TCustomContext, this> {
-    return new ProcedureBuilder<TInput, TOutput, TErrors, TCustomContext, this>(
-      "PATCH",
-      convertPathToHono(path),
-      config,
-      this,
-    );
-  }
-
-  delete<
-    TPath extends string,
-    TInput extends InputConfig,
-    TOutput extends z.ZodTypeAny | undefined,
-    TErrors extends Record<number, z.ZodTypeAny> | undefined,
-  >(
-    path: TPath,
-    config: ProcedureConfig<TPath, TInput, TOutput, TErrors>,
-  ): ProcedureBuilder<TInput, TOutput, TErrors, TCustomContext, this> {
-    return new ProcedureBuilder<TInput, TOutput, TErrors, TCustomContext, this>(
-      "DELETE",
-      convertPathToHono(path),
-      config,
-      this,
-    );
+    return this;
   }
 
   register(
@@ -189,6 +191,150 @@ export class Router<TCustomContext extends object = Record<string, never>> {
       this
     >(undefined, undefined, this);
   }
+}
+
+// Type helper to validate that a ReadyProcedure's input matches path requirements
+type ValidateProcedureForPath<
+  TPath extends string,
+  TProcedure extends ReadyProcedure<InputConfig, z.ZodTypeAny | undefined, Record<number, z.ZodTypeAny> | undefined, any>,
+> = ExtractPathParams<TPath> extends never
+  ? TProcedure
+  : TProcedure["config"]["input"] extends { params: infer P }
+    ? P extends z.ZodTypeAny
+      ? ExtractPathParams<TPath> extends keyof z.infer<P>
+        ? TProcedure
+        : never
+      : never
+    : never;
+
+// Type helper to validate that a PendingProcedure's input matches path requirements
+type ValidatePendingProcedureForPath<
+  TPath extends string,
+  TPendingProcedure extends PendingProcedure<InputConfig, z.ZodTypeAny | undefined, Record<number, z.ZodTypeAny> | undefined, any>,
+> = ExtractPathParams<TPath> extends never
+  ? TPendingProcedure
+  : TPendingProcedure["config"]["input"] extends { params: infer P }
+    ? P extends z.ZodTypeAny
+      ? ExtractPathParams<TPath> extends keyof z.infer<P>
+        ? TPendingProcedure
+        : never
+      : never
+    : never;
+
+// Type helper for methods object keys - maps lowercase method names to HTTP methods
+type MethodKey = "get" | "post" | "put" | "patch" | "delete";
+
+// Type helper for methods object - validates each method's PendingProcedure matches path requirements
+// Use a more flexible type that accepts any PendingProcedure subtype
+// Accept procedures with narrowed context types (e.g., AuthenticatedContext extends AppContext)
+type RouteMethods<
+  TPath extends string,
+  TCustomContext extends object,
+> = {
+  [K in MethodKey]?: PendingProcedure<
+    any,
+    any,
+    any,
+    any // Accept any context type - will be validated at runtime
+  >;
+};
+
+// Type helper to extract ReadyProcedure from a router config value
+// Use more flexible types that accept any Procedure subtype
+// Accept procedures with narrowed context types (e.g., AuthenticatedContext extends AppContext)
+type RouterConfigValue<
+  TCustomContext extends object,
+  TPath extends string,
+> =
+  | ReadyProcedure<
+      any,
+      any,
+      any,
+      any // Accept any context type - will be validated at runtime
+    >
+  | RouteMethods<TPath, TCustomContext>
+  | Router<TCustomContext>;
+
+// New tRPC-style router function
+export function router<
+  TCustomContext extends object = Record<string, never>,
+  TConfig extends {
+    [K in string]: RouterConfigValue<TCustomContext, K>;
+  } = {
+    [K in string]: RouterConfigValue<TCustomContext, K>;
+  },
+>(
+  config: TConfig,
+): Router<TCustomContext> & {
+  use<TContextIn extends BaseContext, TContextOut extends BaseContext>(
+    middleware: Middleware<TContextIn, TContextOut>,
+  ): Router<TCustomContext>;
+} {
+  const routerInstance = new Router<TCustomContext>();
+
+  // Helper to check if a value is a methods object
+  const isMethodsObject = (
+    value: unknown,
+  ): value is Record<string, any> => {
+    if (typeof value !== "object" || value === null || value instanceof Router) {
+      return false;
+    }
+    // Check if it has method-like keys (get, post, put, patch, delete)
+    const keys = Object.keys(value);
+    const methodKeys: MethodKey[] = ["get", "post", "put", "patch", "delete"];
+    return keys.some((k) => methodKeys.includes(k as MethodKey));
+  };
+
+  for (const [key, value] of Object.entries(config)) {
+    if (value instanceof Router) {
+      // Nested router - merge it
+      routerInstance.merge(normalizePrefix(key), value);
+    } else if (isMethodsObject(value)) {
+      // Methods object - register each method with inferred HTTP method
+      for (const [methodKey, pendingProcedure] of Object.entries(value)) {
+        if (pendingProcedure && typeof pendingProcedure === "object" && "handler" in pendingProcedure && "config" in pendingProcedure) {
+          routerInstance.registerPendingProcedure(
+            key as string,
+            methodKey,
+            pendingProcedure as PendingProcedure<
+              InputConfig,
+              z.ZodTypeAny | undefined,
+              Record<number, z.ZodTypeAny> | undefined,
+              TCustomContext
+            >,
+          );
+        }
+      }
+    } else {
+      // ReadyProcedure - register it with the path key
+      routerInstance.registerProcedure(
+        key as string,
+        value as ReadyProcedure<
+          InputConfig,
+          z.ZodTypeAny | undefined,
+          Record<number, z.ZodTypeAny> | undefined,
+          TCustomContext
+        >,
+      );
+    }
+  }
+
+  // Add use method that returns the router for chaining
+  const routerWithUse = routerInstance as Router<TCustomContext> & {
+    use<TContextIn extends BaseContext, TContextOut extends BaseContext>(
+      middleware: Middleware<TContextIn, TContextOut>,
+    ): Router<TCustomContext>;
+  };
+
+  routerWithUse.use = function <
+    TContextIn extends BaseContext,
+    TContextOut extends BaseContext,
+  >(middleware: Middleware<TContextIn, TContextOut>): Router<TCustomContext> {
+    routerInstance.use(middleware);
+    return routerInstance;
+  };
+
+  return routerWithUse;
 }
 
 export function createRouter<

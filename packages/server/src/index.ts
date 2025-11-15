@@ -1,12 +1,19 @@
 // Main export file
-export { createRouter, mergeRouters, Router } from "./router.js";
+export { createRouter, mergeRouters, Router, router } from "./router.js";
 export { createServer } from "./server.js";
-export { init } from "./init.js";
+export { init, publicProcedure } from "./init.js";
+export type { InitOptions, InitResult } from "./init.js";
 export * from "./errors.js";
-export { createMiddleware } from "./types.js";
-export type * from "./types.js";
-export { BaseProcedureBuilder, ProcedureBuilder } from "./procedure.js";
-export type { Procedure } from "./procedure.js";
+export { createMiddleware } from "./middleware.js";
+export type {
+  Middleware,
+  MiddlewareFunction,
+  MiddlewareBuilder,
+  MiddlewareResult,
+  Overwrite,
+} from "./middleware.js";
+export type * from "./types/index.js";
+export { BaseProcedureBuilder, ProcedureBuilder } from "./procedure-builder.js";
 export { generateOpenAPISpec, createDocsRouter } from "./openapi.js";
 export type {
   OpenAPISpec,

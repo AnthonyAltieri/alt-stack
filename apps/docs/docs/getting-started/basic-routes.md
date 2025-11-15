@@ -1,72 +1,100 @@
 # Basic Routes
 
-Define routes using the fluent builder API with support for all HTTP methods.
+Define routes using the tRPC-style API with support for all HTTP methods.
 
 ## Route Methods
 
 The router supports all standard HTTP methods:
 
 ```typescript
-const factory = init();
-const router = factory.router()
-  .get("/users", { /* config */ })
-  .post("/users", { /* config */ })
-  .put("/users/{id}", { /* config */ })
-  .patch("/users/{id}", { /* config */ })
-  .delete("/users/{id}", { /* config */ });
+import { router, publicProcedure } from "@alt-stack/server";
+import { z } from "zod";
+
+export const userRouter = router({
+  list: publicProcedure.get(() => {
+    return [];
+  }),
+  
+  create: publicProcedure.post(() => {
+    return { id: "1" };
+  }),
+  
+  update: publicProcedure.put(() => {
+    return { id: "1" };
+  }),
+  
+  patch: publicProcedure.patch(() => {
+    return { id: "1" };
+  }),
+  
+  remove: publicProcedure.delete(() => {
+    return { success: true };
+  }),
+});
 ```
 
 ## Path Parameters
 
-Extract parameters from the URL path:
+Extract parameters from the URL path. Path parameters in the route key (e.g., `{id}`) are automatically validated:
 
 ```typescript
-const factory = init();
-const router = factory.router()
-  .get("/users/{id}", {
-    input: {
+import { router, publicProcedure } from "@alt-stack/server";
+import { z } from "zod";
+
+export const userRouter = router({
+  "{id}": publicProcedure
+    .input({
       params: z.object({
         id: z.string(),
       }),
-    },
-    output: z.object({
-      id: z.string(),
-      name: z.string(),
+    })
+    .get((opts) => {
+      // opts.input.id is typed as string
+      const { input } = opts;
+      return {
+        id: input.id,
+        name: "Alice",
+      };
     }),
-  })
-  .handler((ctx) => {
-    // ctx.input.id is typed as string
-    return {
-      id: ctx.input.id,
-      name: "Alice",
-    };
-  });
+});
 ```
+
+**Type Safety**: TypeScript will automatically detect an error if you use a path parameter like `{id}` but don't provide the corresponding `params.id` in your input schema. For example, this would cause a TypeScript error:
+
+```typescript
+// ❌ TypeScript error: Missing required path parameter 'id' in params
+export const userRouter = router({
+  "{id}": publicProcedure.get((opts) => {
+    return { id: "1" };
+  }),
+});
+```
+
+You must include `params: z.object({ id: z.string() })` (or the appropriate type) when using `{id}` in your route path.
 
 ## Query Parameters
 
 Extract query string parameters:
 
 ```typescript
-const factory = init();
-const router = factory.router()
-  .get("/users", {
-    input: {
+import { router, publicProcedure } from "@alt-stack/server";
+import { z } from "zod";
+
+export const userRouter = router({
+  list: publicProcedure
+    .input({
       query: z.object({
         limit: z.number().optional(),
         offset: z.number().optional(),
         search: z.string().optional(),
       }),
-    },
-    output: z.array(z.object({
-      id: z.string(),
-      name: z.string(),
-    })),
-  })
-  .handler((ctx) => {
-    // ctx.input.limit, ctx.input.offset, ctx.input.search are typed
-    return [];
-  });
+    })
+    .get((opts) => {
+      // opts.input.limit, opts.input.offset, opts.input.search are typed
+      const { input } = opts;
+      return [];
+    }),
+});
 ```
 
 ## Request Body
@@ -74,27 +102,26 @@ const router = factory.router()
 Handle POST/PUT/PATCH requests with typed request bodies:
 
 ```typescript
-const factory = init();
-const router = factory.router()
-  .post("/users", {
-    input: {
+import { router, publicProcedure } from "@alt-stack/server";
+import { z } from "zod";
+
+export const userRouter = router({
+  create: publicProcedure
+    .input({
       body: z.object({
         name: z.string(),
         email: z.string().email(),
       }),
-    },
-    output: z.object({
-      id: z.string(),
-      name: z.string(),
+    })
+    .post((opts) => {
+      // opts.input.name and opts.input.email are typed
+      const { input } = opts;
+      return {
+        id: "1",
+        name: input.name,
+      };
     }),
-  })
-  .handler((ctx) => {
-    // ctx.input.name and ctx.input.email are typed
-    return {
-      id: "1",
-      name: ctx.input.name,
-    };
-  });
+});
 ```
 
 ## Combining Input Sources
@@ -102,10 +129,12 @@ const router = factory.router()
 You can combine params, query, and body:
 
 ```typescript
-const factory = init();
-const router = factory.router()
-  .put("/users/{id}", {
-    input: {
+import { router, publicProcedure } from "@alt-stack/server";
+import { z } from "zod";
+
+export const userRouter = router({
+  "{id}": publicProcedure
+    .input({
       params: z.object({
         id: z.string(),
       }),
@@ -116,17 +145,44 @@ const router = factory.router()
         name: z.string(),
         email: z.string().email(),
       }),
-    },
-    output: z.object({
-      id: z.string(),
+    })
+    .put((opts) => {
+      // All inputs are available and typed
+      const { input } = opts;
+      // input.id (from params)
+      // input.notify (from query)
+      // input.name, input.email (from body)
+      return { id: input.id };
     }),
-  })
-  .handler((ctx) => {
-    // All inputs are available and typed
-    // ctx.input.id (from params)
-    // ctx.input.notify (from query)
-    // ctx.input.name, ctx.input.email (from body)
-    return { id: ctx.input.id };
-  });
+});
 ```
 
+## Output Validation
+
+You can specify output schemas for validation:
+
+```typescript
+import { router, publicProcedure } from "@alt-stack/server";
+import { z } from "zod";
+
+const UserSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  email: z.string(),
+});
+
+export const userRouter = router({
+  get: publicProcedure
+    .input({
+      params: z.object({ id: z.string() }),
+    })
+    .output(UserSchema)
+    .get((opts) => {
+      return {
+        id: opts.input.id,
+        name: "Alice",
+        email: "alice@example.com",
+      };
+    }),
+});
+```

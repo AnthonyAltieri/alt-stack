@@ -9,8 +9,8 @@ export const UserSchema = z.object({
   id: z.string(),
   email: z.string().email(),
   name: z.string(),
+  role: z.enum(["admin", "user"]),
   // Add other user fields as needed
-  // role: z.enum(["admin", "user"]).optional(),
   // image: z.string().url().optional(),
 });
 
@@ -79,4 +79,70 @@ export async function getAuthSession(
 export async function getAuthUser(request: Request): Promise<User | null> {
   const session = await getAuthSession(request);
   return session?.user ?? null;
+}
+
+// Mock user store for example purposes
+class UserStore {
+  private users: Map<string, User> = new Map();
+
+  constructor() {
+    // Add some mock users
+    this.users.set("1", {
+      id: "1",
+      email: "admin@example.com",
+      name: "Admin User",
+      role: "admin",
+    });
+    this.users.set("2", {
+      id: "2",
+      email: "user@example.com",
+      name: "Regular User",
+      role: "user",
+    });
+  }
+
+  getAll(): User[] {
+    return Array.from(this.users.values());
+  }
+
+  getById(id: string): User | undefined {
+    return this.users.get(id);
+  }
+
+  delete(id: string): boolean {
+    return this.users.delete(id);
+  }
+}
+
+const userStore = new UserStore();
+
+// Helper functions matching the kitchen sink example
+export function getAllUsers(): User[] {
+  return userStore.getAll();
+}
+
+export function getUserById(id: string): User | null {
+  return userStore.getById(id) ?? null;
+}
+
+export function deleteUser(id: string): void {
+  userStore.delete(id);
+}
+
+/**
+ * Mock function to get user from request
+ * In a real app, this would extract user from JWT token or session
+ */
+export async function getUserFromRequest(
+  request: Request,
+): Promise<User | null> {
+  // For demo purposes, check for Authorization header
+  const authHeader = request.headers.get("Authorization");
+  if (authHeader === "Bearer admin") {
+    return userStore.getById("1") ?? null;
+  }
+  if (authHeader === "Bearer user") {
+    return userStore.getById("2") ?? null;
+  }
+  return null;
 }

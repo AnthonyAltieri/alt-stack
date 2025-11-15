@@ -1,8 +1,9 @@
 import { z } from "zod";
-import { createRouter } from "./router.js";
+import { createRouter, router } from "./router.js";
+import { publicProcedure } from "./init.js";
 import type { Router } from "./router.js";
-import type { Procedure } from "./procedure.js";
-import type { InputConfig } from "./types.js";
+import type { Procedure } from "./types/procedure.js";
+import type { InputConfig } from "./types/index.js";
 
 // ============================================================================
 // Types
@@ -619,31 +620,28 @@ export function createDocsRouter<
     : openapiPathOption;
   const enableDocs = options.enableDocs !== false; // Default to true
 
-  const docsRouter = createRouter<TCustomContext>();
+  // Use router() function to create a router with tRPC-style API
+  const docsRouterConfig: Record<string, any> = {};
 
   // Serve OpenAPI spec as JSON
   // Use relative path so the router prefix determines the final path
-  docsRouter
-    .get(`/${openapiPath}`, {
-      input: {},
-      output: z.any(),
-    })
-    .handler(() => {
+  const openapiSpecPath = `/${openapiPath}`;
+  docsRouterConfig[openapiSpecPath] = publicProcedure
+    .input({})
+    .output(z.any())
+    .get(() => {
       return spec;
     });
 
   // Serve interactive documentation (Swagger UI)
   // Always use "/" as the route path so the router prefix determines the final path
   if (enableDocs) {
-    docsRouter
-      .get("/", {
-        input: {},
-        // No output validation - we return HTML Response directly
-      })
-      .handler((ctx) => {
+    docsRouterConfig["/"] = publicProcedure
+      .input({})
+      .get(async (opts) => {
         // Replace the URL placeholder in the HTML template with the actual openapiPath
         // Construct the full path including any router prefix
-        const requestUrl = new URL(ctx.hono.req.url);
+        const requestUrl = new URL(opts.ctx.hono.req.url);
         const baseUrl = requestUrl.origin;
         // Get the pathname of the current request (e.g., "/docs" when mounted under "docs" prefix)
         const currentPath = requestUrl.pathname;
@@ -656,9 +654,10 @@ export function createDocsRouter<
         const openapiUrl = `${baseUrl}${basePath}/${openapiPath}`;
         const html = SWAGGER_UI_HTML.replace("{{OPENAPI_URL}}", openapiUrl);
         // Return HTML response with correct content type
-        return ctx.hono.html(html);
+        // Note: Handlers can return Response directly, which is handled by the server
+        return opts.ctx.hono.html(html);
       });
   }
 
-  return docsRouter;
+  return router<TCustomContext>(docsRouterConfig);
 }
