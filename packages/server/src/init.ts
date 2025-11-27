@@ -3,14 +3,14 @@ import { BaseProcedureBuilder } from "./procedure-builder.js";
 import { z } from "zod";
 import type { ZodError } from "zod";
 
-// Default error schemas
-const default400ErrorSchema = z.object({
+// Default error schemas - exported for type inference
+export const default400ErrorSchema = z.object({
   code: z.literal("VALIDATION_ERROR"),
   message: z.string(),
   details: z.array(z.string()),
 });
 
-const default500ErrorSchema = z.object({
+export const default500ErrorSchema = z.object({
   code: z.literal("INTERNAL_SERVER_ERROR"),
   message: z.string(),
   details: z.array(z.string()),
@@ -22,6 +22,20 @@ type ExtractSchemaFromHandler<
 > = THandler extends (...args: any[]) => [infer TSchema, any]
   ? TSchema
   : never;
+
+// Type for default errors based on InitOptions
+type DefaultErrorSchemas<TInitOptions extends InitOptions | undefined> = {
+  400: TInitOptions extends { default400Error: infer T }
+    ? T extends (...args: any[]) => [infer TSchema, any]
+      ? TSchema
+      : typeof default400ErrorSchema
+    : typeof default400ErrorSchema;
+  500: TInitOptions extends { default500Error: infer T }
+    ? T extends (...args: any[]) => [infer TSchema, any]
+      ? TSchema
+      : typeof default500ErrorSchema
+    : typeof default500ErrorSchema;
+};
 
 export interface InitOptions<TCustomContext extends object = Record<string, never>> {
   default400Error?: (
@@ -42,7 +56,9 @@ export interface InitResult<
     { params?: never; query?: never; body?: never },
     undefined,
     undefined,
-    TCustomContext
+    TCustomContext,
+    unknown,
+    DefaultErrorSchemas<TInitOptions>
   >;
   defaultErrorHandlers?: {
     default400Error: TInitOptions extends { default400Error: infer T }
@@ -100,12 +116,14 @@ function createDefault500Error(error: unknown): z.infer<typeof default500ErrorSc
   };
 }
 
-// Export publicProcedure directly
+// Export publicProcedure directly with default error schemas
 export const publicProcedure = new BaseProcedureBuilder<
   { params?: never; query?: never; body?: never },
   undefined,
   undefined,
-  Record<string, never>
+  Record<string, never>,
+  unknown,
+  { 400: typeof default400ErrorSchema; 500: typeof default500ErrorSchema }
 >();
 
 export function init<TCustomContext extends object = Record<string, never>>(
@@ -153,7 +171,9 @@ export function init<TCustomContext extends object = Record<string, never>>(
       { params?: never; query?: never; body?: never },
       undefined,
       undefined,
-      TCustomContext
+      TCustomContext,
+      unknown,
+      DefaultErrorSchemas<typeof options>
     >(),
     defaultErrorHandlers: {
       default400Error: default400ErrorHandler,

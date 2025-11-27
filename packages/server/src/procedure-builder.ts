@@ -58,6 +58,7 @@ type MergeErrors<
 /**
  * Base procedure builder that accumulates configuration and middleware
  * The key innovation: TCustomContext tracks the narrowed context type through middleware chain
+ * TDefaultErrors tracks default 400/500 error schemas from init() for proper ctx.error() typing
  */
 export class BaseProcedureBuilder<
   TBaseInput extends InputConfig = {
@@ -69,6 +70,7 @@ export class BaseProcedureBuilder<
   TBaseErrors extends Record<number, z.ZodTypeAny> | undefined = undefined,
   TCustomContext extends object = Record<string, never>,
   TRouter = unknown,
+  TDefaultErrors extends Record<number, z.ZodTypeAny> = {},
 > {
   private _baseConfig: {
     input: TBaseInput;
@@ -139,7 +141,7 @@ export class BaseProcedureBuilder<
       | MiddlewareFunction<
           TypedContext<
             InputConfig,
-            Record<number, z.ZodTypeAny> | undefined,
+            MergeErrors<TDefaultErrors, TBaseErrors>,
             TCustomContext
           >,
           object,
@@ -148,7 +150,7 @@ export class BaseProcedureBuilder<
       | MiddlewareBuilder<
           TypedContext<
             InputConfig,
-            Record<number, z.ZodTypeAny> | undefined,
+            MergeErrors<TDefaultErrors, TBaseErrors>,
             TCustomContext
           >,
           $ContextOverridesOut
@@ -158,7 +160,8 @@ export class BaseProcedureBuilder<
     TBaseOutput,
     TBaseErrors,
     Overwrite<TCustomContext, $ContextOverridesOut>,
-    TRouter
+    TRouter,
+    TDefaultErrors
   > {
     // Extract middleware array from builder or wrap single middleware
     const newMiddleware =
@@ -171,7 +174,8 @@ export class BaseProcedureBuilder<
       TBaseOutput,
       TBaseErrors,
       Overwrite<TCustomContext, $ContextOverridesOut>,
-      TRouter
+      TRouter,
+      TDefaultErrors
     >(
       this._baseConfig,
       [...this._middleware, ...newMiddleware] as any,
@@ -186,14 +190,16 @@ export class BaseProcedureBuilder<
     TBaseOutput,
     TBaseErrors,
     TCustomContext,
-    TRouter
+    TRouter,
+    TDefaultErrors
   > {
     return new BaseProcedureBuilder<
       MergeInputConfig<TBaseInput, TInput>,
       TBaseOutput,
       TBaseErrors,
       TCustomContext,
-      TRouter
+      TRouter,
+      TDefaultErrors
     >(
       {
         input: { ...this._baseConfig.input, ...input } as MergeInputConfig<
@@ -215,14 +221,16 @@ export class BaseProcedureBuilder<
     TOutput,
     TBaseErrors,
     TCustomContext,
-    TRouter
+    TRouter,
+    TDefaultErrors
   > {
     return new BaseProcedureBuilder<
       TBaseInput,
       TOutput,
       TBaseErrors,
       TCustomContext,
-      TRouter
+      TRouter,
+      TDefaultErrors
     >(
       {
         input: this._baseConfig.input,
@@ -239,21 +247,23 @@ export class BaseProcedureBuilder<
   ): BaseProcedureBuilder<
     TBaseInput,
     TBaseOutput,
-    TErrors,
+    MergeErrors<TBaseErrors, TErrors>,
     TCustomContext,
-    TRouter
+    TRouter,
+    TDefaultErrors
   > {
     return new BaseProcedureBuilder<
       TBaseInput,
       TBaseOutput,
-      TErrors,
+      MergeErrors<TBaseErrors, TErrors>,
       TCustomContext,
-      TRouter
+      TRouter,
+      TDefaultErrors
     >(
       {
         input: this._baseConfig.input,
         output: this._baseConfig.output,
-        errors,
+        errors: { ...this._baseConfig.errors, ...errors } as MergeErrors<TBaseErrors, TErrors>,
       },
       this._middleware,
       this.router,
@@ -278,14 +288,16 @@ export class BaseProcedureBuilder<
     TBaseOutput,
     TBaseErrors,
     TCustomContext,
-    TRouterProvided
+    TRouterProvided,
+    TDefaultErrors
   > {
     return new BaseProcedureBuilder<
       TBaseInput,
       TBaseOutput,
       TBaseErrors,
       TCustomContext,
-      TRouterProvided
+      TRouterProvided,
+      TDefaultErrors
     >(this._baseConfig, this._middleware, router);
   }
 
@@ -295,15 +307,15 @@ export class BaseProcedureBuilder<
   get(
     handler: (opts: {
       input: InferInput<TBaseInput>;
-      ctx: TypedContext<TBaseInput, TBaseErrors, TCustomContext>;
+      ctx: TypedContext<TBaseInput, MergeErrors<TDefaultErrors, TBaseErrors>, TCustomContext>;
     }) =>
       | Promise<InferOutput<NonNullable<TBaseOutput>> | Response>
       | InferOutput<NonNullable<TBaseOutput>>
       | Response,
-  ): ReadyProcedure<TBaseInput, TBaseOutput, TBaseErrors, TCustomContext> {
+  ): ReadyProcedure<TBaseInput, TBaseOutput, MergeErrors<TDefaultErrors, TBaseErrors>, TCustomContext> {
     return {
       method: "GET",
-      config: this._baseConfig,
+      config: this._baseConfig as any,
       handler,
       middleware: this._middleware as any,
     };
@@ -312,15 +324,15 @@ export class BaseProcedureBuilder<
   post(
     handler: (opts: {
       input: InferInput<TBaseInput>;
-      ctx: TypedContext<TBaseInput, TBaseErrors, TCustomContext>;
+      ctx: TypedContext<TBaseInput, MergeErrors<TDefaultErrors, TBaseErrors>, TCustomContext>;
     }) =>
       | Promise<InferOutput<NonNullable<TBaseOutput>> | Response>
       | InferOutput<NonNullable<TBaseOutput>>
       | Response,
-  ): ReadyProcedure<TBaseInput, TBaseOutput, TBaseErrors, TCustomContext> {
+  ): ReadyProcedure<TBaseInput, TBaseOutput, MergeErrors<TDefaultErrors, TBaseErrors>, TCustomContext> {
     return {
       method: "POST",
-      config: this._baseConfig,
+      config: this._baseConfig as any,
       handler,
       middleware: this._middleware as any,
     };
@@ -329,15 +341,15 @@ export class BaseProcedureBuilder<
   put(
     handler: (opts: {
       input: InferInput<TBaseInput>;
-      ctx: TypedContext<TBaseInput, TBaseErrors, TCustomContext>;
+      ctx: TypedContext<TBaseInput, MergeErrors<TDefaultErrors, TBaseErrors>, TCustomContext>;
     }) =>
       | Promise<InferOutput<NonNullable<TBaseOutput>> | Response>
       | InferOutput<NonNullable<TBaseOutput>>
       | Response,
-  ): ReadyProcedure<TBaseInput, TBaseOutput, TBaseErrors, TCustomContext> {
+  ): ReadyProcedure<TBaseInput, TBaseOutput, MergeErrors<TDefaultErrors, TBaseErrors>, TCustomContext> {
     return {
       method: "PUT",
-      config: this._baseConfig,
+      config: this._baseConfig as any,
       handler,
       middleware: this._middleware as any,
     };
@@ -346,15 +358,15 @@ export class BaseProcedureBuilder<
   patch(
     handler: (opts: {
       input: InferInput<TBaseInput>;
-      ctx: TypedContext<TBaseInput, TBaseErrors, TCustomContext>;
+      ctx: TypedContext<TBaseInput, MergeErrors<TDefaultErrors, TBaseErrors>, TCustomContext>;
     }) =>
       | Promise<InferOutput<NonNullable<TBaseOutput>> | Response>
       | InferOutput<NonNullable<TBaseOutput>>
       | Response,
-  ): ReadyProcedure<TBaseInput, TBaseOutput, TBaseErrors, TCustomContext> {
+  ): ReadyProcedure<TBaseInput, TBaseOutput, MergeErrors<TDefaultErrors, TBaseErrors>, TCustomContext> {
     return {
       method: "PATCH",
-      config: this._baseConfig,
+      config: this._baseConfig as any,
       handler,
       middleware: this._middleware as any,
     };
@@ -363,15 +375,15 @@ export class BaseProcedureBuilder<
   delete(
     handler: (opts: {
       input: InferInput<TBaseInput>;
-      ctx: TypedContext<TBaseInput, TBaseErrors, TCustomContext>;
+      ctx: TypedContext<TBaseInput, MergeErrors<TDefaultErrors, TBaseErrors>, TCustomContext>;
     }) =>
       | Promise<InferOutput<NonNullable<TBaseOutput>> | Response>
       | InferOutput<NonNullable<TBaseOutput>>
       | Response,
-  ): ReadyProcedure<TBaseInput, TBaseOutput, TBaseErrors, TCustomContext> {
+  ): ReadyProcedure<TBaseInput, TBaseOutput, MergeErrors<TDefaultErrors, TBaseErrors>, TCustomContext> {
     return {
       method: "DELETE",
-      config: this._baseConfig,
+      config: this._baseConfig as any,
       handler,
       middleware: this._middleware as any,
     };
@@ -383,14 +395,14 @@ export class BaseProcedureBuilder<
   handler(
     handlerFn: (opts: {
       input: InferInput<TBaseInput>;
-      ctx: TypedContext<TBaseInput, TBaseErrors, TCustomContext>;
+      ctx: TypedContext<TBaseInput, MergeErrors<TDefaultErrors, TBaseErrors>, TCustomContext>;
     }) =>
       | Promise<InferOutput<NonNullable<TBaseOutput>> | Response>
       | InferOutput<NonNullable<TBaseOutput>>
       | Response,
-  ): PendingProcedure<TBaseInput, TBaseOutput, TBaseErrors, TCustomContext> {
+  ): PendingProcedure<TBaseInput, TBaseOutput, MergeErrors<TDefaultErrors, TBaseErrors>, TCustomContext> {
     return {
-      config: this._baseConfig,
+      config: this._baseConfig as any,
       handler: handlerFn,
       middleware: this._middleware as any,
     };

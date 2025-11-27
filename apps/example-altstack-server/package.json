@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "tsc",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "test:e2e": "vitest run",
+    "test": "pnpm test:e2e"
   },
   "dependencies": {
     "@hono/node-server": "^1.0.0",
@@ -20,7 +22,7 @@
     "@alt-stack/typescript-config": "workspace:*",
     "@types/node": "^20.0.0",
     "tsx": "^4.0.0",
-    "typescript": "5.9.2"
+    "typescript": "5.9.2",
+    "vitest": "^4.0.3"
   }
 }
-

@@ -185,6 +185,8 @@ export function createServer<
           }
 
           let statusCode = 500;
+          let errorCode = "ERROR";
+          let message = "Error occurred";
           for (const [code, schema] of Object.entries(
             procedure.config.errors,
           )) {
@@ -192,18 +194,28 @@ export function createServer<
             if (result.success) {
               statusCode = Number(code);
               const errorResponse = result.data;
-              throw new ServerError(
-                statusCode,
-                "ERROR",
+              if (
                 typeof errorResponse === "object" &&
                 errorResponse !== null &&
                 "error" in errorResponse &&
-                typeof errorResponse.error === "object" &&
-                errorResponse.error !== null &&
-                "message" in errorResponse.error &&
-                typeof errorResponse.error.message === "string"
-                  ? errorResponse.error.message
-                  : "Error occurred",
+                errorResponse.error &&
+                typeof errorResponse.error === "object"
+              ) {
+                const errorPayload = errorResponse.error as Record<
+                  string,
+                  unknown
+                >;
+                if (typeof errorPayload.code === "string") {
+                  errorCode = errorPayload.code;
+                }
+                if (typeof errorPayload.message === "string") {
+                  message = errorPayload.message;
+                }
+              }
+              throw new ServerError(
+                statusCode,
+                errorCode,
+                message,
                 errorResponse,
               );
             }

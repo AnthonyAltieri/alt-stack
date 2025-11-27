@@ -1,5 +1,5 @@
-import { router, publicProcedure, init, createServer } from "@alt-stack/server";
 import type { BaseContext, Middleware } from "@alt-stack/server";
+import { createServer, init, router } from "@alt-stack/server";
 import type { Context } from "hono";
 import { z } from "zod";
 
@@ -10,7 +10,7 @@ import { z } from "zod";
 const UserSchema = z.object({
   id: z.string(),
   email: z.string(),
-  role: z.literal("admin", "user"),
+  role: z.enum(["admin", "user"]),
 });
 type User = z.infer<typeof UserSchema>;
 
@@ -41,7 +41,7 @@ type Todo = z.infer<typeof TodoSchema>;
 const factory = init<AppContext>();
 
 // Public procedure (no auth required)
-const publicProc = publicProcedure;
+const publicProc = factory.procedure;
 
 // Protected procedure with authentication middleware
 const protectedProcedure = factory.procedure
@@ -55,7 +55,9 @@ const protectedProcedure = factory.procedure
   })
   .use(async (opts) => {
     const { ctx, next } = opts;
+
     if (!ctx.user) {
+      // Only allowed to throw default errors or defined errors with ctx.error()
       throw ctx.error({
         error: {
           code: "UNAUTHORIZED",
@@ -494,17 +496,66 @@ const appRouter = router<AppContext>({
 });
 
 // ============================================================================
+// In-Memory Database
+// ============================================================================
+
+const db = {
+  todos: new Map<string, Todo>(),
+  users: new Map<string, User>(),
+} as const;
+
+// Seed initial data
+const ADMIN_USER_ID = "00000000-0000-0000-0000-000000000001";
+const REGULAR_USER_ID = "00000000-0000-0000-0000-000000000002";
+function seedDatabase() {
+  // Seed users
+  const adminUser: User = {
+    id: ADMIN_USER_ID,
+    email: "admin@example.com",
+    role: "admin",
+  };
+  const regularUser: User = {
+    id: REGULAR_USER_ID,
+    email: "user@example.com",
+    role: "user",
+  };
+  db.users.set(adminUser.id, adminUser);
+  db.users.set(regularUser.id, regularUser);
+
+  // Seed todos
+  const todo1: Todo = {
+    id: "10000000-0000-0000-0000-000000000001",
+    title: "Learn TypeScript",
+    description: "Master TypeScript fundamentals",
+    completed: false,
+    createdAt: new Date().toISOString(),
+    userId: regularUser.id,
+  };
+  const todo2: Todo = {
+    id: "10000000-0000-0000-0000-000000000002",
+    title: "Build API",
+    description: "Create RESTful API with Hono",
+    completed: true,
+    createdAt: new Date(Date.now() - 86400000).toISOString(),
+    userId: regularUser.id,
+  };
+  db.todos.set(todo1.id, todo1);
+  db.todos.set(todo2.id, todo2);
+}
+
+// Initialize database on module load
+seedDatabase();
+
+// ============================================================================
 // Helper Functions (implementation details)
 // ============================================================================
 
 function getAllTodos(): Todo[] {
-  // Implementation
-  return [];
+  return Array.from(db.todos.values());
 }
 
-function getTodoById(_id: string): Todo | null {
-  // Implementation
-  return null;
+function getTodoById(id: string): Todo | null {
+  return db.todos.get(id) ?? null;
 }
 
 function createTodo(data: {
@@ -512,8 +563,7 @@ function createTodo(data: {
   description?: string;
   userId: string;
 }): Todo {
-  // Implementation
-  return {
+  const todo: Todo = {
     id: crypto.randomUUID(),
     title: data.title,
     description: data.description,
@@ -521,37 +571,56 @@ function createTodo(data: {
     createdAt: new Date().toISOString(),
     userId: data.userId,
   };
+  db.todos.set(todo.id, todo);
+  return todo;
 }
 
 function updateTodo(
-  _id: string,
-  _data: { title?: string; description?: string; completed?: boolean },
-) {
-  // Implementation
-  return getTodoById(_id)!;
+  id: string,
+  data: { title?: string; description?: string; completed?: boolean },
+): Todo {
+  const todo = db.todos.get(id);
+  if (!todo) {
+    throw new Error(`Todo with id ${id} not found`);
+  }
+
+  const updated: Todo = {
+    ...todo,
+    ...(data.title !== undefined && { title: data.title }),
+    ...(data.description !== undefined && { description: data.description }),
+    ...(data.completed !== undefined && { completed: data.completed }),
+  };
+  db.todos.set(id, updated);
+  return updated;
 }
 
-function deleteTodo(_id: string): void {
-  // Implementation
+function deleteTodo(id: string): void {
+  db.todos.delete(id);
 }
 
 function getAllUsers(): User[] {
-  // Implementation
-  return [];
+  return Array.from(db.users.values());
 }
 
-function getUserById(_id: string): User | null {
-  // Implementation
-  return null;
+function getUserById(id: string): User | null {
+  return db.users.get(id) ?? null;
 }
 
-function deleteUser(_id: string): void {
-  // Implementation
+function deleteUser(id: string): void {
+  db.users.delete(id);
+  // Also delete all todos belonging to this user
+  for (const [todoId, todo] of db.todos.entries()) {
+    if (todo.userId === id) {
+      db.todos.delete(todoId);
+    }
+  }
 }
 
-function getUserFromRequest(_request: Request): User {
+function getUserFromRequest(authorization: unknown): User | null {
   // Extract user from request (e.g., from JWT token)
-  return null!;
+  // For demo purposes, authorization is just the user id
+  if (typeof authorization !== "string") return null;
+  return db.users.get(authorization) ?? null;
 }
 
 // ============================================================================
@@ -559,21 +628,14 @@ function getUserFromRequest(_request: Request): User {
 // ============================================================================
 
 async function createContext(c: Context): Promise<AppContext> {
-  const user = await getUserFromRequest(c.req.raw);
+  const user = await getUserFromRequest(c.req.header("Authorization"));
   return { user };
 }
 
 const app = createServer<AppContext>(
-  {
-    api: appRouter, // All routes prefixed with /api
-  },
-  {
-    createContext,
-    docs: {
-      path: "/docs",
-      openapiPath: "/docs/openapi.json",
-    },
-  },
+  // All routes prefixed with /api
+  { api: appRouter },
+  { createContext, docs: { path: "/docs", openapiPath: "/docs/openapi.json" } },
 );
 
 export default app;

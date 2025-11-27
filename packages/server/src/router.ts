@@ -326,11 +326,13 @@ export function router<
     ): Router<TCustomContext>;
   };
 
+  const originalUse = routerInstance.use.bind(routerInstance);
+
   routerWithUse.use = function <
     TContextIn extends BaseContext,
     TContextOut extends BaseContext,
   >(middleware: Middleware<TContextIn, TContextOut>): Router<TCustomContext> {
-    routerInstance.use(middleware);
+    originalUse(middleware);
     return routerInstance;
   };
 
