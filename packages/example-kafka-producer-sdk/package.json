@@ -1,6 +1,6 @@
 {
   "name": "@alt-stack/example-kafka-producer-sdk",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Auto-generated TypeScript SDK for example-kafka-producer",
   "type": "module",
   "main": "./dist/index.js",
@@ -40,4 +40,3 @@
   },
   "license": "MIT"
 }
-
