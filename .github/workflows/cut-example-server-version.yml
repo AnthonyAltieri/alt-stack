@@ -1,0 +1,252 @@
+name: Cut Example Server Version
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_override:
+        description: 'Override version bump type (leave empty for auto-detect from commits)'
+        required: false
+        type: choice
+        options:
+          - ''
+          - patch
+          - minor
+          - major
+
+jobs:
+  cut-version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+        continue-on-error: true
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Determine version bump type
+        id: version-type
+        shell: bash
+        run: |
+          node << 'EOF'
+          const { execSync } = require('child_process');
+          const fs = require('fs');
+
+          const SERVER_DIR = 'apps/example-altstack-server';
+          const versionOverride = process.env.VERSION_OVERRIDE || '';
+
+          if (versionOverride) {
+            console.log(`Using override version bump: ${versionOverride}`);
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `bump_type=${versionOverride}\n`);
+            process.exit(0);
+          }
+
+          // Find last tag for example-altstack-server
+          let lastTag = null;
+          try {
+            const tags = execSync('git tag --sort=-version:refname', { encoding: 'utf-8' })
+              .trim()
+              .split('\n')
+              .filter(Boolean);
+
+            for (const tag of tags) {
+              if (tag.startsWith('example-altstack-server@')) {
+                lastTag = tag;
+                break;
+              }
+            }
+          } catch (e) {
+            // No tags found
+          }
+
+          // Determine commit range
+          let sinceRef = lastTag || '';
+          let commitRange = sinceRef ? `${sinceRef}..HEAD` : 'HEAD';
+
+          // Get commits affecting the server directory
+          let commits = [];
+          try {
+            const cmd = sinceRef
+              ? `git log ${commitRange} --pretty=format:"%s" -- ${SERVER_DIR}`
+              : `git log --pretty=format:"%s" -- ${SERVER_DIR}`;
+            const commitOutput = execSync(cmd, { encoding: 'utf-8' });
+            commits = commitOutput.trim().split('\n').filter(Boolean);
+          } catch (e) {
+            commits = [];
+          }
+
+          console.log(`Found ${commits.length} commits since ${lastTag || 'beginning'}`);
+          commits.forEach(c => console.log(`  - ${c}`));
+
+          // Analyze commits for version bump type
+          let bumpType = 'patch';
+          let hasBreaking = false;
+          let hasFeature = false;
+
+          for (const commit of commits) {
+            // Check for breaking changes
+            if (commit.includes('BREAKING CHANGE') ||
+                commit.includes('BREAKING:') ||
+                /^[^:]+!:/.test(commit)) {
+              hasBreaking = true;
+              break;
+            }
+
+            // Check for features
+            if (/^(feat|feature)(\(.+\))?:/i.test(commit)) {
+              hasFeature = true;
+            }
+          }
+
+          if (hasBreaking) {
+            bumpType = 'major';
+          } else if (hasFeature) {
+            bumpType = 'minor';
+          }
+
+          console.log(`Determined bump type: ${bumpType}`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `bump_type=${bumpType}\n`);
+          EOF
+        env:
+          VERSION_OVERRIDE: ${{ github.event.inputs.version_override }}
+
+      - name: Bump server version
+        id: bump-version
+        shell: bash
+        run: |
+          cd apps/example-altstack-server
+
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          echo "Current version: $CURRENT_VERSION"
+
+          pnpm version ${{ steps.version-type.outputs.bump_type }} --no-git-tag-version
+
+          NEW_VERSION=$(node -p "require('./package.json').version")
+          echo "New version: $NEW_VERSION"
+
+          echo "old_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Start example server
+        id: server
+        run: |
+          cd apps/example-altstack-server
+          pnpm dev > server.log 2>&1 &
+          SERVER_PID=$!
+          echo "pid=$SERVER_PID" >> $GITHUB_OUTPUT
+
+          # Wait for server to be ready
+          MAX_ATTEMPTS=30
+          ATTEMPT=0
+
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            sleep 2
+            if curl -f -s http://localhost:3000/docs/openapi.json > /dev/null 2>&1; then
+              echo "Server is ready on port 3000"
+              echo "port=3000" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+            ATTEMPT=$((ATTEMPT + 1))
+            echo "Waiting for server... attempt $ATTEMPT/$MAX_ATTEMPTS"
+          done
+
+          echo "Server failed to start"
+          cat server.log || true
+          kill $SERVER_PID 2>/dev/null || true
+          exit 1
+
+      - name: Generate SDK types
+        run: |
+          # Generate types using zod-openapi CLI (fetch from URL directly)
+          pnpm --filter @alt-stack/zod-openapi exec tsx src/cli.ts \
+            http://localhost:${{ steps.server.outputs.port }}/docs/openapi.json \
+            -o ${{ github.workspace }}/packages/example-altstack-server-sdk/src/index.ts
+
+          echo "Generated SDK types successfully"
+
+      - name: Stop server
+        if: always()
+        run: |
+          SERVER_PID=${{ steps.server.outputs.pid }}
+          if [ -n "$SERVER_PID" ]; then
+            kill $SERVER_PID 2>/dev/null || true
+            sleep 1
+            kill -9 $SERVER_PID 2>/dev/null || true
+          fi
+
+      - name: Update SDK version
+        run: |
+          cd packages/example-altstack-server-sdk
+          npm version ${{ steps.bump-version.outputs.new_version }} --no-git-tag-version --allow-same-version
+          echo "Updated SDK version to ${{ steps.bump-version.outputs.new_version }}"
+
+      - name: Commit changes
+        run: |
+          git add apps/example-altstack-server/package.json
+          git add packages/example-altstack-server-sdk/
+
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+
+          git commit -m "chore: release example-altstack-server@${{ steps.bump-version.outputs.new_version }} [skip ci]"
+
+      - name: Create and push tag
+        run: |
+          TAG_NAME="example-altstack-server@${{ steps.bump-version.outputs.new_version }}"
+          git tag -a "$TAG_NAME" -m "Release $TAG_NAME"
+          git push origin HEAD:${{ github.ref_name }}
+          git push origin "$TAG_NAME"
+
+      - name: Summary
+        run: |
+          echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Package**: example-altstack-server" >> $GITHUB_STEP_SUMMARY
+          echo "- **Previous Version**: ${{ steps.bump-version.outputs.old_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **New Version**: ${{ steps.bump-version.outputs.new_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Bump Type**: ${{ steps.version-type.outputs.bump_type }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "SDK package `@alt-stack/example-altstack-server-sdk` has been updated to match." >> $GITHUB_STEP_SUMMARY
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -f openapi.json
+          rm -f apps/example-altstack-server/server.log
+

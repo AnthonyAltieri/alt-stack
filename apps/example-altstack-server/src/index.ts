@@ -1,5 +1,5 @@
 import type { BaseContext, Middleware } from "@alt-stack/server";
-import { createServer, init, router } from "@alt-stack/server";
+import { createDocsRouter, createServer, init, router } from "@alt-stack/server";
 import type { Context } from "hono";
 import { z } from "zod";
 
@@ -632,10 +632,25 @@ async function createContext(c: Context): Promise<AppContext> {
   return { user };
 }
 
-const app = createServer<AppContext>(
-  // All routes prefixed with /api
+// Create docs router from all API routes
+const docsRouter = createDocsRouter<AppContext>(
   { api: appRouter },
-  { createContext, docs: { path: "/docs", openapiPath: "/docs/openapi.json" } },
+  { title: "Example API", version: "1.0.0" },
+);
+
+const app = createServer<AppContext>(
+  // All routes prefixed with /api, docs at /docs
+  { api: appRouter, docs: docsRouter },
+  { createContext },
 );
 
 export default app;
+
+// Start server when run directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const { serve } = await import("@hono/node-server");
+  const port = 3000;
+  console.log(`Server running at http://localhost:${port}`);
+  console.log(`OpenAPI docs at http://localhost:${port}/docs/openapi.json`);
+  serve({ fetch: app.fetch, port });
+}

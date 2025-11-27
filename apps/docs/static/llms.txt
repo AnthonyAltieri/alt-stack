@@ -620,78 +620,126 @@ const generatedCode = openApiToZodTsCode(openApiSpec, undefined, {
 
 # Combining Routers
 
-Organize your API by combining multiple routers in `createServer`. The object keys become path prefixes.
+Organize your API by combining multiple routers using the new tRPC-style `router()` function. Routers can be nested, and paths combine automatically.
 
 ## Basic Router Combination
 
 ```typescript
-import { init, createServer } from "@alt-stack/server";
+import { router, publicProcedure, createServer } from "@alt-stack/server";
 import { z } from "zod";
 
-const factory = init();
-
 // User routes
-const userRouter = factory.router()
-  .get("/{id}", {
-    input: {
+const userRouter = router({
+  "{id}": publicProcedure
+    .input({
       params: z.object({
         id: z.string(),
       }),
-    },
-    output: z.object({
-      id: z.string(),
-      name: z.string(),
+    })
+    .output(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+      })
+    )
+    .get((opts) => {
+      const { input } = opts;
+      return { id: input.id, name: "Alice" };
     }),
-  })
-  .handler((ctx) => {
-    return { id: ctx.input.id, name: "Alice" };
-  })
-  .post("/", {
-    input: {
+
+  create: publicProcedure
+    .input({
       body: z.object({
         name: z.string(),
       }),
-    },
-    output: z.object({
-      id: z.string(),
-    }),
-  })
-  .handler((ctx) => {
-    return { id: "1" };
-  });
-
-// Post routes
-const postsRouter = factory.router()
-  .get("/", {
-    input: {},
-    output: z.array(
+    })
+    .output(
       z.object({
         id: z.string(),
-        title: z.string(),
       })
-    ),
-  })
-  .handler(() => {
-    return [{ id: "1", title: "Hello World" }];
-  });
+    )
+    .post((opts) => {
+      return { id: "1" };
+    }),
+});
+
+// Post routes
+const postsRouter = router({
+  list: publicProcedure
+    .output(
+      z.array(
+        z.object({
+          id: z.string(),
+          title: z.string(),
+        })
+      )
+    )
+    .get(() => {
+      return [{ id: "1", title: "Hello World" }];
+    }),
+});
 
 // Combine routers - keys become path prefixes
-const app = createServer({
+const appRouter = router({
   users: userRouter,  // Routes prefixed with /users
   posts: postsRouter, // Routes prefixed with /posts
 });
 
+const app = createServer({
+  api: appRouter,
+});
+
 // Routes available at:
-// - GET /users/{id}
-// - POST /users
-// - GET /posts
+// - GET /api/users/{id}
+// - POST /api/users/create
+// - GET /api/posts/list
+```
+
+## Nested Routers
+
+Routers can be nested within other routers. Paths combine automatically:
+
+```typescript
+import { router, publicProcedure } from "@alt-stack/server";
+
+const productRouter = router({
+  "favorites/me": publicProcedure.get(() => {
+    return [];
+  }),
+});
+
+const userRouter = router({
+  profile: publicProcedure.get(() => {
+    return { id: "1" };
+  }),
+});
+
+// Nested routers
+const appRouter = router({
+  products: productRouter,  // /products/favorites/me
+  users: userRouter,        // /users/profile
+});
+
+// Final paths:
+// - GET /products/favorites/me
+// - GET /users/profile
 ```
 
 ## Multiple Routers with Same Prefix
 
-You can pass arrays of routers for the same prefix:
+You can pass arrays of routers for the same prefix in `createServer`:
 
 ```typescript
+import { router, publicProcedure, createServer } from "@alt-stack/server";
+
+const v1Router = router({
+  users: publicProcedure.get(() => []),
+});
+
+const v2Router = router({
+  users: publicProcedure.get(() => []),
+});
+
 const app = createServer({
   api: [v1Router, v2Router], // Both routers prefixed with /api
 });
@@ -699,11 +747,25 @@ const app = createServer({
 
 This is useful for versioning APIs or organizing routes by feature.
 
-## Nested Routes
+## Nested Routes with Compound Paths
 
-To achieve nested routes like `/api/v1/*` and `/api/v2/*`, use compound prefixes:
+To achieve nested routes like `/api/v1/*` and `/api/v2/*`, use compound prefixes in `createServer`:
 
 ```typescript
+import { router, publicProcedure, createServer } from "@alt-stack/server";
+
+const v1Router = router({
+  users: publicProcedure.get(() => []),
+});
+
+const v2Router = router({
+  users: publicProcedure.get(() => []),
+});
+
+const adminRouter = router({
+  settings: publicProcedure.get(() => []),
+});
+
 const app = createServer({
   "api/v1": v1Router,
   "api/v2": v2Router,
@@ -712,9 +774,36 @@ const app = createServer({
 ```
 
 Results in routes like:
-- `/api/v1/*` - All v1Router routes
-- `/api/v2/*` - All v2Router routes
-- `/admin/*` - All adminRouter routes
+- `/api/v1/users` - All v1Router routes
+- `/api/v2/users` - All v2Router routes
+- `/admin/settings` - All adminRouter routes
+
+## Router-Level Middleware
+
+You can apply middleware to entire routers:
+
+```typescript
+import { router, publicProcedure, createMiddleware } from "@alt-stack/server";
+
+const authMiddleware = createMiddleware(async ({ ctx, next }) => {
+  // Auth logic
+  return next();
+});
+
+const userRouter = router({
+  profile: publicProcedure.get(() => ({ id: "1" })),
+}).use(authMiddleware);
+
+const postRouter = router({
+  list: publicProcedure.get(() => []),
+});
+
+// Combine routers
+const appRouter = router({
+  users: userRouter,  // Has auth middleware
+  posts: postRouter,  // No auth middleware
+});
+```
 
 ---
 
@@ -942,10 +1031,12 @@ Inputs can be validated from three sources:
 ## Example
 
 ```typescript
-const factory = init();
-const router = factory.router()
-  .get("/users/{id}", {
-    input: {
+import { router, publicProcedure } from "@alt-stack/server";
+import { z } from "zod";
+
+export const userRouter = router({
+  "{id}": publicProcedure
+    .input({
       params: z.object({
         id: z.string(),
       }),
@@ -953,17 +1044,45 @@ const router = factory.router()
         limit: z.number().optional(),
         offset: z.number().optional(),
       }),
-    },
-    output: z.object({
-      id: z.string(),
+    })
+    .output(
+      z.object({
+        id: z.string(),
+      })
+    )
+    .get((opts) => {
+      // opts.input.id (from params)
+      // opts.input.limit (from query)
+      // opts.input.offset (from query)
+      const { input } = opts;
+      return { id: input.id };
     }),
-  })
-  .handler((ctx) => {
-    // ctx.input.id (from params)
-    // ctx.input.limit (from query)
-    // ctx.input.offset (from query)
-    return { id: ctx.input.id };
-  });
+});
+```
+
+## Path Parameter Validation
+
+When using path parameters in the route key (e.g., `{id}`), TypeScript enforces that you must provide a `params` schema with matching keys:
+
+```typescript
+import { router, publicProcedure } from "@alt-stack/server";
+import { z } from "zod";
+
+export const userRouter = router({
+  // ✅ Valid - params.id matches {id} in path
+  "{id}": publicProcedure
+    .input({
+      params: z.object({
+        id: z.string(),
+      }),
+    })
+    .get((opts) => {
+      return { id: opts.input.id };
+    }),
+
+  // ❌ TypeScript error - missing params.id for {id} path
+  // "{id}": publicProcedure.get(() => ({ id: "1" })),
+});
 ```
 
 ## Validation Errors
@@ -982,6 +1101,39 @@ When validation fails, a `400` response is automatically returned:
 
 The handler is only called if all inputs pass validation, ensuring type safety and runtime safety.
 
+## Combining Input Types
+
+You can combine params, query, and body validation:
+
+```typescript
+import { router, publicProcedure } from "@alt-stack/server";
+import { z } from "zod";
+
+export const userRouter = router({
+  "{id}": publicProcedure
+    .input({
+      params: z.object({
+        id: z.string(),
+      }),
+      query: z.object({
+        include: z.enum(["profile", "posts"]).optional(),
+      }),
+      body: z.object({
+        name: z.string().min(1),
+        email: z.string().email(),
+      }),
+    })
+    .put((opts) => {
+      const { input } = opts;
+      // All inputs are validated and typed:
+      // input.id (from params)
+      // input.include (from query, optional)
+      // input.name, input.email (from body)
+      return { id: input.id };
+    }),
+});
+```
+
 ---
 
 // File: core-concepts/middleware
@@ -992,14 +1144,14 @@ Apply middleware at router-level or procedure-level to add cross-cutting concern
 
 ## Router-Level Middleware
 
-Apply middleware to all routes in a router. Use `createMiddleware` helper to ensure proper context typing:
+Apply middleware to all routes in a router using the `.use()` method:
 
 ```typescript
-import { init, createServer, createMiddleware } from "@alt-stack/server";
+import { router, publicProcedure, createMiddleware } from "@alt-stack/server";
 import { z } from "zod";
 
 interface AppContext {
-  user: User | null;
+  user: { id: string; name: string } | null;
 }
 
 const authMiddleware = createMiddleware<AppContext>(async ({ ctx, next }) => {
@@ -1012,91 +1164,152 @@ const authMiddleware = createMiddleware<AppContext>(async ({ ctx, next }) => {
   return next({ ctx: { user } });
 });
 
-const factory = init<AppContext>();
-const router = factory.router()
-  .use(authMiddleware)
-  .get("/profile", {
-    input: {},
-    output: z.object({
-      id: z.string(),
-      name: z.string(),
+export const userRouter = router({
+  profile: publicProcedure
+    .input({})
+    .output(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+      })
+    )
+    .get((opts) => {
+      // opts.ctx.user is typed (from authMiddleware)
+      const { ctx } = opts;
+      return {
+        id: ctx.user!.id,
+        name: ctx.user!.name,
+      };
     }),
-  })
-  .handler((ctx) => {
-    // ctx.user is typed (from authMiddleware)
-    return {
-      id: ctx.user.id,
-      name: ctx.user.name,
-    };
-  });
-
-const app = createServer({
-  users: router,
-});
+}).use(authMiddleware);
 ```
 
 ## Procedure-Level Middleware
 
-Apply middleware to specific routes:
+Apply middleware to specific procedures using `.use()`:
 
 ```typescript
-const factory = init();
-const router = factory.router()
-  .post("/users", {
-    input: {
+import { router, publicProcedure } from "@alt-stack/server";
+import { z } from "zod";
+
+export const userRouter = router({
+  create: publicProcedure
+    .input({
       body: z.object({
         name: z.string(),
         email: z.string().email(),
       }),
-    },
-    output: z.object({
-      id: z.string(),
+    })
+    .output(
+      z.object({
+        id: z.string(),
+      })
+    )
+    .use(async (opts) => {
+      // Log before handler
+      const { ctx, next } = opts;
+      console.log("Creating user:", ctx.input.name);
+      return next();
+    })
+    .post((opts) => {
+      return { id: "1" };
     }),
-  })
-  .use(async ({ ctx, next }) => {
-    // Log before handler
-    console.log("Creating user:", ctx.input.name);
-    return next();
-  })
-  .handler((ctx) => {
-    return { id: "1" };
-  });
+});
 ```
 
 ## Context Extension
 
-Middleware can extend the context by passing updated context to `next()`:
+Middleware can extend the context by passing updated context to `next()`. This follows the tRPC pattern:
 
 ```typescript
-const loggerMiddleware = createMiddleware<AppContext>(async ({ ctx, next }) => {
+import { router, publicProcedure, init } from "@alt-stack/server";
+
+interface AppContext {
+  user: { id: string; name: string } | null;
+}
+
+const factory = init<AppContext>();
+
+const loggerMiddleware = async (opts: {
+  ctx: any;
+  next: (opts?: { ctx: Partial<any> }) => Promise<any>;
+}) => {
+  const { ctx, next } = opts;
   const start = Date.now();
   const result = await next();
   const duration = Date.now() - start;
   console.log(`Request took ${duration}ms`);
   return result;
-});
+};
 
-const authMiddleware = createMiddleware<AppContext>(async ({ ctx, next }) => {
+const authMiddleware = async (opts: {
+  ctx: any;
+  next: (opts?: { ctx: Partial<any> }) => Promise<any>;
+}) => {
+  const { ctx, next } = opts;
   const user = await authenticate(ctx.hono.req);
   if (!user) {
     return ctx.hono.json({ error: "Unauthorized" }, 401);
   }
   // Extend context - user is now non-null in subsequent handlers
   return next({ ctx: { user } });
+};
+
+const protectedProcedure = factory.procedure
+  .use(loggerMiddleware)
+  .use(authMiddleware);
+
+export const appRouter = router({
+  profile: protectedProcedure
+    .input({})
+    .get((opts) => {
+      // opts.ctx.user is guaranteed to be non-null
+      const { ctx } = opts;
+      return { id: ctx.user!.id, name: ctx.user!.name };
+    }),
 });
 ```
 
 ## Multiple Middleware
 
-Chain multiple middleware on the same router or procedure:
+Chain multiple middleware on the same procedure:
 
 ```typescript
+import { router, publicProcedure, init } from "@alt-stack/server";
+
+interface AppContext {
+  user: { id: string; role: string } | null;
+}
+
 const factory = init<AppContext>();
-const router = factory.router()
+
+const loggerMiddleware = async (opts: any) => {
+  console.log("Request started");
+  return opts.next();
+};
+
+const authMiddleware = async (opts: any) => {
+  const user = await getUser(opts.ctx);
+  return opts.next({ ctx: { user } });
+};
+
+const adminMiddleware = async (opts: any) => {
+  if (opts.ctx.user?.role !== "admin") {
+    return new Response("Forbidden", { status: 403 });
+  }
+  return opts.next();
+};
+
+const adminProcedure = factory.procedure
   .use(loggerMiddleware)
   .use(authMiddleware)
-  .get("/profile", { /* ... */ })
-  .handler(/* ... */);
+  .use(adminMiddleware);
+
+export const adminRouter = router({
+  settings: adminProcedure.get(() => {
+    return { admin: true };
+  }),
+});
 ```
 
 Middleware executes in the order they're defined.
@@ -1106,22 +1319,94 @@ Middleware executes in the order they're defined.
 Create reusable procedures with middleware to reuse authentication or other middleware across multiple routes. See the [Reusable Procedures guide](/core-concepts/reusable-procedures) for details:
 
 ```typescript
+import { router, publicProcedure, init } from "@alt-stack/server";
+import { z } from "zod";
+
+interface AppContext {
+  user: { id: string; name: string } | null;
+}
+
 const factory = init<AppContext>();
-const router = factory.router();
 
 // Create reusable procedures
-const publicProcedure = factory.procedure;
+const publicProc = publicProcedure;
 const protectedProcedure = factory.procedure.use(async (opts) => {
   // Auth middleware
-  if (!opts.ctx.user) {
+  const { ctx, next } = opts;
+  if (!ctx.user) {
     return new Response("Unauthorized", { status: 401 });
   }
-  return opts.next({ ctx: { user: opts.ctx.user } });
+  return next({ ctx: { user: ctx.user } });
 });
 
 // Use procedures
-publicProcedure.on(router).get("/hello", { input: {}, output: z.string() }).handler(() => "hello");
-protectedProcedure.on(router).get("/profile", { input: {}, output: UserSchema }).handler((ctx) => ctx.user!);
+export const appRouter = router({
+  hello: publicProc.get(() => "hello"),
+  profile: protectedProcedure
+    .input({})
+    .output(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+      })
+    )
+    .get((opts) => {
+      return opts.ctx.user!;
+    }),
+});
+```
+
+## Middleware Chaining and Context Flow
+
+Middleware can chain together, with each middleware able to extend the context:
+
+```typescript
+import { router, publicProcedure, init } from "@alt-stack/server";
+
+interface AppContext {
+  user: { id: string; role: string } | null;
+  requestId: string;
+  isAdmin: boolean;
+}
+
+const factory = init<AppContext>();
+
+// First middleware adds requestId
+const requestIdMiddleware = async (opts: any) => {
+  const requestId = crypto.randomUUID();
+  return opts.next({ ctx: { requestId } });
+};
+
+// Second middleware adds user
+const authMiddleware = async (opts: any) => {
+  const user = await getUser(opts.ctx);
+  return opts.next({ ctx: { user } });
+};
+
+// Third middleware adds isAdmin based on user role
+const adminCheckMiddleware = async (opts: any) => {
+  const isAdmin = opts.ctx.user?.role === "admin";
+  return opts.next({ ctx: { isAdmin } });
+};
+
+const adminProcedure = factory.procedure
+  .use(requestIdMiddleware)
+  .use(authMiddleware)
+  .use(adminCheckMiddleware);
+
+export const adminRouter = router({
+  dashboard: adminProcedure
+    .input({})
+    .get((opts) => {
+      // All context extensions are available
+      const { ctx } = opts;
+      return {
+        requestId: ctx.requestId,
+        userId: ctx.user!.id,
+        isAdmin: ctx.isAdmin,
+      };
+    }),
+});
 ```
 
 ---
@@ -1193,10 +1478,10 @@ Create reusable procedures with middleware to follow the tRPC pattern. This allo
 
 ## Basic Pattern
 
-Use `init()` to create procedures and routers:
+Use `publicProcedure` or `init()` to create procedures:
 
 ```typescript
-import { init, createServer } from "@alt-stack/server";
+import { router, publicProcedure, init } from "@alt-stack/server";
 import { z } from "zod";
 
 interface AppContext {
@@ -1205,8 +1490,8 @@ interface AppContext {
 
 const factory = init<AppContext>();
 
-// Create reusable procedures from init()
-const publicProcedure = factory.procedure;
+// Create reusable procedures
+const publicProc = publicProcedure;
 const protectedProcedure = factory.procedure
   .errors({
     401: z.object({
@@ -1216,9 +1501,8 @@ const protectedProcedure = factory.procedure
       }),
     }),
   })
-  .use(
-  async function isAuthed(opts) {
-    const { ctx } = opts;
+  .use(async function isAuthed(opts) {
+    const { ctx, next } = opts;
     // `ctx.user` is nullable
     if (!ctx.user) {
       throw ctx.error({
@@ -1229,53 +1513,47 @@ const protectedProcedure = factory.procedure
       });
     }
     // ✅ Pass updated context where user is non-null
-    return opts.next({
+    return next({
       ctx: {
         user: ctx.user, // ✅ user value is known to be non-null now
       },
     });
-  }
-);
+  });
 
-// Create a router
-const router = factory.router();
-
-// Use procedures to create routes
-publicProcedure.on(router)
-  .get("/hello", {
-    input: {},
-    output: z.string(),
-  })
-  .handler(() => {
+// Create a router using the new tRPC-style API
+export const appRouter = router({
+  hello: publicProc.get(() => {
     return "hello world";
-  });
+  }),
 
-protectedProcedure.on(router)
-  .get("/profile", {
-    input: {},
-    output: z.object({
-      id: z.string(),
-      name: z.string(),
+  profile: protectedProcedure
+    .input({})
+    .output(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+      })
+    )
+    .get((opts) => {
+      // opts.ctx.user is guaranteed to be non-null after middleware
+      const { ctx } = opts;
+      return {
+        id: ctx.user!.id,
+        name: ctx.user!.name,
+      };
     }),
-  })
-  .handler((ctx) => {
-    // ctx.user is guaranteed to be non-null after middleware
-    return {
-      id: ctx.user!.id,
-      name: ctx.user!.name,
-    };
-  });
 
-protectedProcedure.on(router)
-  .get("/secret", {
-    input: {},
-    output: z.object({
-      secret: z.string(),
+  secret: protectedProcedure
+    .input({})
+    .output(
+      z.object({
+        secret: z.string(),
+      })
+    )
+    .get(() => {
+      return { secret: "sauce" };
     }),
-  })
-  .handler(() => {
-    return { secret: "sauce" };
-  });
+});
 ```
 
 ## Configuring Procedures
@@ -1285,61 +1563,61 @@ Procedures support the same configuration methods as regular routes:
 ### Setting Default Input
 
 ```typescript
-const factory = init();
-const router = factory.router();
+import { router, publicProcedure } from "@alt-stack/server";
+import { z } from "zod";
 
-const validatedProcedure = factory.procedure.input({
+const validatedProcedure = publicProcedure.input({
   query: z.object({
     apiKey: z.string().min(1),
   }),
 });
 
 // All routes using this procedure will require apiKey in query
-validatedProcedure.on(router)
-  .get("/data", {
-    input: {
+export const dataRouter = router({
+  list: validatedProcedure
+    .input({
       body: z.object({ filter: z.string() }), // Additional input
-    },
-    output: z.array(z.any()),
-  })
-  .handler((ctx) => {
-    // ctx.input.apiKey is available (from procedure)
-    // ctx.input.filter is available (from route)
-    return [];
-  });
+    })
+    .get((opts) => {
+      // opts.input.apiKey is available (from procedure)
+      // opts.input.filter is available (from route)
+      const { input } = opts;
+      return [];
+    }),
+});
 ```
 
 ### Setting Default Output
 
 ```typescript
-const factory = init();
-const router = factory.router();
+import { router, publicProcedure } from "@alt-stack/server";
+import { z } from "zod";
 
-const jsonProcedure = factory.procedure.output(
+const jsonProcedure = publicProcedure.output(
   z.object({
     success: z.boolean(),
   })
 );
 
-jsonProcedure.on(router)
-  .post("/action", {
-    input: {
+export const actionRouter = router({
+  create: jsonProcedure
+    .input({
       body: z.object({ action: z.string() }),
-    },
-    // output is automatically set from procedure
-  })
-  .handler(() => {
-    return { success: true };
-  });
+    })
+    .post((opts) => {
+      // output is automatically set from procedure
+      return { success: true };
+    }),
+});
 ```
 
 ### Setting Default Errors
 
 ```typescript
-const factory = init();
-const router = factory.router();
+import { router, publicProcedure } from "@alt-stack/server";
+import { z } from "zod";
 
-const errorProcedure = factory.procedure.errors({
+const errorProcedure = publicProcedure.errors({
   401: z.object({
     error: z.object({
       code: z.literal("UNAUTHORIZED"),
@@ -1348,23 +1626,23 @@ const errorProcedure = factory.procedure.errors({
   }),
 });
 
-errorProcedure.on(router)
-  .get("/protected", {
-    input: {},
-    output: z.string(),
-    // errors are automatically set from procedure
-  })
-  .handler((ctx) => {
-    if (someCondition) {
-      throw ctx.error({
-        error: {
-          code: "UNAUTHORIZED",
-          message: "Not authorized",
-        },
-      });
-    }
-    return "success";
-  });
+export const protectedRouter = router({
+  data: errorProcedure
+    .input({})
+    .output(z.string())
+    .get((opts) => {
+      const { ctx } = opts;
+      if (someCondition) {
+        throw ctx.error({
+          error: {
+            code: "UNAUTHORIZED",
+            message: "Not authorized",
+          },
+        });
+      }
+      return "success";
+    }),
+});
 ```
 
 ### Combining Procedure and Route Errors
@@ -1372,11 +1650,11 @@ errorProcedure.on(router)
 Errors defined on procedures are automatically merged with errors defined on routes. Route errors take precedence when the same status code is defined in both:
 
 ```typescript
-const factory = init();
-const router = factory.router();
+import { router, publicProcedure } from "@alt-stack/server";
+import { z } from "zod";
 
 // Procedure defines common authentication error
-const apiProcedure = factory.procedure.errors({
+const apiProcedure = publicProcedure.errors({
   401: z.object({
     error: z.object({
       code: z.literal("UNAUTHORIZED"),
@@ -1385,14 +1663,13 @@ const apiProcedure = factory.procedure.errors({
   }),
 });
 
-// Route adds route-specific errors
-apiProcedure.on(router)
-  .get("/users/{id}", {
-    input: {
+export const userRouter = router({
+  "{id}": apiProcedure
+    .input({
       params: z.object({ id: z.string() }),
-    },
-    output: z.object({ id: z.string(), name: z.string() }),
-    errors: {
+    })
+    .output(z.object({ id: z.string(), name: z.string() }))
+    .errors({
       // 401 is inherited from procedure
       // Add additional route-specific errors
       404: z.object({
@@ -1407,43 +1684,44 @@ apiProcedure.on(router)
           message: z.string(),
         }),
       }),
-    },
-  })
-  .handler((ctx) => {
-    const user = findUser(ctx.input.id);
-    
-    if (!user) {
-      // Can throw 404 error (defined on route)
-      throw ctx.error({
-        error: {
-          code: "NOT_FOUND",
-          message: "User not found",
-        },
-      });
-    }
-    
-    if (!canAccessUser(user)) {
-      // Can throw 403 error (defined on route)
-      throw ctx.error({
-        error: {
-          code: "FORBIDDEN",
-          message: "Access denied",
-        },
-      });
-    }
-    
-    if (!isAuthenticated()) {
-      // Can throw 401 error (inherited from procedure)
-      throw ctx.error({
-        error: {
-          code: "UNAUTHORIZED",
-          message: "Authentication required",
-        },
-      });
-    }
-    
-    return user;
-  });
+    })
+    .get((opts) => {
+      const { input, ctx } = opts;
+      const user = findUser(input.id);
+
+      if (!user) {
+        // Can throw 404 error (defined on route)
+        throw ctx.error({
+          error: {
+            code: "NOT_FOUND",
+            message: "User not found",
+          },
+        });
+      }
+
+      if (!canAccessUser(user)) {
+        // Can throw 403 error (defined on route)
+        throw ctx.error({
+          error: {
+            code: "FORBIDDEN",
+            message: "Access denied",
+          },
+        });
+      }
+
+      if (!isAuthenticated()) {
+        // Can throw 401 error (inherited from procedure)
+        throw ctx.error({
+          error: {
+            code: "UNAUTHORIZED",
+            message: "Authentication required",
+          },
+        });
+      }
+
+      return user;
+    }),
+});
 ```
 
 In this example, the route has access to all three error types:
@@ -1454,7 +1732,7 @@ In this example, the route has access to all three error types:
 **Union of Error Schemas**: If both the procedure and route define an error with the same status code, the schemas are unioned. This means `ctx.error()` can accept either schema for that status code:
 
 ```typescript
-const apiProcedure = factory.procedure.errors({
+const apiProcedure = publicProcedure.errors({
   401: z.object({
     error: z.object({
       code: z.literal("UNAUTHORIZED"),
@@ -1463,111 +1741,227 @@ const apiProcedure = factory.procedure.errors({
   }),
 });
 
-apiProcedure.on(router)
-  .get("/users/{id}", {
-    input: {
-      params: z.object({ id: z.string() }),
-    },
-    output: z.object({ id: z.string() }),
-    errors: {
-      // 401 error schema is unioned with procedure's 401
+export const settingsRouter = router({
+  me: apiProcedure
+    .input({})
+    .errors({
+      // Route defines a different 401 error schema - they will be unioned
       401: z.object({
         error: z.object({
-          code: z.literal("AUTH_REQUIRED"),
+          code: z.literal("SESSION_EXPIRED"),
           message: z.string(),
-          redirect: z.string().url(), // Additional field in route's 401
+          redirect: z.string().url(),
         }),
       }),
-      404: z.object({
-        error: z.object({
-          code: z.literal("NOT_FOUND"),
-          message: z.string(),
-        }),
-      }),
-    },
-  })
-  .handler((ctx) => {
-    if (!isAuthenticated()) {
-      // Can throw either procedure's 401 schema or route's 401 schema
+    })
+    .get((opts) => {
+      const { ctx } = opts;
+      // Can throw 401 with either UNAUTHORIZED or SESSION_EXPIRED
       throw ctx.error({
         error: {
-          code: "UNAUTHORIZED", // From procedure
-          message: "Please log in",
-        },
-      });
-      // OR
-      throw ctx.error({
-        error: {
-          code: "AUTH_REQUIRED", // From route
-          message: "Authentication required",
+          code: "SESSION_EXPIRED",
+          message: "Your session has expired",
           redirect: "https://example.com/login",
         },
       });
-    }
-    
-    if (!user) {
-      throw ctx.error({
-        error: {
-          code: "NOT_FOUND",
-          message: "User not found",
-        },
-      });
-    }
-    
-    return user;
-  });
-```
-
-Both 401 error schemas are valid because they're unioned together. This allows flexibility while maintaining type safety.
-
-## Chaining Middleware
-
-You can chain multiple middleware on procedures:
-
-```typescript
-const factory = init();
-const loggedProcedure = factory.procedure.use(async (opts) => {
-  console.log("Request started");
-  return opts.next();
-});
-
-const authenticatedProcedure = loggedProcedure.use(async (opts) => {
-  if (!opts.ctx.user) {
-    return new Response("Unauthorized", { status: 401 });
-  }
-  return opts.next({ ctx: { user: opts.ctx.user } });
-});
-```
-
-## Combining Configuration and Middleware
-
-You can combine configuration methods with middleware:
-
-```typescript
-const factory = init();
-const apiProcedure = factory.procedure
-  .input({
-    query: z.object({
-      version: z.string(),
     }),
-  })
-  .use(async (opts) => {
-    // Validate API version
-    if (opts.ctx.input.version !== "v1") {
-      return new Response("Unsupported version", { status: 400 });
-    }
-    return opts.next();
-  });
+});
 ```
 
-## Context Narrowing
+## Middleware Chaining
 
-When middleware calls `next({ ctx: {...} })`, the context is updated at runtime. TypeScript cannot fully track this narrowing through function calls, but the runtime behavior is correct:
+Middleware can be chained to build up context:
 
 ```typescript
-const factory = init<AppContext>();
-const router = factory.router();
+import { router, publicProcedure } from "@alt-stack/server";
+import { z } from "zod";
 
+interface AppContext {
+  user: { id: string; role: string } | null;
+}
+
+const factory = init<AppContext>();
+
+const authProcedure = factory.procedure.use(async (opts) => {
+  const { ctx, next } = opts;
+  const user = await getUser(ctx);
+  if (!user) {
+    throw ctx.error({ code: "UNAUTHORIZED" });
+  }
+  return next({ ctx: { user } });
+});
+
+const adminProcedure = authProcedure.use(async (opts) => {
+  const { ctx, next } = opts;
+  if (ctx.user.role !== "admin") {
+    throw ctx.error({ code: "FORBIDDEN" });
+  }
+  return next({ ctx: { isAdmin: true } });
+});
+
+export const adminRouter = router({
+  settings: adminProcedure
+    .input({})
+    .get((opts) => {
+      // opts.ctx.user and opts.ctx.isAdmin are both available
+      const { ctx } = opts;
+      return { admin: ctx.isAdmin };
+    }),
+});
+```
+
+## Common Patterns
+
+### Public and Protected Routes
+
+```typescript
+import { router, publicProcedure, init } from "@alt-stack/server";
+import { z } from "zod";
+
+interface AppContext {
+  user: { id: string; name: string } | null;
+}
+
+const factory = init<AppContext>();
+
+const publicProc = publicProcedure;
+const protectedProcedure = factory.procedure.use(authMiddleware);
+
+export const appRouter = router({
+  hello: publicProc.get(() => "hello"),
+
+  profile: protectedProcedure
+    .input({})
+    .get((opts) => {
+      return opts.ctx.user!; // Non-null due to middleware
+    }),
+});
+```
+
+### Role-Based Procedures
+
+```typescript
+import { router, publicProcedure, init } from "@alt-stack/server";
+
+interface AppContext {
+  user: { role: string } | null;
+}
+
+const factory = init<AppContext>();
+
+const requireRole = (role: string) =>
+  factory.procedure.use(async (opts) => {
+    const { ctx, next } = opts;
+    if (!ctx.user || ctx.user.role !== role) {
+      return new Response("Forbidden", { status: 403 });
+    }
+    return next();
+  });
+
+const adminProcedure = requireRole("admin");
+const moderatorProcedure = requireRole("moderator");
+
+export const adminRouter = router({
+  delete: adminProcedure.get(() => ({ success: true })),
+});
+
+export const moderatorRouter = router({
+  moderate: moderatorProcedure.post(() => ({ success: true })),
+});
+```
+
+### Rate Limited Procedures
+
+```typescript
+import { router, publicProcedure } from "@alt-stack/server";
+
+const rateLimitedProcedure = publicProcedure.use(async (opts) => {
+  const { ctx, next } = opts;
+  const rateLimitKey = getRateLimitKey(ctx);
+  if (await isRateLimited(rateLimitKey)) {
+    return new Response("Too many requests", { status: 429 });
+  }
+  await incrementRateLimit(rateLimitKey);
+  return next();
+});
+
+export const apiRouter = router({
+  data: rateLimitedProcedure.get(() => {
+    return { data: [] };
+  }),
+});
+```
+
+---
+
+// File: example
+
+# Kitchen Sink Example
+
+A comprehensive example demonstrating all features of Altstack with the tRPC-style API. This example shows a complete Todo API server with authentication, error handling, middleware, and type safety.
+
+**Note**: In the tRPC-style API, the keys in the `router()` object become the endpoint paths. For example, `list: publicProcedure.get(...)` creates the route `/list`, and `"{id}": publicProcedure.get(...)` creates the route `/{id}`. When routers are nested, paths combine (e.g., `todos: todoRouter` with key `"{id}"` creates `/todos/{id}`).
+
+**Multiple HTTP Methods on Same Path**: To define multiple HTTP methods for the same path (e.g., GET, PUT, DELETE on `/todos/{id}`), use a nested methods object with `.handler()` instead of `.get()`, `.put()`, etc. The HTTP method is automatically inferred from the object key. For example:
+```typescript
+"{id}": {
+  get: publicProc.input(...).handler((opts) => { ... }),
+  put: protectedProcedure.input(...).handler((opts) => { ... }),
+  delete: protectedProcedure.input(...).handler((opts) => { ... }),
+}
+```
+
+**Default Error Schemas**: 400 (validation) and 500 (internal server) errors are automatically included for all procedures. When you provide a custom 400 or 500 error via `.errors()`, it will be unioned with the default, allowing your procedure to accept both the default error format and your custom format. You can override the default error handlers in `init()` options.
+
+## Complete Server Implementation
+
+```typescript
+import { router, publicProcedure, init, createServer } from "@alt-stack/server";
+import type { BaseContext, Middleware } from "@alt-stack/server";
+import type { Context } from "hono";
+import { z } from "zod";
+
+// ============================================================================
+// Type Definitions
+// ============================================================================
+
+const UserSchema = z.object({
+  id: z.string(),
+  email: z.string(),
+  role: z.literal("admin", "user"),
+});
+type User = z.infer<typeof UserSchema>;
+
+interface AppContext {
+  user: User | null;
+}
+
+const TodoSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  description: z.string().optional(),
+  completed: z.boolean(),
+  createdAt: z.string(),
+  userId: z.string(),
+});
+type Todo = z.infer<typeof TodoSchema>;
+
+// ============================================================================
+// Reusable Procedures
+// ============================================================================
+
+// Initialize factory with default error handlers
+// You can override default 400/500 error handlers here if needed:
+// const factory = init<AppContext>({
+//   default400Error: (errors, variant, value) => [customSchema, customInstance],
+//   default500Error: (error) => [customSchema, customInstance],
+// });
+const factory = init<AppContext>();
+
+// Public procedure (no auth required)
+const publicProc = publicProcedure;
+
+// Protected procedure with authentication middleware
 const protectedProcedure = factory.procedure
   .errors({
     401: z.object({
@@ -1577,413 +1971,609 @@ const protectedProcedure = factory.procedure
       }),
     }),
   })
-  .use(
-  async function isAuthed(opts) {
-    const { ctx } = opts;
+  .use(async (opts) => {
+    const { ctx, next } = opts;
     if (!ctx.user) {
       throw ctx.error({
-        error: {
-          code: "UNAUTHORIZED" as const,
-          message: "Authentication required",
-        },
-      });
-    }
-    // Runtime: ctx.user is now non-null
-    return opts.next({
-      ctx: {
-        user: ctx.user,
-      },
-    });
-  }
-);
-
-protectedProcedure.on(router)
-  .get("/profile", {
-    input: {},
-    output: z.object({ id: z.string() }),
-    // errors are inherited from protectedProcedure
-  })
-  .handler((ctx) => {
-    // Runtime: ctx.user is non-null
-    // TypeScript: may need type assertion or null check for full type safety
-    if (!ctx.user) {
-      // This should never happen at runtime due to middleware
-      throw ctx.error({
-        error: {
-          code: "UNAUTHORIZED" as const,
-          message: "Authentication required",
-        },
-      });
-    }
-    return { id: ctx.user.id };
-  });
-```
-
-## Common Patterns
-
-### Public and Protected Routes
-
-```typescript
-const factory = init<AppContext>();
-const router = factory.router();
-
-const publicProcedure = factory.procedure;
-const protectedProcedure = factory.procedure.use(authMiddleware);
-
-// Public route
-publicProcedure.on(router).get("/hello", { input: {}, output: z.string() }).handler(() => "hello");
-
-// Protected route
-protectedProcedure.on(router).get("/profile", { input: {}, output: UserSchema }).handler((ctx) => {
-  return ctx.user!; // Non-null due to middleware
-});
-```
-
-### Role-Based Procedures
-
-```typescript
-const factory = init<AppContext>();
-
-const requireRole = (role: string) =>
-  factory.procedure.use(async (opts) => {
-    if (!opts.ctx.user || opts.ctx.user.role !== role) {
-      return new Response("Forbidden", { status: 403 });
-    }
-    return opts.next();
-  });
-
-const adminProcedure = requireRole("admin");
-const moderatorProcedure = requireRole("moderator");
-```
-
-### Rate Limited Procedures
-
-```typescript
-const factory = init();
-
-const rateLimitedProcedure = factory.procedure.use(async (opts) => {
-  const rateLimitKey = getRateLimitKey(opts.ctx);
-  if (await isRateLimited(rateLimitKey)) {
-    return new Response("Too many requests", { status: 429 });
-  }
-  await incrementRateLimit(rateLimitKey);
-  return opts.next();
-});
-```
-
----
-
-// File: example
-
-# Example
-
-A complete example demonstrating the full-stack type safety of Altstack. This example shows a Todo API server and how to consume it with zero boilerplate and full type inference.
-
-## Server Implementation
-
-Let's build a type-safe Todo API. Notice how TypeScript infers everything from our Zod schemas:
-
-```typescript
-import { init, createServer } from "@alt-stack/server";
-import { z } from "zod";
-
-// Define app context
-interface AppContext {
-  user: User | null;
-}
-
-const factory = init<AppContext>();
-const router = factory.router()
-  // Get all todos with optional filtering
-  .get("/", {
-    input: {
-      query: z.object({
-        completed: z.enum(["true", "false"]).optional(),
-      }),
-    },
-    output: z.array(TodoSchema),
-  })
-  .handler((ctx) => {
-    // ✅ ctx.input.completed is typed as "true" | "false" | undefined
-    // ✅ Return type is automatically inferred from output schema
-    let todos = todoStore.getAll();
-    
-    if (ctx.input.completed === "true") {
-      todos = todos.filter((t) => t.completed);
-    }
-    
-    return todos; // TypeScript knows this matches z.array(TodoSchema)
-  })
-  
-  // Get single todo
-  .get("/{id}", {
-    input: {
-      params: z.object({
-        id: z.string(),
-      }),
-    },
-    output: TodoSchema,
-    errors: {
-      404: z.object({
-        error: z.object({
-          code: z.literal("NOT_FOUND"),
-          message: z.string(),
-        }),
-      }),
-    },
-  })
-  .handler((ctx) => {
-    // ✅ ctx.input.id is typed as string (from params)
-    // ✅ ctx.error() only accepts the 404 error schema
-    const todo = todoStore.getById(ctx.input.id);
-    
-    if (!todo) {
-      throw ctx.error({
-        // ✅ TypeScript ensures code is "NOT_FOUND"
-        // ✅ Status code (404) is automatically inferred!
-        error: {
-          code: "NOT_FOUND",
-          message: `Todo with id ${ctx.input.id} not found`,
-        },
-      });
-    }
-    
-    return todo; // ✅ Return type matches TodoSchema
-  })
-  
-  // Create todo
-  .post("/", {
-    input: {
-      body: z.object({
-        title: z.string().min(1),
-        description: z.string().optional(),
-      }),
-    },
-    output: TodoSchema,
-  })
-  .handler((ctx) => {
-    // ✅ ctx.input.title is string
-    // ✅ ctx.input.description is string | undefined
-    return todoStore.create({
-      title: ctx.input.title,
-      description: ctx.input.description,
-    });
-  });
-
-const app = createServer(
-  { todos: router },
-  { createContext }
-);
-```
-
-**Notice what we didn't write:**
-- No type definitions for request/response
-- No manual validation code
-- No error response type definitions
-- No status code mappings
-
-TypeScript infers everything from the Zod schemas!
-
-## Type Inference in Action
-
-The power of Altstack is in the type inference. Let's see what TypeScript knows:
-
-```typescript
-.handler((ctx) => {
-  // ✅ ctx.input.id - string (from params)
-  // ✅ ctx.input.title - string (from body)
-  // ✅ ctx.input.description - string | undefined (from body)
-  // ✅ ctx.input.completed - "true" | "false" | undefined (from query)
-  
-  // ✅ Return type is inferred from output schema
-  // ✅ TypeScript will error if return doesn't match TodoSchema
-});
-```
-
-## Middleware and Type Narrowing
-
-Altstack supports context narrowing through middleware (tRPC-style pattern):
-
-```typescript
-const factory = init<AppContext>();
-const protectedRouter = factory.router()
-  .get("/profile", {
-    input: {},
-    output: z.object({
-      id: z.string(),
-      email: z.string(),
-      name: z.string(),
-    }),
-    errors: {
-      401: z.object({
-        error: z.object({
-          code: z.literal("UNAUTHORIZED"),
-          message: z.string(),
-        }),
-      }),
-    },
-  })
-  .use(async function isAuthed(opts) {
-    const { ctx } = opts;
-    
-    // ctx.user is nullable here
-    if (!ctx.user) {
-      throw opts.ctx.error({
         error: {
           code: "UNAUTHORIZED",
           message: "Authentication required",
         },
       });
     }
-    
-    // ✅ Pass updated context - TypeScript narrows user to non-null
-    return opts.next({
-      ctx: {
-        user: ctx.user, // Now known to be non-null
-      },
-    });
+    return next({ ctx: { user: ctx.user } });
+  });
+
+// Admin-only procedure
+const adminProcedure = protectedProcedure
+  .errors({
+    403: z.object({
+      error: z.object({
+        code: z.literal("FORBIDDEN"),
+        message: z.string(),
+      }),
+    }),
   })
-  .handler((ctx) => {
-    // ✅ After middleware, ctx.user is guaranteed non-null
-    // TypeScript can infer this even though it can't track through next()
-    return {
-      id: ctx.user.id,     // ✅ TypeScript knows user exists
-      email: ctx.user.email,
-      name: ctx.user.name,
-    };
+  .use(async (opts) => {
+    const { ctx, next } = opts;
+    if (ctx.user.role !== "admin") {
+      throw ctx.error({
+        error: {
+          code: "FORBIDDEN",
+          message: "Admin access required",
+        },
+      });
+    }
+    return next();
+  });
+
+// ============================================================================
+// Routers
+// ============================================================================
+
+// Todo router with full CRUD operations
+export const todoRouter = router<AppContext>({
+  // GET /todos - List all todos with query filtering
+  // POST /todos - Create new todo (protected)
+  "/": {
+    get: publicProc
+      .input({
+        query: z.object({
+          completed: z.enum(["true", "false"]).optional(),
+          limit: z.number().int().positive().optional(),
+          offset: z.number().int().nonnegative().optional(),
+        }),
+      })
+      .output(z.array(TodoSchema))
+      .handler((opts) => {
+        const { input } = opts;
+        // ✅ input.completed is typed as "true" | "false" | undefined
+        // ✅ input.limit and input.offset are typed
+        let todos = getAllTodos();
+
+        if (input.completed === "true") {
+          todos = todos.filter((t) => t.completed);
+        } else if (input.completed === "false") {
+          todos = todos.filter((t) => !t.completed);
+        }
+
+        if (input.limit) {
+          todos = todos.slice(
+            input.offset ?? 0,
+            (input.offset ?? 0) + input.limit,
+          );
+        }
+
+        return todos; // ✅ Return type matches z.array(TodoSchema)
+      }),
+
+    post: protectedProcedure
+      .input({
+        body: z.object({
+          title: z.string().min(1).max(200),
+          description: z.string().max(1000).optional(),
+        }),
+      })
+      .output(TodoSchema)
+      // ✅ 400 validation error is automatically included - no need to declare it
+      // ✅ 500 internal server error is also automatically included
+      .handler((opts) => {
+        const { input, ctx } = opts;
+        // ✅ input.title is string (min 1, max 200)
+        // ✅ input.description is string | undefined (max 1000)
+        // ✅ ctx.user is guaranteed non-null (from middleware)
+
+        const todo = createTodo({
+          title: input.title,
+          description: input.description,
+          userId: ctx.user!.id,
+        });
+
+        return todo;
+      }),
+  },
+
+  // GET /todos/{id} - Get single todo with path parameter
+  // PUT /todos/{id} - Update todo
+  // DELETE /todos/{id} - Delete todo
+  // Using nested methods object to support multiple HTTP methods on the same path
+  "{id}": {
+    get: publicProc
+      .input({
+        params: z.object({
+          id: z.string().uuid(), // ✅ TypeScript enforces params.id matches {id}
+        }),
+      })
+      .output(TodoSchema)
+      .errors({
+        404: z.object({
+          error: z.object({
+            code: z.literal("NOT_FOUND"),
+            message: z.string(),
+          }),
+        }),
+      })
+      .handler((opts) => {
+        const { input, ctx } = opts;
+        // ✅ input.id is typed as string (from params)
+        const todo = getTodoById(input.id);
+
+        if (!todo) {
+          throw ctx.error({
+            // ✅ TypeScript ensures code is "NOT_FOUND"
+            // ✅ Status code (404) is automatically inferred!
+            error: {
+              code: "NOT_FOUND",
+              message: `Todo with id ${input.id} not found`,
+            },
+          });
+        }
+
+        return todo; // ✅ Return type matches TodoSchema
+      }),
+
+    put: protectedProcedure
+      .input({
+        params: z.object({
+          id: z.string().uuid(),
+        }),
+        query: z.object({
+          notify: z.boolean().optional(),
+        }),
+        body: z.object({
+          title: z.string().min(1).max(200).optional(),
+          description: z.string().max(1000).optional(),
+          completed: z.boolean().optional(),
+        }),
+      })
+      .output(TodoSchema)
+      .errors({
+        // ✅ 400 and 500 errors are automatically included (default validation and internal server errors)
+        // ✅ Custom 400 error will be unioned with the default validation error
+        // This means ctx.error() can accept either the default validation error OR this custom error
+        400: z.object({
+          error: z.object({
+            code: z.literal("CUSTOM_VALIDATION_ERROR"),
+            message: z.string(),
+            field: z.string(),
+          }),
+        }),
+        404: z.object({
+          error: z.object({
+            code: z.literal("NOT_FOUND"),
+            message: z.string(),
+          }),
+        }),
+        403: z.object({
+          error: z.object({
+            code: z.literal("FORBIDDEN"),
+            message: z.string(),
+          }),
+        }),
+      })
+      .handler((opts) => {
+        const { input, ctx } = opts;
+        // ✅ All inputs are available and typed:
+        // input.id (from params)
+        // input.notify (from query, optional)
+        // input.title, input.description, input.completed (from body, all optional)
+
+        const todo = getTodoById(input.id);
+        if (!todo) {
+          throw ctx.error({
+            error: {
+              code: "NOT_FOUND",
+              message: `Todo with id ${input.id} not found`,
+            },
+          });
+        }
+
+        // Check ownership
+        if (todo.userId !== ctx.user!.id && ctx.user!.role !== "admin") {
+          throw ctx.error({
+            error: {
+              code: "FORBIDDEN",
+              message: "You don't have permission to update this todo",
+            },
+          });
+        }
+
+        const updated = updateTodo(input.id, {
+          title: input.title,
+          description: input.description,
+          completed: input.completed,
+        });
+
+        if (input.notify) {
+          // Send notification
+        }
+
+        return updated;
+      }),
+
+    delete: protectedProcedure
+      .input({
+        params: z.object({
+          id: z.string().uuid(),
+        }),
+      })
+      .output(
+        z.object({
+          success: z.boolean(),
+        }),
+      )
+      .errors({
+        404: z.object({
+          error: z.object({
+            code: z.literal("NOT_FOUND"),
+            message: z.string(),
+          }),
+        }),
+      })
+      .handler((opts) => {
+        const { input, ctx } = opts;
+        const todo = getTodoById(input.id);
+        if (!todo) {
+          throw ctx.error({
+            error: {
+              code: "NOT_FOUND",
+              message: `Todo with id ${input.id} not found`,
+            },
+          });
+        }
+
+        deleteTodo(input.id);
+        return { success: true };
+      }),
+  },
+
+  // PATCH /todos/{id}/complete - Partial update with nested path
+  "{id}/complete": protectedProcedure
+    .input({
+      params: z.object({
+        id: z.string().uuid(),
+      }),
+      body: z.object({
+        completed: z.boolean(),
+      }),
+    })
+    .output(TodoSchema)
+    .errors({
+      404: z.object({
+        error: z.object({
+          code: z.literal("NOT_FOUND"),
+          message: z.string(),
+        }),
+      }),
+    })
+    .patch((opts) => {
+      const { input } = opts;
+      const todo = getTodoById(input.id);
+      if (!todo) {
+        throw opts.ctx.error({
+          error: {
+            code: "NOT_FOUND",
+            message: `Todo with id ${input.id} not found`,
+          },
+        });
+      }
+      return updateTodo(input.id, { completed: input.completed });
+    }),
+});
+
+// User router with profile management
+export const userRouter = router<AppContext>({
+  // GET /users/me - Get current user profile
+  me: protectedProcedure
+    .input({})
+    .output(
+      z.object({
+        id: z.string(),
+        email: z.string(),
+        role: z.enum(["admin", "user"]),
+      }),
+    )
+    .get((opts) => {
+      const { ctx } = opts;
+      // ✅ ctx.user is guaranteed non-null after middleware
+      return {
+        id: ctx.user!.id,
+        email: ctx.user!.email,
+        role: ctx.user!.role,
+      };
+    }),
+
+  // GET /users/{id} - Get user by ID
+  "{id}": publicProc
+    .input({
+      params: z.object({
+        id: z.string().uuid(),
+      }),
+    })
+    .output(
+      z.object({
+        id: z.string(),
+        email: z.string(),
+      }),
+    )
+    .errors({
+      404: z.object({
+        error: z.object({
+          code: z.literal("NOT_FOUND"),
+          message: z.string(),
+        }),
+      }),
+    })
+    .get((opts) => {
+      const { input, ctx } = opts;
+      const user = getUserById(input.id);
+      if (!user) {
+        throw ctx.error({
+          error: {
+            code: "NOT_FOUND",
+            message: `User with id ${input.id} not found`,
+          },
+        });
+      }
+      return { id: user.id, email: user.email };
+    }),
+});
+
+// Admin router (admin-only routes)
+export const adminRouter = router<AppContext>({
+  // GET /admin/users - List all users (admin only)
+  users: adminProcedure
+    .input({
+      query: z.object({
+        role: z.enum(["admin", "user"]).optional(),
+      }),
+    })
+    .output(
+      z.array(
+        z.object({
+          id: z.string(),
+          email: z.string(),
+          role: z.enum(["admin", "user"]),
+        }),
+      ),
+    )
+    .get((opts) => {
+      const { input } = opts;
+      let users = getAllUsers();
+      if (input.role) {
+        users = users.filter((u) => u.role === input.role);
+      }
+      return users;
+    }),
+
+  // DELETE /admin/users/{id} - Delete user (admin only)
+  "users/{id}": adminProcedure
+    .input({
+      params: z.object({
+        id: z.string().uuid(),
+      }),
+    })
+    .output(
+      z.object({
+        success: z.boolean(),
+      }),
+    )
+    .errors({
+      404: z.object({
+        error: z.object({
+          code: z.literal("NOT_FOUND"),
+          message: z.string(),
+        }),
+      }),
+    })
+    .delete((opts) => {
+      const { input, ctx } = opts;
+      const user = getUserById(input.id);
+      if (!user) {
+        throw ctx.error({
+          error: {
+            code: "NOT_FOUND",
+            message: `User with id ${input.id} not found`,
+          },
+        });
+      }
+      deleteUser(input.id);
+      return { success: true };
+    }),
+});
+
+// ============================================================================
+// Router-Level Middleware
+// ============================================================================
+
+// Logging middleware for all routes
+const loggingMiddleware: Middleware<BaseContext & AppContext> = async ({
+  ctx,
+  next,
+}) => {
+  const start = Date.now();
+  const result = await next();
+  const duration = Date.now() - start;
+  console.log(`[${ctx.hono.req.method}] ${ctx.hono.req.url} - ${duration}ms`);
+  return result;
+};
+
+// Apply middleware to todo router
+const todoRouterWithLogging = todoRouter.use(loggingMiddleware);
+
+// ============================================================================
+// Combine Routers
+// ============================================================================
+
+const appRouter = router<AppContext>({
+  todos: todoRouterWithLogging, // /todos/*
+  users: userRouter, // /users/*
+  admin: adminRouter, // /admin/*
+});
+
+// ============================================================================
+// Helper Functions (implementation details)
+// ============================================================================
+
+function getAllTodos(): Todo[] {
+  // Implementation
+  return [];
+}
+
+function getTodoById(_id: string): Todo | null {
+  // Implementation
+  return null;
+}
+
+function createTodo(data: {
+  title: string;
+  description?: string;
+  userId: string;
+}): Todo {
+  // Implementation
+  return {
+    id: crypto.randomUUID(),
+    title: data.title,
+    description: data.description,
+    completed: false,
+    createdAt: new Date().toISOString(),
+    userId: data.userId,
+  };
+}
+
+function updateTodo(
+  _id: string,
+  _data: { title?: string; description?: string; completed?: boolean },
+) {
+  // Implementation
+  return getTodoById(_id)!;
+}
+
+function deleteTodo(_id: string): void {
+  // Implementation
+}
+
+function getAllUsers(): User[] {
+  // Implementation
+  return [];
+}
+
+function getUserById(_id: string): User | null {
+  // Implementation
+  return null;
+}
+
+function deleteUser(_id: string): void {
+  // Implementation
+}
+
+function getUserFromRequest(_request: Request): User {
+  // Extract user from request (e.g., from JWT token)
+  return null!;
+}
+
+// ============================================================================
+// Create Server
+// ============================================================================
+
+async function createContext(c: Context): Promise<AppContext> {
+  const user = await getUserFromRequest(c.req.raw);
+  return { user };
+}
+
+const app = createServer<AppContext>(
+  {
+    api: appRouter, // All routes prefixed with /api
+  },
+  {
+    createContext,
+    docs: {
+      path: "/docs",
+      openapiPath: "/docs/openapi.json",
+    },
+  },
+);
+
+export default app;
+```
+
+## Key Features Demonstrated
+
+### 1. **Type-Safe Path Parameters**
+```typescript
+"{id}": publicProc
+  .input({
+    params: z.object({
+      id: z.string().uuid(), // ✅ TypeScript enforces this matches {id}
+    }),
+  })
+```
+TypeScript will error if you use `{id}` without providing `params.id`.
+
+### 2. **Multiple Error Types**
+```typescript
+.errors({
+  404: z.object({ error: z.object({ code: z.literal("NOT_FOUND"), ... }) }),
+  403: z.object({ error: z.object({ code: z.literal("FORBIDDEN"), ... }) }),
+})
+```
+Each route can define multiple error types with different status codes.
+
+### 3. **Combining Input Sources**
+```typescript
+.input({
+  params: z.object({ id: z.string().uuid() }),
+  query: z.object({ notify: z.boolean().optional() }),
+  body: z.object({ title: z.string().optional() }),
+})
+```
+Routes can use params, query, and body together.
+
+### 4. **Middleware Chaining**
+```typescript
+const adminProcedure = protectedProcedure
+  .use(async (opts) => {
+    // Additional middleware
   });
 ```
+Middleware can be chained to build up context and permissions.
 
-The `next({ ctx: { user } })` pattern ensures both runtime safety and TypeScript type narrowing.
-
-## Client Consumption
-
-Consume the API with full type safety using the generated types:
-
-### Step 1: Generate Types
-
-First, generate Request/Response types from your server (see [Server Integration](/client/guides/server-integration)):
-
+### 5. **Router-Level Middleware**
 ```typescript
-// generate-types.ts
-import { generateOpenAPISpec } from "@alt-stack/server";
-import { openApiToZodTsCode } from "@alt-stack/zod-openapi";
-
-const openApiSpec = generateOpenAPISpec({ todos: router }, {
-  title: "Todo API",
-  version: "1.0.0",
-});
-
-const generatedCode = openApiToZodTsCode(openApiSpec, undefined, {
-  includeRoutes: true,
-});
-
-// This creates Request and Response objects with Zod schemas
+const todoRouterWithLogging = todoRouter.use(loggingMiddleware);
 ```
+Apply middleware to all routes in a router.
 
-### Step 2: Create Client
-
+### 6. **Nested Routers**
 ```typescript
-import { createApiClient } from "@alt-stack/client";
-import { Request, Response } from "./generated-types.js";
-
-const client = createApiClient({
-  baseUrl: "http://localhost:3000",
-  Request,  // ✅ Type-safe request schemas
-  Response, // ✅ Type-safe response schemas
+const appRouter = router<AppContext>({
+  todos: todoRouterWithLogging, // /todos/*
+  users: userRouter,            // /users/*
+  admin: adminRouter,           // /admin/*
 });
 ```
+Routers can be nested, and paths combine automatically.
 
-### Step 3: Make Type-Safe API Calls
-
+### 7. **Output Validation**
 ```typescript
-// Get all todos
-const result = await client.get("/todos/", {
-  query: {
-    completed: "true", // ✅ TypeScript knows this is "true" | "false" | undefined
-  },
-});
-
-if (result.success) {
-  // ✅ result.data is typed as Todo[]
-  result.data.forEach(todo => {
-    console.log(todo.title);      // ✅ TypeScript autocomplete
-    console.log(todo.completed);  // ✅ TypeScript knows this exists
-  });
-} else {
-  // ✅ result.error is typed based on possible error responses
-  if (result.error.type === "error") {
-    console.error(result.error.code, result.error.message);
-  }
-}
-
-// Get single todo
-const todoResult = await client.get("/todos/{id}", {
-  params: {
-    id: "123", // ✅ TypeScript knows this must be a string
-  },
-});
-
-if (todoResult.success) {
-  // ✅ todoResult.data is typed as Todo
-  console.log(todoResult.data.title);
-  console.log(todoResult.data.description); // ✅ Optional, typed as string | undefined
-} else {
-  // ✅ todoResult.error is typed based on error schemas
-  // TypeScript knows it could be 404 NOT_FOUND error
-  if (todoResult.code === "404") {
-    console.error(todoResult.error.error.message); // ✅ Typed!
-  }
-}
-
-// Create todo
-const createResult = await client.post("/todos/", {
-  body: {
-    title: "Buy groceries", // ✅ TypeScript requires string, min length 1
-    description: "Milk and eggs", // ✅ Optional string
-  },
-});
-
-if (createResult.success) {
-  // ✅ createResult.data is typed as Todo
-  console.log(createResult.data.id);
-}
+.output(TodoSchema)
 ```
+Return types are validated against Zod schemas.
 
-## Key Takeaways
+## Type Safety Highlights
 
-### Zero Boilerplate
-- No manual type definitions - Zod schemas are the source of truth
-- No validation code - automatic runtime validation
-- No error response types - inferred from error schemas
-
-### Full Type Safety
-- `ctx.input` is fully typed based on your schemas
-- Return types are validated and inferred
-- Error handling is type-safe with status code inference
-
-### Type Narrowing
-- Middleware can narrow context types
-- `next({ ctx })` pattern enables type narrowing
-- TypeScript tracks types through the request lifecycle
-
-### End-to-End Types
-- Server types flow to client via OpenAPI generation
-- Client has the same type safety as server
-- Single source of truth (Zod schemas)
+- ✅ **Path parameters**: TypeScript enforces `{id}` requires `params.id`
+- ✅ **Input types**: All inputs (`params`, `query`, `body`) are fully typed
+- ✅ **Output types**: Return values are validated and typed
+- ✅ **Error types**: `ctx.error()` only accepts defined error schemas
+- ✅ **Context narrowing**: Middleware can extend context with type safety
+- ✅ **Status codes**: Error status codes are inferred from error schemas
 
 ## Try It Yourself
 
 The complete example server is available in the repository:
 - **Server**: `apps/example-altstack-server/`
 - Run it: `pnpm --filter example-altstack-server dev`
-
-The server demonstrates:
-- Full CRUD operations
-- Query parameter filtering
-- Error handling
-- Protected routes with authentication
-- Middleware with type narrowing
 
 See the [Installation Guide](/getting-started/installation) to get started building your own type-safe API!
 
@@ -1993,73 +2583,101 @@ See the [Installation Guide](/getting-started/installation) to get started build
 
 # Basic Routes
 
-Define routes using the fluent builder API with support for all HTTP methods.
+Define routes using the tRPC-style API with support for all HTTP methods.
 
 ## Route Methods
 
 The router supports all standard HTTP methods:
 
 ```typescript
-const factory = init();
-const router = factory.router()
-  .get("/users", { /* config */ })
-  .post("/users", { /* config */ })
-  .put("/users/{id}", { /* config */ })
-  .patch("/users/{id}", { /* config */ })
-  .delete("/users/{id}", { /* config */ });
+import { router, publicProcedure } from "@alt-stack/server";
+import { z } from "zod";
+
+export const userRouter = router({
+  list: publicProcedure.get(() => {
+    return [];
+  }),
+  
+  create: publicProcedure.post(() => {
+    return { id: "1" };
+  }),
+  
+  update: publicProcedure.put(() => {
+    return { id: "1" };
+  }),
+  
+  patch: publicProcedure.patch(() => {
+    return { id: "1" };
+  }),
+  
+  remove: publicProcedure.delete(() => {
+    return { success: true };
+  }),
+});
 ```
 
 ## Path Parameters
 
-Extract parameters from the URL path:
+Extract parameters from the URL path. Path parameters in the route key (e.g., `{id}`) are automatically validated:
 
 ```typescript
-const factory = init();
-const router = factory.router()
-  .get("/users/{id}", {
-    input: {
+import { router, publicProcedure } from "@alt-stack/server";
+import { z } from "zod";
+
+export const userRouter = router({
+  "{id}": publicProcedure
+    .input({
       params: z.object({
         id: z.string(),
       }),
-    },
-    output: z.object({
-      id: z.string(),
-      name: z.string(),
+    })
+    .get((opts) => {
+      // opts.input.id is typed as string
+      const { input } = opts;
+      return {
+        id: input.id,
+        name: "Alice",
+      };
     }),
-  })
-  .handler((ctx) => {
-    // ctx.input.id is typed as string
-    return {
-      id: ctx.input.id,
-      name: "Alice",
-    };
-  });
+});
 ```
+
+**Type Safety**: TypeScript will automatically detect an error if you use a path parameter like `{id}` but don't provide the corresponding `params.id` in your input schema. For example, this would cause a TypeScript error:
+
+```typescript
+// ❌ TypeScript error: Missing required path parameter 'id' in params
+export const userRouter = router({
+  "{id}": publicProcedure.get((opts) => {
+    return { id: "1" };
+  }),
+});
+```
+
+You must include `params: z.object({ id: z.string() })` (or the appropriate type) when using `{id}` in your route path.
 
 ## Query Parameters
 
 Extract query string parameters:
 
 ```typescript
-const factory = init();
-const router = factory.router()
-  .get("/users", {
-    input: {
+import { router, publicProcedure } from "@alt-stack/server";
+import { z } from "zod";
+
+export const userRouter = router({
+  list: publicProcedure
+    .input({
       query: z.object({
         limit: z.number().optional(),
         offset: z.number().optional(),
         search: z.string().optional(),
       }),
-    },
-    output: z.array(z.object({
-      id: z.string(),
-      name: z.string(),
-    })),
-  })
-  .handler((ctx) => {
-    // ctx.input.limit, ctx.input.offset, ctx.input.search are typed
-    return [];
-  });
+    })
+    .get((opts) => {
+      // opts.input.limit, opts.input.offset, opts.input.search are typed
+      const { input } = opts;
+      return [];
+    }),
+});
 ```
 
 ## Request Body
@@ -2067,27 +2685,26 @@ const router = factory.router()
 Handle POST/PUT/PATCH requests with typed request bodies:
 
 ```typescript
-const factory = init();
-const router = factory.router()
-  .post("/users", {
-    input: {
+import { router, publicProcedure } from "@alt-stack/server";
+import { z } from "zod";
+
+export const userRouter = router({
+  create: publicProcedure
+    .input({
       body: z.object({
         name: z.string(),
         email: z.string().email(),
       }),
-    },
-    output: z.object({
-      id: z.string(),
-      name: z.string(),
+    })
+    .post((opts) => {
+      // opts.input.name and opts.input.email are typed
+      const { input } = opts;
+      return {
+        id: "1",
+        name: input.name,
+      };
     }),
-  })
-  .handler((ctx) => {
-    // ctx.input.name and ctx.input.email are typed
-    return {
-      id: "1",
-      name: ctx.input.name,
-    };
-  });
+});
 ```
 
 ## Combining Input Sources
@@ -2095,10 +2712,12 @@ const router = factory.router()
 You can combine params, query, and body:
 
 ```typescript
-const factory = init();
-const router = factory.router()
-  .put("/users/{id}", {
-    input: {
+import { router, publicProcedure } from "@alt-stack/server";
+import { z } from "zod";
+
+export const userRouter = router({
+  "{id}": publicProcedure
+    .input({
       params: z.object({
         id: z.string(),
       }),
@@ -2109,18 +2728,46 @@ const router = factory.router()
         name: z.string(),
         email: z.string().email(),
       }),
-    },
-    output: z.object({
-      id: z.string(),
+    })
+    .put((opts) => {
+      // All inputs are available and typed
+      const { input } = opts;
+      // input.id (from params)
+      // input.notify (from query)
+      // input.name, input.email (from body)
+      return { id: input.id };
     }),
-  })
-  .handler((ctx) => {
-    // All inputs are available and typed
-    // ctx.input.id (from params)
-    // ctx.input.notify (from query)
-    // ctx.input.name, ctx.input.email (from body)
-    return { id: ctx.input.id };
-  });
+});
+```
+
+## Output Validation
+
+You can specify output schemas for validation:
+
+```typescript
+import { router, publicProcedure } from "@alt-stack/server";
+import { z } from "zod";
+
+const UserSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  email: z.string(),
+});
+
+export const userRouter = router({
+  get: publicProcedure
+    .input({
+      params: z.object({ id: z.string() }),
+    })
+    .output(UserSchema)
+    .get((opts) => {
+      return {
+        id: opts.input.id,
+        name: "Alice",
+        email: "alice@example.com",
+      };
+    }),
+});
 ```
 
 ---
@@ -2983,7 +3630,7 @@ Follow the tRPC authorization pattern for type-safe protected routes. The middle
 The recommended way to create protected routes is using reusable procedures:
 
 ```typescript
-import { init, createServer } from "@alt-stack/server";
+import { router, publicProcedure, init, createServer } from "@alt-stack/server";
 import { z } from "zod";
 
 interface AppContext {
@@ -2991,10 +3638,9 @@ interface AppContext {
 }
 
 const factory = init<AppContext>();
-const router = factory.router();
 
 // Create reusable procedures
-const publicProcedure = factory.procedure;
+const publicProc = publicProcedure;
 const protectedProcedure = factory.procedure
   .errors({
     401: z.object({
@@ -3004,45 +3650,40 @@ const protectedProcedure = factory.procedure
       }),
     }),
   })
-  .use(
-    async function isAuthed(opts) {
-      const { ctx } = opts;
-      if (!ctx.user) {
-        throw ctx.error({
-          error: {
-            code: "UNAUTHORIZED" as const,
-            message: "Authentication required",
-          },
-        });
-      }
-      return opts.next({
-        ctx: {
-          user: ctx.user,
+  .use(async function isAuthed(opts) {
+    const { ctx, next } = opts;
+    if (!ctx.user) {
+      throw ctx.error({
+        error: {
+          code: "UNAUTHORIZED" as const,
+          message: "Authentication required",
         },
       });
     }
-  );
+    return next({
+      ctx: {
+        user: ctx.user,
+      },
+    });
+  });
 
 // Use procedures to create routes
-publicProcedure.on(router)
-  .get("/hello", {
-    input: {},
-    output: z.string(),
-  })
-  .handler(() => "hello world");
+export const appRouter = router({
+  hello: publicProc.get(() => "hello world"),
 
-protectedProcedure.on(router)
-  .get("/secret", {
-    input: {},
-    output: z.object({
-      secret: z.string(),
-    }),
-  })
-  .handler(() => ({
-    secret: "sauce",
-  }));
+  secret: protectedProcedure
+    .input({})
+    .output(
+      z.object({
+        secret: z.string(),
+      })
+    )
+    .get(() => ({
+      secret: "sauce",
+    })),
+});
 
-const app = createServer({ api: router });
+const app = createServer({ api: appRouter });
 ```
 
 See the [Reusable Procedures guide](/core-concepts/reusable-procedures) for more details.
@@ -3052,78 +3693,79 @@ See the [Reusable Procedures guide](/core-concepts/reusable-procedures) for more
 The middleware can narrow the context type by passing an updated context to `next()`:
 
 ```typescript
-import { init } from "@alt-stack/server";
+import { router, publicProcedure, init } from "@alt-stack/server";
 import { z } from "zod";
 
-const factory = init<AppContext>();
-const protectedRouter = factory.router();
+interface AppContext {
+  user: { id: string; email: string; name: string } | null;
+}
 
-// You can reuse this middleware pattern for any procedure
-protectedRouter
-  .get("/profile", {
-    input: {},
-    output: z.object({
-      id: z.string(),
-      email: z.string(),
-      name: z.string(),
-    }),
-    errors: {
+const factory = init<AppContext>();
+
+export const protectedRouter = router({
+  profile: factory.procedure
+    .input({})
+    .output(
+      z.object({
+        id: z.string(),
+        email: z.string(),
+        name: z.string(),
+      })
+    )
+    .errors({
       401: z.object({
         error: z.object({
           code: z.literal("UNAUTHORIZED"),
           message: z.string(),
         }),
       }),
-    },
-  })
-  .use(async function isAuthed(opts) {
-    const { ctx } = opts;
-    // `ctx.user` is nullable
-    if (!ctx.user) {
-      throw opts.ctx.error({
-        error: {
-          code: "UNAUTHORIZED" as const,
-          message: "Authentication required",
+    })
+    .use(async function isAuthed(opts) {
+      const { ctx, next } = opts;
+      // `ctx.user` is nullable
+      if (!ctx.user) {
+        throw ctx.error({
+          error: {
+            code: "UNAUTHORIZED" as const,
+            message: "Authentication required",
+          },
+        });
+      }
+      // ✅ Pass updated context where user is non-null (tRPC pattern)
+      // This allows the context to have user as non-null for subsequent handlers
+      return next({
+        ctx: {
+          user: ctx.user, // ✅ user value is known to be non-null now
         },
       });
-    }
-    // ✅ Pass updated context where user is non-null (tRPC pattern)
-    // This allows the context to have user as non-null for subsequent handlers
-    return opts.next({
-      ctx: {
-        user: ctx.user, // ✅ user value is known to be non-null now
-      },
-    });
-  })
-  .handler((ctx) => {
-    // ✅ ctx.user is now guaranteed to be non-null after the middleware
-    // The next({ ctx: { user: ... } }) pattern ensures the runtime context has user
-    // Type check needed because TypeScript can't track the narrowing through next()
-    if (!ctx.user) {
-      // This should never happen due to middleware, but TypeScript needs the check
-      throw ctx.error({
-        error: {
-          code: "UNAUTHORIZED" as const,
-          message: "Authentication required",
-        },
-      });
-    }
-    return {
-      id: ctx.user.id,
-      email: ctx.user.email,
-      name: ctx.user.name,
-    };
-  });
+    })
+    .get((opts) => {
+      // ✅ opts.ctx.user is now guaranteed to be non-null after the middleware
+      const { ctx } = opts;
+      return {
+        id: ctx.user!.id,
+        email: ctx.user!.email,
+        name: ctx.user!.name,
+      };
+    }),
+});
 ```
 
-## Traditional Middleware Pattern
+## Router-Level Middleware Pattern
 
-You can also use a traditional middleware approach without the context narrowing. Use `createMiddleware` helper to avoid type assertions:
+You can also use router-level middleware to protect all routes in a router:
 
 ```typescript
-import { createMiddleware } from "@alt-stack/server";
+import { router, publicProcedure, createMiddleware, init } from "@alt-stack/server";
+import { z } from "zod";
 
-// Middleware that requires authentication - no type assertion needed!
+interface AppContext {
+  user: { id: string; email: string } | null;
+}
+
+const factory = init<AppContext>();
+
+// Middleware that requires authentication
 const requireAuth = createMiddleware<AppContext>(async ({ ctx, next }) => {
   // ctx is automatically typed as BaseContext & AppContext
   if (!ctx.user) {
@@ -3137,77 +3779,140 @@ const requireAuth = createMiddleware<AppContext>(async ({ ctx, next }) => {
       401
     ) as Response;
   }
-  return next();
+  return next({ ctx: { user: ctx.user } });
 });
 
 // Use on router level (protects all routes)
-const factory = init<AppContext>();
-const protectedRouter = factory.router()
-  .use(requireAuth)
-  .get("/profile", {
-    input: {},
-    output: z.object({
-      id: z.string(),
-      email: z.string(),
-    }),
-  })
-  .handler((ctx) => {
-    // Additional null check recommended for type safety
-    if (!ctx.user) {
-      throw ctx.error({
-        error: {
-          code: "UNAUTHORIZED" as const,
-          message: "Authentication required",
-        },
-      });
-    }
-    
-    return {
-      id: ctx.user.id,
-      email: ctx.user.email,
-    };
-  });
+export const protectedRouter = router({
+  profile: factory.procedure
+    .input({})
+    .output(
+      z.object({
+        id: z.string(),
+        email: z.string(),
+      })
+    )
+    .get((opts) => {
+      const { ctx } = opts;
+      // Additional null check recommended for type safety
+      if (!ctx.user) {
+        throw ctx.error({
+          error: {
+            code: "UNAUTHORIZED" as const,
+            message: "Authentication required",
+          },
+        });
+      }
 
-// Or use on procedure level (protects specific routes)
-const factory = init<AppContext>();
-const router = factory.router()
-  .get("/public", {
-    input: {},
-    output: z.object({ message: z.string() }),
-  })
-  .handler(() => {
-    return { message: "Public content" };
-  })
-  .get("/private", {
-    input: {},
-    output: z.object({
-      id: z.string(),
-      email: z.string(),
+      return {
+        id: ctx.user.id,
+        email: ctx.user.email,
+      };
     }),
-  })
-  .use(requireAuth) // Protect only this route
-  .handler((ctx) => {
-    if (!ctx.user) {
-      throw ctx.error({
-        error: {
-          code: "UNAUTHORIZED" as const,
-          message: "Authentication required",
-        },
-      });
-    }
-    
-    return {
-      id: ctx.user.id,
-      email: ctx.user.email,
-    };
-  });
+}).use(requireAuth);
 ```
 
-## Type-Safe User Context with Zod
+## Mixed Public and Protected Routes
+
+You can mix public and protected routes in the same router:
+
+```typescript
+import { router, publicProcedure, init } from "@alt-stack/server";
+import { z } from "zod";
+
+interface AppContext {
+  user: { id: string; email: string } | null;
+}
+
+const factory = init<AppContext>();
+
+const publicProc = publicProcedure;
+const protectedProcedure = factory.procedure.use(async (opts) => {
+  const { ctx, next } = opts;
+  if (!ctx.user) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  return next({ ctx: { user: ctx.user } });
+});
+
+export const appRouter = router({
+  public: publicProc.get(() => ({ message: "Public content" })),
+
+  private: protectedProcedure
+    .input({})
+    .output(
+      z.object({
+        id: z.string(),
+        email: z.string(),
+      })
+    )
+    .get((opts) => {
+      const { ctx } = opts;
+      return {
+        id: ctx.user!.id,
+        email: ctx.user!.email,
+      };
+    }),
+});
+```
+
+## Role-Based Access Control
+
+You can validate user roles, permissions, or other attributes:
+
+```typescript
+import { router, publicProcedure, init } from "@alt-stack/server";
+import { z } from "zod";
+
+interface AppContext {
+  user: { id: string; role: string; permissions: string[] } | null;
+}
+
+const factory = init<AppContext>();
+
+// Middleware that requires specific role
+const requireRole = (role: "admin" | "user" | "moderator") => {
+  return factory.procedure.use(async (opts) => {
+    const { ctx, next } = opts;
+    if (!ctx.user) {
+      return new Response("Unauthorized", { status: 401 });
+    }
+    if (ctx.user.role !== role) {
+      return new Response("Forbidden", { status: 403 });
+    }
+    return next({ ctx: { user: ctx.user } });
+  });
+};
+
+const adminProcedure = requireRole("admin");
+const moderatorProcedure = requireRole("moderator");
+
+export const adminRouter = router({
+  users: adminProcedure
+    .input({})
+    .output(z.array(z.object({ id: z.string(), name: z.string() })))
+    .get(() => {
+      return getAllUsers();
+    }),
+});
+
+export const moderatorRouter = router({
+  moderate: moderatorProcedure
+    .input({
+      body: z.object({ action: z.string() }),
+    })
+    .post(() => {
+      return { success: true };
+    }),
+});
+```
+
+## Type-Safe User Context
 
 For better type safety, use Zod's type inference to create authenticated context types:
 
 ```typescript
+import { router, publicProcedure, init } from "@alt-stack/server";
 import { z } from "zod";
 
 // Your validated user schema
@@ -3215,87 +3920,41 @@ const UserSchema = z.object({
   id: z.string(),
   email: z.string().email(),
   name: z.string(),
-});
-
-type User = z.infer<typeof UserSchema>;
-
-interface AppContext extends Record<string, unknown> {
-  user: User | null;
-}
-
-interface AuthenticatedContext extends AppContext {
-  user: User; // Non-nullable after requireAuth middleware
-}
-
-const requireAuth = async ({ ctx, next }): Promise<AuthenticatedContext | Response> => {
-  const appCtx = ctx as typeof ctx & AppContext;
-  
-  // Validate user with Zod if not already validated
-  if (!appCtx.user) {
-    return appCtx.hono.json(
-      {
-        error: {
-          code: "UNAUTHORIZED",
-          message: "Authentication required",
-        },
-      },
-      401
-    ) as Response;
-  }
-  
-  // Optionally re-validate to ensure type safety
-  const validatedUser = UserSchema.parse(appCtx.user);
-  
-  // Return context with validated, non-nullable user
-  return next() as Promise<AuthenticatedContext>;
-};
-```
-
-## Role-Based Access Control
-
-You can also validate user roles, permissions, or other attributes using Zod:
-
-```typescript
-import { z } from "zod";
-
-const UserWithRoleSchema = UserSchema.extend({
   role: z.enum(["admin", "user", "moderator"]),
   permissions: z.array(z.string()),
 });
 
-type UserWithRole = z.infer<typeof UserWithRoleSchema>;
+type User = z.infer<typeof UserSchema>;
 
-// Middleware that requires specific role
-const requireRole = (role: "admin" | "user" | "moderator") => {
-  return async ({ ctx, next }) => {
-    const appCtx = ctx as typeof ctx & AppContext;
-    
-    if (!appCtx.user) {
-      return appCtx.hono.json({ error: "Unauthorized" }, 401) as Response;
-    }
-    
-    // Validate user has required role
-    const validatedUser = UserWithRoleSchema.safeParse(appCtx.user);
-    if (!validatedUser.success || validatedUser.data.role !== role) {
-      return appCtx.hono.json({ error: "Forbidden" }, 403) as Response;
-    }
-    
-    return next();
-  };
-};
+interface AppContext {
+  user: User | null;
+}
 
-// Usage
 const factory = init<AppContext>();
-const adminRouter = factory.router()
-  .use(requireRole("admin"))
-  .get("/admin/users", {
-    input: {},
-    output: z.array(UserSchema),
-  })
-  .handler(async (ctx) => {
-    // ctx.user is validated as admin
-    return getAllUsers();
-  });
+
+const protectedProcedure = factory.procedure.use(async (opts) => {
+  const { ctx, next } = opts;
+  if (!ctx.user) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
+  // Optionally re-validate to ensure type safety
+  const validatedUser = UserSchema.parse(ctx.user);
+
+  // Return context with validated user
+  return next({ ctx: { user: validatedUser } });
+});
+
+export const appRouter = router({
+  profile: protectedProcedure
+    .input({})
+    .output(UserSchema)
+    .get((opts) => {
+      // opts.ctx.user is validated and typed
+      const { ctx } = opts;
+      return ctx.user!;
+    }),
+});
 ```
 
 ---
