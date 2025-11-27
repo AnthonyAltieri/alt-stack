@@ -1,0 +1,43 @@
+{
+  "name": "@alt-stack/example-kafka-producer-sdk",
+  "version": "1.0.0",
+  "description": "Auto-generated TypeScript SDK for example-kafka-producer",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "check-types": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@alt-stack/typescript-config": "workspace:*",
+    "tsup": "^8.0.0",
+    "typescript": "^5.9.2",
+    "zod": "^4.1.12"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/altstack/zod-utilities.git",
+    "directory": "packages/example-kafka-producer-sdk"
+  },
+  "license": "MIT"
+}
+

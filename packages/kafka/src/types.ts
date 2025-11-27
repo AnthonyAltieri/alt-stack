@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import type { KafkaMessage } from "kafkajs";
+import type { AnyMiddlewareFunction } from "./middleware.js";
 
 export type InferOutput<T extends z.ZodTypeAny> = z.infer<T>;
 
@@ -40,14 +41,6 @@ export type TypedKafkaContext<
       : never;
   };
 
-export type Middleware<
-  TContextIn extends BaseKafkaContext,
-  TContextOut extends BaseKafkaContext = TContextIn,
-> = (opts: {
-  ctx: TContextIn;
-  next: (opts?: { ctx: Partial<TContextOut> }) => Promise<TContextOut>;
-}) => Promise<TContextOut>;
-
 export interface ProcedureConfig<
   TInput extends InputConfig,
   TOutput extends z.ZodTypeAny | undefined,
@@ -59,29 +52,79 @@ export interface ProcedureConfig<
 }
 
 /**
- * Helper function to create middleware with proper context typing.
- * Eliminates the need for type assertions when using middleware with routers.
- *
- * @example
- * ```typescript
- * const loggingMiddleware = createMiddleware<AppContext>(async ({ ctx, next }) => {
- *   console.log(`Processing message from topic ${ctx.topic}`);
- *   return next();
- * });
- *
- * const router = createKafkaRouter<AppContext>()
- *   .use(loggingMiddleware)
- *   .topic("user-events", { ... })
- * ```
+ * A Kafka procedure that has been fully configured and registered
  */
-export function createMiddleware<TCustomContext extends object>(
-  middleware: Middleware<
-    BaseKafkaContext & TCustomContext,
-    BaseKafkaContext & TCustomContext
-  >,
-): Middleware<BaseKafkaContext, BaseKafkaContext> {
-  return middleware as unknown as Middleware<
-    BaseKafkaContext,
-    BaseKafkaContext
-  >;
+export interface KafkaProcedure<
+  TInput extends InputConfig,
+  TOutput extends z.ZodTypeAny | undefined,
+  TErrors extends Record<string, z.ZodTypeAny> | undefined,
+  TCustomContext extends object = Record<string, never>,
+> {
+  topic: string;
+  config: {
+    input: TInput;
+    output?: TOutput;
+    errors?: TErrors;
+  };
+  handler: (opts: {
+    input: InferInput<TInput>;
+    ctx: TypedKafkaContext<TInput, TOutput, TErrors, TCustomContext>;
+  }) =>
+    | Promise<InferOutput<NonNullable<TOutput>>>
+    | InferOutput<NonNullable<TOutput>>
+    | void
+    | Promise<void>;
+  middleware: AnyMiddlewareFunction[];
+}
+
+/**
+ * A procedure that is ready to be registered with a topic
+ * Has a handler defined via .subscribe()
+ */
+export interface ReadyKafkaProcedure<
+  TInput extends InputConfig,
+  TOutput extends z.ZodTypeAny | undefined,
+  TErrors extends Record<string, z.ZodTypeAny> | undefined,
+  TCustomContext extends object = Record<string, never>,
+> {
+  config: {
+    input: TInput;
+    output?: TOutput;
+    errors?: TErrors;
+  };
+  handler: (opts: {
+    input: InferInput<TInput>;
+    ctx: TypedKafkaContext<TInput, TOutput, TErrors, TCustomContext>;
+  }) =>
+    | Promise<InferOutput<NonNullable<TOutput>>>
+    | InferOutput<NonNullable<TOutput>>
+    | void
+    | Promise<void>;
+  middleware: AnyMiddlewareFunction[];
+}
+
+/**
+ * A procedure that is pending - has handler but topic determined by router config
+ * Created via .handler()
+ */
+export interface PendingKafkaProcedure<
+  TInput extends InputConfig,
+  TOutput extends z.ZodTypeAny | undefined,
+  TErrors extends Record<string, z.ZodTypeAny> | undefined,
+  TCustomContext extends object = Record<string, never>,
+> {
+  config: {
+    input: TInput;
+    output?: TOutput;
+    errors?: TErrors;
+  };
+  handler: (opts: {
+    input: InferInput<TInput>;
+    ctx: TypedKafkaContext<TInput, TOutput, TErrors, TCustomContext>;
+  }) =>
+    | Promise<InferOutput<NonNullable<TOutput>>>
+    | InferOutput<NonNullable<TOutput>>
+    | void
+    | Promise<void>;
+  middleware: AnyMiddlewareFunction[];
 }

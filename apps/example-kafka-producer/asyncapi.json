@@ -1,0 +1,189 @@
+{
+  "asyncapi": "3.0.0",
+  "info": {
+    "title": "Example Kafka Producer API",
+    "version": "1.0.0",
+    "description": "AsyncAPI specification for the example Kafka producer"
+  },
+  "channels": {
+    "user_events": {
+      "address": "user-events",
+      "messages": {
+        "UserEventsMessage": {
+          "$ref": "#/components/messages/UserEventsMessage"
+        }
+      }
+    },
+    "orders_created": {
+      "address": "orders/created",
+      "messages": {
+        "OrdersCreatedMessage": {
+          "$ref": "#/components/messages/OrdersCreatedMessage"
+        }
+      }
+    },
+    "notifications": {
+      "address": "notifications",
+      "messages": {
+        "NotificationsMessage": {
+          "$ref": "#/components/messages/NotificationsMessage"
+        }
+      }
+    }
+  },
+  "operations": {
+    "publishUserEvents": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/user_events"
+      },
+      "messages": [
+        {
+          "$ref": "#/components/messages/UserEventsMessage"
+        }
+      ]
+    },
+    "publishOrdersCreated": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/orders_created"
+      },
+      "messages": [
+        {
+          "$ref": "#/components/messages/OrdersCreatedMessage"
+        }
+      ]
+    },
+    "publishNotifications": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/notifications"
+      },
+      "messages": [
+        {
+          "$ref": "#/components/messages/NotificationsMessage"
+        }
+      ]
+    }
+  },
+  "components": {
+    "schemas": {
+      "UserEventsPayload": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string"
+          },
+          "eventType": {
+            "type": "string",
+            "enum": [
+              "created",
+              "updated",
+              "deleted"
+            ]
+          },
+          "timestamp": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "userId",
+          "eventType",
+          "timestamp"
+        ]
+      },
+      "OrdersCreatedPayload": {
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "productId": {
+                  "type": "string"
+                },
+                "quantity": {
+                  "type": "integer",
+                  "exclusiveMinimum": true,
+                  "maximum": 9007199254740991
+                },
+                "price": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "productId",
+                "quantity",
+                "price"
+              ]
+            }
+          },
+          "total": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "orderId",
+          "userId",
+          "items",
+          "total"
+        ]
+      },
+      "NotificationsPayload": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "recipient": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "recipient",
+          "message"
+        ]
+      }
+    },
+    "messages": {
+      "UserEventsMessage": {
+        "name": "UserEventsMessage",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/UserEventsPayload"
+        }
+      },
+      "OrdersCreatedMessage": {
+        "name": "OrdersCreatedMessage",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/OrdersCreatedPayload"
+        }
+      },
+      "NotificationsMessage": {
+        "name": "NotificationsMessage",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/NotificationsPayload"
+        }
+      }
+    }
+  }
+}

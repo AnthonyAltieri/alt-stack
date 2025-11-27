@@ -1,14 +1,12 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { KafkaContainer, StartedKafkaContainer } from "@testcontainers/kafka";
 import { Kafka, Producer } from "kafkajs";
-import { createKafkaRouter } from "./router.js";
+import { kafkaRouter, createKafkaRouter, init, publicProcedure } from "./index.js";
 import { createConsumer } from "./consumer.js";
 import { z } from "zod";
 
 // Helper to wait for consumer to be ready (simplified - just wait for group join)
 async function waitForConsumerReady(_consumer: any, _timeout = 3000) {
-  // Wait for consumer group to be established
-  // In tests, a short delay is usually sufficient
   await new Promise((resolve) => setTimeout(resolve, 200));
 }
 
@@ -30,7 +28,7 @@ function createMessageWaiter<T>(
           ),
         );
       } else {
-        setTimeout(check, 25); // Check every 25ms instead of 50ms
+        setTimeout(check, 25);
       }
     };
     check();
@@ -49,7 +47,6 @@ describe("Consumer e2e", () => {
 
       kafka = new Kafka({
         brokers: [broker],
-        // Reduce retries for faster test execution
         retry: {
           retries: 2,
           initialRetryTime: 100,
@@ -82,19 +79,18 @@ describe("Consumer e2e", () => {
     const topic = "test-topic";
     const processedMessages: unknown[] = [];
 
-    const router = createKafkaRouter();
-    router
-      .topic(topic, {
-        input: {
+    const router = kafkaRouter({
+      [topic]: publicProcedure
+        .input({
           message: z.object({
             id: z.string(),
             value: z.number(),
           }),
-        },
-      })
-      .handler((ctx) => {
-        processedMessages.push(ctx.input);
-      });
+        })
+        .subscribe(({ input }) => {
+          processedMessages.push(input);
+        }),
+    });
 
     const consumer = await createConsumer(router, {
       kafka: kafka!,
@@ -134,19 +130,18 @@ describe("Consumer e2e", () => {
     const topic = "validation-topic";
     const errors: Error[] = [];
 
-    const router = createKafkaRouter();
-    router
-      .topic(topic, {
-        input: {
+    const router = kafkaRouter({
+      [topic]: publicProcedure
+        .input({
           message: z.object({
             id: z.string(),
             count: z.number(),
           }),
-        },
-      })
-      .handler(() => {
-        // Should not be called for invalid messages
-      });
+        })
+        .subscribe(() => {
+          // Should not be called for invalid messages
+        }),
+    });
 
     const consumer = await createConsumer(router, {
       kafka: kafka!,
@@ -189,20 +184,21 @@ describe("Consumer e2e", () => {
     const topic = "output-validation-topic";
     const errors: Error[] = [];
 
-    const router = createKafkaRouter();
-    router
-      .topic(topic, {
-        input: {
+    const router = kafkaRouter({
+      [topic]: publicProcedure
+        .input({
           message: z.object({ id: z.string() }),
-        },
-        output: z.object({
-          result: z.string(),
-          count: z.number(),
+        })
+        .output(
+          z.object({
+            result: z.string(),
+            count: z.number(),
+          }),
+        )
+        .subscribe(() => {
+          return { result: "success", count: "not-a-number" } as any;
         }),
-      })
-      .handler(() => {
-        return { result: "success", count: "not-a-number" } as any;
-      });
+    });
 
     const consumer = await createConsumer(router, {
       kafka: kafka!,
@@ -229,7 +225,6 @@ describe("Consumer e2e", () => {
       ],
     });
 
-    // Wait for error to occur (output validation will fail)
     await createMessageWaiter(errors, 1);
 
     expect(errors.length).toBeGreaterThan(0);
@@ -245,16 +240,17 @@ describe("Consumer e2e", () => {
     const topic = "context-topic";
     const contexts: unknown[] = [];
 
-    const router = createKafkaRouter<{ userId: string }>();
-    router
-      .topic(topic, {
-        input: {
+    const { procedure } = init<{ userId: string }>();
+
+    const router = kafkaRouter<{ userId: string }>({
+      [topic]: procedure
+        .input({
           message: z.object({ id: z.string() }),
-        },
-      })
-      .handler((ctx) => {
-        contexts.push({ userId: ctx.userId, input: ctx.input });
-      });
+        })
+        .subscribe(({ input, ctx }) => {
+          contexts.push({ userId: ctx.userId, input });
+        }),
+    });
 
     const consumer = await createConsumer(router, {
       kafka: kafka!,
@@ -293,21 +289,18 @@ describe("Consumer e2e", () => {
     const topic = "middleware-topic";
     const calls: string[] = [];
 
-    const router = createKafkaRouter();
-    router.use(async ({ ctx: _ctx, next }) => {
+    const router = kafkaRouter({
+      [topic]: publicProcedure
+        .input({
+          message: z.object({ id: z.string() }),
+        })
+        .subscribe(() => {
+          calls.push("handler");
+        }),
+    }).use(async ({ next }) => {
       calls.push("router-middleware");
       return next();
     });
-
-    router
-      .topic(topic, {
-        input: {
-          message: z.object({ id: z.string() }),
-        },
-      })
-      .handler(() => {
-        calls.push("handler");
-      });
 
     const consumer = await createConsumer(router, {
       kafka: kafka!,
@@ -341,24 +334,23 @@ describe("Consumer e2e", () => {
     const topic = "procedure-middleware-topic";
     const calls: string[] = [];
 
-    const router = createKafkaRouter();
-    router
-      .topic(topic, {
-        input: {
+    const router = kafkaRouter({
+      [topic]: publicProcedure
+        .input({
           message: z.object({ id: z.string() }),
-        },
-      })
-      .use(async ({ ctx: _ctx, next }) => {
-        calls.push("procedure-middleware-1");
-        return next();
-      })
-      .use(async ({ ctx: _ctx, next }) => {
-        calls.push("procedure-middleware-2");
-        return next();
-      })
-      .handler(() => {
-        calls.push("handler");
-      });
+        })
+        .use(async ({ next }) => {
+          calls.push("procedure-middleware-1");
+          return next();
+        })
+        .use(async ({ next }) => {
+          calls.push("procedure-middleware-2");
+          return next();
+        })
+        .subscribe(() => {
+          calls.push("handler");
+        }),
+    });
 
     const consumer = await createConsumer(router, {
       kafka: kafka!,
@@ -395,31 +387,30 @@ describe("Consumer e2e", () => {
     const topic = "error-schema-topic";
     const errors: Error[] = [];
 
-    const router = createKafkaRouter();
-    router
-      .topic(topic, {
-        input: {
+    const router = kafkaRouter({
+      [topic]: publicProcedure
+        .input({
           message: z.object({ id: z.string() }),
-        },
-        errors: {
+        })
+        .errors({
           NOT_FOUND: z.object({
             error: z.object({
               code: z.literal("NOT_FOUND"),
               message: z.string(),
             }),
           }),
-        },
-      })
-      .handler((ctx) => {
-        if (ctx.input.id === "missing") {
-          ctx.error({
-            error: {
-              code: "NOT_FOUND",
-              message: "Resource not found",
-            },
-          });
-        }
-      });
+        })
+        .subscribe(({ input, ctx }) => {
+          if (input.id === "missing") {
+            throw ctx.error({
+              error: {
+                code: "NOT_FOUND",
+                message: "Resource not found",
+              },
+            });
+          }
+        }),
+    });
 
     const consumer = await createConsumer(router, {
       kafka: kafka!,
@@ -465,26 +456,22 @@ describe("Consumer e2e", () => {
       [topic2]: [],
     };
 
-    const router = createKafkaRouter();
-    router
-      .topic(topic1, {
-        input: {
+    const router = kafkaRouter({
+      [topic1]: publicProcedure
+        .input({
           message: z.object({ id: z.string() }),
-        },
-      })
-      .handler((ctx) => {
-        processed[topic1]!.push(ctx.input);
-      });
-
-    router
-      .topic(topic2, {
-        input: {
+        })
+        .subscribe(({ input }) => {
+          processed[topic1]!.push(input);
+        }),
+      [topic2]: publicProcedure
+        .input({
           message: z.object({ value: z.number() }),
-        },
-      })
-      .handler((ctx) => {
-        processed[topic2]!.push(ctx.input);
-      });
+        })
+        .subscribe(({ input }) => {
+          processed[topic2]!.push(input);
+        }),
+    });
 
     const consumer = await createConsumer(router, {
       kafka: kafka!,

@@ -1,0 +1,10 @@
+{
+  "extends": "@alt-stack/typescript-config/base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": ".",
+    "lib": ["es2022", "DOM", "DOM.Iterable"]
+  },
+  "include": ["src/**/*", "generated-types.ts"]
+}
+

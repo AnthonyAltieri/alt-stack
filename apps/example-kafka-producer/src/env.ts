@@ -1,0 +1,19 @@
+import { createEnv } from "@t3-oss/env-core";
+import { z } from "zod";
+
+export const env = createEnv({
+  server: {
+    KAFKA_BROKERS: z
+      .string()
+      .default("localhost:9092")
+      .describe("Comma-separated list of Kafka broker addresses"),
+    KAFKA_CLIENT_ID: z
+      .string()
+      .default("example-producer")
+      .describe("Kafka client ID"),
+  },
+  runtimeEnv: process.env,
+  skipValidation: !!process.env.SKIP_ENV_VALIDATION,
+  emptyStringAsUndefined: true,
+});
+

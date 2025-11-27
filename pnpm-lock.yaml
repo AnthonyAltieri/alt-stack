@@ -117,6 +117,37 @@ importers:
         specifier: 5.9.2
         version: 5.9.2
 
+  apps/example-kafka-producer:
+    dependencies:
+      '@alt-stack/kafka':
+        specifier: workspace:*
+        version: link:../../packages/kafka
+      '@t3-oss/env-core':
+        specifier: ^0.9.0
+        version: 0.9.2(typescript@5.9.2)(zod@4.1.12)
+      kafkajs:
+        specifier: ^2.2.4
+        version: 2.2.4
+      zod:
+        specifier: ^4.0.0
+        version: 4.1.12
+    devDependencies:
+      '@alt-stack/typescript-config':
+        specifier: workspace:*
+        version: link:../../packages/typescript-config
+      '@alt-stack/zod-asyncapi':
+        specifier: workspace:*
+        version: link:../../packages/zod-asyncapi
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.24
+      tsx:
+        specifier: ^4.0.0
+        version: 4.20.6
+      typescript:
+        specifier: 5.9.2
+        version: 5.9.2
+
   packages/client:
     dependencies:
       zod:
@@ -198,6 +229,31 @@ importers:
         version: 4.0.3(@types/debug@4.1.12)(@types/node@20.19.24)(jiti@1.21.7)(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1)
 
   packages/typescript-config: {}
+
+  packages/zod-asyncapi:
+    dependencies:
+      tsx:
+        specifier: ^4.19.2
+        version: 4.20.6
+      zod:
+        specifier: ^4.1.12
+        version: 4.1.12
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.24
+      oxlint:
+        specifier: ^1.24.0
+        version: 1.24.0
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.0(jiti@1.21.7)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.2)(yaml@2.8.1)
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.2
+      vitest:
+        specifier: ^4.0.3
+        version: 4.0.3(@types/debug@4.1.12)(@types/node@20.19.24)(jiti@1.21.7)(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1)
 
   packages/zod-openapi:
     dependencies:

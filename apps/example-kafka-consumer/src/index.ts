@@ -1,48 +1,57 @@
-import {
-  createKafkaRouter,
-  createConsumer,
-  createMiddleware,
-  type BaseKafkaContext,
-} from "@alt-stack/kafka";
+import { init, kafkaRouter, createConsumer, type BaseKafkaContext } from "@alt-stack/kafka";
 import { Kafka } from "kafkajs";
 import { z } from "zod";
 import { env } from "./env.js";
 
-// Define app context
-interface AppContext extends Record<string, unknown> {
+// ============================================================================
+// Type Definitions
+// ============================================================================
+
+interface AppContext {
   logger: {
     log: (message: string) => void;
   };
 }
 
-// Create context function
-function createContext(baseCtx: BaseKafkaContext): AppContext {
-  return {
-    logger: {
-      log: (message: string) => {
-        console.log(
-          `[${baseCtx.topic}:${baseCtx.partition}:${baseCtx.offset}] ${message}`,
-        );
-      },
-    },
-  };
-}
+// ============================================================================
+// Initialize Factory
+// ============================================================================
 
-// Middleware for logging messages
-const loggingMiddleware = createMiddleware<AppContext>(
-  async (opts: {
-    ctx: BaseKafkaContext & AppContext;
-    next: (opts?: {
-      ctx: Partial<BaseKafkaContext & AppContext>;
-    }) => Promise<BaseKafkaContext & AppContext>;
-  }) => {
-    const { ctx, next } = opts;
-    ctx.logger.log(`Processing message from topic ${ctx.topic}`);
-    const result = await next();
-    ctx.logger.log(`Completed processing message from topic ${ctx.topic}`);
-    return result;
-  },
-);
+const { procedure } = init<AppContext>();
+
+// ============================================================================
+// Reusable Procedures
+// ============================================================================
+
+// Public procedure (no auth required)
+const publicProc = procedure;
+
+// Procedure with logging middleware
+const loggedProcedure = procedure.use(async ({ ctx, next }) => {
+  ctx.logger.log(`Processing message from topic ${ctx.topic}`);
+  const result = await next();
+  ctx.logger.log(`Completed processing message from topic ${ctx.topic}`);
+  return result;
+});
+
+// Protected procedure with validation middleware
+const validatedProcedure = loggedProcedure
+  .errors({
+    VALIDATION_ERROR: z.object({
+      error: z.object({
+        code: z.literal("VALIDATION_ERROR"),
+        message: z.string(),
+      }),
+    }),
+  })
+  .use(async ({ ctx, next }) => {
+    ctx.logger.log("Running validation middleware");
+    return next();
+  });
+
+// ============================================================================
+// Schemas
+// ============================================================================
 
 // User event schema
 const UserEventSchema = z.object({
@@ -74,104 +83,97 @@ const OrderProcessedSchema = z.object({
   processedAt: z.number(),
 });
 
-// Create router with middleware
-const router = createKafkaRouter<AppContext>()
-  .use(loggingMiddleware)
-  .topic("user-events", {
-    input: {
-      message: UserEventSchema,
-    },
-    errors: {
+// Notification schema
+const NotificationSchema = z.object({
+  type: z.string(),
+  recipient: z.string(),
+  message: z.string(),
+});
+
+// ============================================================================
+// Router
+// ============================================================================
+
+const appRouter = kafkaRouter<AppContext>({
+  // User events topic
+  "user-events": validatedProcedure
+    .input({ message: UserEventSchema })
+    .errors({
       INVALID_USER: z.object({
         error: z.object({
           code: z.literal("INVALID_USER"),
           message: z.string(),
         }),
       }),
-    },
-  })
-  .handler((ctx) => {
-    // Example: Use throw ctx.error() for error handling
-    if (!ctx.input.userId) {
-      throw ctx.error({
-        error: {
-          code: "INVALID_USER",
-          message: "User ID is required",
-        },
-      });
-    }
+    })
+    .subscribe(({ input, ctx }) => {
+      if (!input.userId) {
+        throw ctx.error({
+          error: {
+            code: "INVALID_USER",
+            message: "User ID is required",
+          },
+        });
+      }
 
-    ctx.logger.log(
-      `User event: ${ctx.input.eventType} for user ${ctx.input.userId}`,
-    );
+      ctx.logger.log(`User event: ${input.eventType} for user ${input.userId}`);
 
-    // Process user event
-    if (ctx.input.eventType === "created") {
-      ctx.logger.log(`New user created: ${ctx.input.userId}`);
-    } else if (ctx.input.eventType === "updated") {
-      ctx.logger.log(`User updated: ${ctx.input.userId}`);
-    } else if (ctx.input.eventType === "deleted") {
-      ctx.logger.log(`User deleted: ${ctx.input.userId}`);
-    }
+      if (input.eventType === "created") {
+        ctx.logger.log(`New user created: ${input.userId}`);
+      } else if (input.eventType === "updated") {
+        ctx.logger.log(`User updated: ${input.userId}`);
+      } else if (input.eventType === "deleted") {
+        ctx.logger.log(`User deleted: ${input.userId}`);
+      }
 
-    // Log metadata if present
-    if (ctx.input.metadata) {
-      ctx.logger.log(`Metadata: ${JSON.stringify(ctx.input.metadata)}`);
-    }
-  })
-  .topic("orders/created", {
-    input: {
-      message: OrderCreatedSchema,
-    },
-    output: OrderProcessedSchema,
-  })
-  .handler((ctx) => {
-    ctx.logger.log(
-      `Processing order ${ctx.input.orderId} for user ${ctx.input.userId}`,
-    );
-    ctx.logger.log(`Order total: $${ctx.input.total.toFixed(2)}`);
-    ctx.logger.log(`Items: ${ctx.input.items.length}`);
-
-    // Simulate order processing
-    const processedAt = Date.now();
-
-    // Return processed order (will be validated against output schema)
-    return {
-      orderId: ctx.input.orderId,
-      status: "processed" as const,
-      processedAt,
-    };
-  });
-
-// Create reusable procedure for notifications
-const notificationRouter = createKafkaRouter<AppContext>()
-  .procedure.input({
-    message: z.object({
-      type: z.string(),
-      recipient: z.string(),
-      message: z.string(),
+      if (input.metadata) {
+        ctx.logger.log(`Metadata: ${JSON.stringify(input.metadata)}`);
+      }
     }),
-  })
-  .topic("notifications", {
-    input: {
-      message: z.object({
-        type: z.string(),
-        recipient: z.string(),
-        message: z.string(),
-      }),
+
+  // Orders created topic
+  "orders/created": loggedProcedure
+    .input({ message: OrderCreatedSchema })
+    .output(OrderProcessedSchema)
+    .subscribe(({ input, ctx }) => {
+      ctx.logger.log(`Processing order ${input.orderId} for user ${input.userId}`);
+      ctx.logger.log(`Order total: $${input.total.toFixed(2)}`);
+      ctx.logger.log(`Items: ${input.items.length}`);
+
+      const processedAt = Date.now();
+
+      return {
+        orderId: input.orderId,
+        status: "processed" as const,
+        processedAt,
+      };
+    }),
+
+  // Notifications topic
+  notifications: publicProc.input({ message: NotificationSchema }).subscribe(({ input, ctx }) => {
+    ctx.logger.log(`Sending ${input.type} notification to ${input.recipient}`);
+    ctx.logger.log(`Message: ${input.message}`);
+  }),
+});
+
+// ============================================================================
+// Context Factory
+// ============================================================================
+
+function createContext(baseCtx: BaseKafkaContext): AppContext {
+  return {
+    logger: {
+      log: (message: string) => {
+        console.log(`[${baseCtx.topic}:${baseCtx.partition}:${baseCtx.offset}] ${message}`);
+      },
     },
-  })
-  .handler((ctx) => {
-    ctx.logger.log(
-      `Sending ${ctx.input.type} notification to ${ctx.input.recipient}`,
-    );
-    ctx.logger.log(`Message: ${ctx.input.message}`);
-  });
+  };
+}
 
-// Merge routers
-router.merge("notifications", notificationRouter);
+// ============================================================================
+// Main
+// ============================================================================
 
-// Main function
 async function main() {
   const brokers = env.KAFKA_BROKERS.split(",");
   const clientId = env.KAFKA_CLIENT_ID;
@@ -186,7 +188,7 @@ async function main() {
     brokers,
   });
 
-  const consumer = await createConsumer(router, {
+  const consumer = await createConsumer(appRouter, {
     kafka,
     groupId,
     createContext,
@@ -195,7 +197,6 @@ async function main() {
   console.log("Kafka consumer started and listening for messages...");
   console.log("Press Ctrl+C to stop");
 
-  // Handle graceful shutdown
   const shutdown = async () => {
     console.log("\nShutting down consumer...");
     await consumer.disconnect();

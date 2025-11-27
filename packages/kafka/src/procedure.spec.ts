@@ -1,44 +1,38 @@
 import { describe, it, expect } from "vitest";
-import { createKafkaRouter } from "./router.js";
+import { init, kafkaRouter, publicProcedure } from "./index.js";
 import { z } from "zod";
 
 describe("KafkaProcedure", () => {
   it("should build procedure with input validation", () => {
-    const router = createKafkaRouter();
-    let receivedInput: unknown;
+    const { procedure } = init();
 
-    router
-      .topic("test-topic", {
-        input: { message: z.object({ id: z.string(), value: z.number() }) },
-      })
-      .handler((ctx) => {
-        receivedInput = ctx.input;
+    const readyProc = procedure
+      .input({ message: z.object({ id: z.string(), value: z.number() }) })
+      .subscribe(({ input }) => {
+        // input is typed
+        console.log(input.id);
       });
 
-    const procedures = router.getProcedures();
-    expect(procedures).toHaveLength(1);
-    expect(procedures[0]?.config.input.message).toBeDefined();
+    expect(readyProc.config.input.message).toBeDefined();
+    expect(readyProc.handler).toBeDefined();
+    expect(readyProc.middleware).toBeDefined();
   });
 
   it("should build procedure with output validation", () => {
-    const router = createKafkaRouter();
     const outputSchema = z.object({ result: z.string() });
 
-    router
-      .topic("test-topic", {
-        input: { message: z.object({ id: z.string() }) },
-        output: outputSchema,
-      })
-      .handler(() => {
+    const readyProc = publicProcedure
+      .input({ message: z.object({ id: z.string() }) })
+      .output(outputSchema)
+      .subscribe(() => {
         return { result: "success" };
       });
 
-    const procedures = router.getProcedures();
-    expect(procedures[0]?.config.output).toBe(outputSchema);
+    expect(readyProc.config.output).toBe(outputSchema);
   });
 
   it("should build procedure with error schemas", () => {
-    const router = createKafkaRouter();
+    const { procedure } = init();
     const errorSchemas = {
       NOT_FOUND: z.object({
         error: z.object({
@@ -48,14 +42,12 @@ describe("KafkaProcedure", () => {
       }),
     };
 
-    router
-      .topic("test-topic", {
-        input: { message: z.object({ id: z.string() }) },
-        errors: errorSchemas,
-      })
-      .handler((ctx) => {
-        if (ctx.input.id === "missing") {
-          ctx.error({
+    const readyProc = procedure
+      .input({ message: z.object({ id: z.string() }) })
+      .errors(errorSchemas)
+      .subscribe(({ input, ctx }) => {
+        if (input.id === "missing") {
+          throw ctx.error({
             error: {
               code: "NOT_FOUND",
               message: "Not found",
@@ -64,60 +56,80 @@ describe("KafkaProcedure", () => {
         }
       });
 
-    const procedures = router.getProcedures();
-    expect(procedures[0]?.config.errors).toBeDefined();
+    expect(readyProc.config.errors).toBeDefined();
   });
 
   it("should chain middleware", () => {
-    const router = createKafkaRouter();
+    const { procedure } = init();
     const calls: string[] = [];
 
-    router
-      .topic("test", {
-        input: { message: z.object({ value: z.string() }) },
-      })
-      .use(async ({ ctx, next }) => {
+    const readyProc = procedure
+      .input({ message: z.object({ value: z.string() }) })
+      .use(async ({ next }) => {
         calls.push("middleware-1");
         return next();
       })
-      .use(async ({ ctx, next }) => {
+      .use(async ({ next }) => {
         calls.push("middleware-2");
         return next();
       })
-      .handler(() => {
+      .subscribe(() => {
         calls.push("handler");
       });
 
-    const procedures = router.getProcedures();
-    expect(procedures[0]?.middleware).toHaveLength(2);
+    expect(readyProc.middleware).toHaveLength(2);
   });
 
-  it("should use base procedure builder", () => {
-    const router = createKafkaRouter();
+  it("should use base procedure builder with router", () => {
+    interface AppContext {
+      userId: string;
+    }
+    const { procedure } = init<AppContext>();
     const baseInput = z.object({ base: z.string() });
     const baseOutput = z.object({ baseResult: z.string() });
 
-    router.procedure
-      .input({ message: baseInput })
-      .output(baseOutput)
-      .topic("test", {
-        input: { message: z.object({ id: z.string() }) },
-      })
-      .handler(() => {
-        return { baseResult: "success" };
-      });
+    const router = kafkaRouter<AppContext>({
+      test: procedure
+        .input({ message: baseInput })
+        .output(baseOutput)
+        .subscribe(() => {
+          return { baseResult: "success" };
+        }),
+    });
 
     const procedures = router.getProcedures();
     expect(procedures).toHaveLength(1);
   });
 
-  it("should throw error when handler not defined", () => {
-    const router = createKafkaRouter();
-    const builder = router.topic("test", {
-      input: { message: z.object({ id: z.string() }) },
+  it("should create pending procedure with handler()", () => {
+    const { procedure } = init();
+
+    const pendingProc = procedure
+      .input({ message: z.object({ id: z.string() }) })
+      .handler(({ input }) => {
+        console.log(input.id);
+      });
+
+    expect(pendingProc.config.input.message).toBeDefined();
+    expect(pendingProc.handler).toBeDefined();
+    expect(pendingProc.middleware).toBeDefined();
+    // PendingProcedure doesn't have a topic yet
+    expect((pendingProc as any).topic).toBeUndefined();
+  });
+
+  it("should work with kafkaRouter object-based config", () => {
+    const { procedure } = init();
+
+    const router = kafkaRouter({
+      "test-topic": procedure
+        .input({ message: z.object({ id: z.string() }) })
+        .subscribe(({ input }) => {
+          console.log(input.id);
+        }),
     });
 
-    expect(() => builder.build()).toThrow("Handler not defined for topic test");
+    const procedures = router.getProcedures();
+    expect(procedures).toHaveLength(1);
+    expect(procedures[0]?.topic).toBe("test-topic");
   });
 });
-

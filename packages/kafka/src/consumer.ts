@@ -5,19 +5,22 @@ import type {
   TypedKafkaContext,
   InputConfig,
   BaseKafkaContext,
+  KafkaProcedure,
+  InferInput,
 } from "./types.js";
-import type { KafkaProcedure } from "./procedure.js";
 import type { KafkaRouter } from "./router.js";
 import { validateMessage } from "./validation.js";
 import { ProcessingError } from "./errors.js";
 
-export interface CreateConsumerOptions {
+export interface CreateConsumerOptions<
+  TCustomContext extends object = Record<string, never>,
+> {
   kafka: Kafka | KafkaConfig;
   consumerConfig?: Omit<ConsumerConfig, "groupId">;
   groupId: string;
   createContext?: (
     baseCtx: BaseKafkaContext,
-  ) => Promise<Record<string, unknown>> | Record<string, unknown>;
+  ) => Promise<TCustomContext> | TCustomContext;
   onError?: (error: Error) => void;
 }
 
@@ -25,7 +28,7 @@ export async function createConsumer<
   TCustomContext extends object = Record<string, never>,
 >(
   router: KafkaRouter<TCustomContext>,
-  options: CreateConsumerOptions,
+  options: CreateConsumerOptions<TCustomContext>,
 ): Promise<Consumer> {
   const kafkaInstance =
     typeof (options.kafka as any).consumer === "function"
@@ -129,7 +132,7 @@ export async function createConsumer<
           const ctx: ProcedureContext = {
             ...customContext,
             ...baseCtx,
-            input: validatedInput as any,
+            input: validatedInput as InferInput<InputConfig>,
             error: procedure.config.errors ? errorFn : (undefined as any),
           } as ProcedureContext;
 
@@ -146,7 +149,7 @@ export async function createConsumer<
             }
             const result = await middleware({
               ctx: currentCtx,
-              next: async (opts?: { ctx: Partial<ProcedureContext> }) => {
+              next: async (opts?: { ctx?: any }) => {
                 if (opts?.ctx) {
                   currentCtx = {
                     ...currentCtx,
@@ -155,10 +158,14 @@ export async function createConsumer<
                 }
                 const nextResult = await runMiddleware();
                 currentCtx = nextResult;
-                return currentCtx;
+                return { marker: "middlewareMarker" as any, ok: true as const, data: currentCtx };
               },
             });
-            currentCtx = result;
+            // Handle MiddlewareResult
+            if (result && typeof result === "object" && "marker" in result) {
+              return currentCtx;
+            }
+            currentCtx = result as ProcedureContext;
             return currentCtx;
           };
 
@@ -182,8 +189,11 @@ export async function createConsumer<
           // Run procedure middleware
           currentCtx = await runMiddleware();
 
-          // Run handler - errors will bubble up naturally to Kafka.js
-          const response = await procedure.handler(currentCtx);
+          // Run handler with { input, ctx } signature
+          const response = await procedure.handler({
+            input: currentCtx.input,
+            ctx: currentCtx,
+          });
 
           // Validate output if schema is provided
           if (procedure.config.output && response !== undefined) {
