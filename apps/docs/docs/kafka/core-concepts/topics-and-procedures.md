@@ -1,95 +1,101 @@
 # Topics and Procedures
 
-Define Kafka topics and their message handlers with type-safe procedures.
+Define Kafka topics with type-safe message schemas using `kafkaRouter`.
 
 ## Basic Topic Definition
 
-Use the `topic` method to define a Kafka topic and its message schema:
-
 ```typescript
-import { createKafkaRouter } from "@alt-stack/kafka";
+import { init, kafkaRouter } from "@alt-stack/kafka";
 import { z } from "zod";
 
-const router = createKafkaRouter()
-  .topic("user-events", {
-    input: {
+const { procedure } = init();
+
+const router = kafkaRouter({
+  "user-events": procedure
+    .input({
       message: z.object({
         userId: z.string(),
         eventType: z.string(),
       }),
-    },
-  })
-  .handler((ctx) => {
-    // ctx.input is typed based on the schema (not ctx.input.message)
-    console.log(ctx.input.userId);
-  });
+    })
+    .subscribe(({ input }) => {
+      // input is the validated message
+      console.log(input.userId);
+    }),
+});
 ```
 
 ## Message Validation
 
-Messages are automatically validated against the schema before the handler is called:
+Messages are validated before the handler runs:
 
 ```typescript
-const router = createKafkaRouter()
-  .topic("orders", {
-    input: {
+const router = kafkaRouter({
+  orders: procedure
+    .input({
       message: z.object({
         orderId: z.string().uuid(),
         amount: z.number().positive(),
         currency: z.string().length(3),
       }),
-    },
-  })
-  .handler((ctx) => {
-    // Only called if message matches schema
-    // ctx.input is the parsed message (not ctx.input.message)
-    processOrder(ctx.input);
-  });
+    })
+    .subscribe(({ input }) => {
+      // Only called if message passes validation
+      processOrder(input);
+    }),
+});
 ```
 
 ## Multiple Topics
 
-Define multiple topics in a single router:
-
 ```typescript
-const router = createKafkaRouter()
-  .topic("user-events", {
-    input: {
-      message: UserEventSchema,
-    },
-  })
-  .handler(handleUserEvent)
-  .topic("order-events", {
-    input: {
-      message: OrderEventSchema,
-    },
-  })
-  .handler(handleOrderEvent);
+const router = kafkaRouter({
+  "user-events": procedure
+    .input({ message: UserEventSchema })
+    .subscribe(({ input }) => handleUserEvent(input)),
+
+  "order-events": procedure
+    .input({ message: OrderEventSchema })
+    .subscribe(({ input }) => handleOrderEvent(input)),
+});
 ```
 
 ## Output Validation
 
-Optionally validate handler output:
+Optionally validate handler return values:
 
 ```typescript
-const router = createKafkaRouter()
-  .topic("process-data", {
-    input: {
-      message: z.object({
-        data: z.string(),
-      }),
-    },
-    output: z.object({
-      processed: z.boolean(),
-      result: z.string(),
-    }),
-  })
-  .handler((ctx) => {
-    // ctx.input is the parsed message
-    return {
+const router = kafkaRouter({
+  "process-data": procedure
+    .input({
+      message: z.object({ data: z.string() }),
+    })
+    .output(
+      z.object({
+        processed: z.boolean(),
+        result: z.string(),
+      })
+    )
+    .subscribe(({ input }) => ({
       processed: true,
-      result: ctx.input.data.toUpperCase(),
-    };
-  });
+      result: input.data.toUpperCase(),
+    })),
+});
 ```
 
+## subscribe vs handler
+
+- `.subscribe()` - Use in `kafkaRouter({})` config (topic determined by key)
+- `.handler()` - Creates a pending procedure for manual registration
+
+```typescript
+// Using subscribe (recommended)
+const router = kafkaRouter({
+  "my-topic": procedure.input({ message: Schema }).subscribe(({ input }) => {}),
+});
+
+// Using handler for manual registration
+const pendingProc = procedure.input({ message: Schema }).handler(({ input }) => {});
+const router = createKafkaRouter();
+router.registerPendingProcedure("my-topic", pendingProc);
+```

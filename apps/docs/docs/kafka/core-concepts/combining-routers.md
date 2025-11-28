@@ -1,109 +1,62 @@
 # Combining Routers
 
-Combine multiple routers to organize your Kafka consumers by domain or feature.
+Organize consumers by domain using nested routers.
 
-## Basic Router Combination
+## Nested Routers
 
-Use `mergeKafkaRouters` to combine routers:
-
-```typescript
-import { createKafkaRouter, mergeKafkaRouters } from "@alt-stack/kafka";
-
-const userRouter = createKafkaRouter()
-  .topic("user-created", { /* ... */ })
-  .handler(handleUserCreated)
-  .topic("user-updated", { /* ... */ })
-  .handler(handleUserUpdated);
-
-const orderRouter = createKafkaRouter()
-  .topic("order-created", { /* ... */ })
-  .handler(handleOrderCreated)
-  .topic("order-cancelled", { /* ... */ })
-  .handler(handleOrderCancelled);
-
-// Combine routers
-const mainRouter = mergeKafkaRouters({
-  users: userRouter,
-  orders: orderRouter,
-});
-
-const consumer = await createConsumer(mainRouter, {
-  kafka: new Kafka({
-    brokers: ["localhost:9092"],
-  }),
-  groupId: "my-consumer-group",
-});
-```
-
-## Router Constructor
-
-You can also combine routers using the router constructor:
+Use nested `kafkaRouter` for topic prefixing:
 
 ```typescript
-const mainRouter = createKafkaRouter({
+import { init, kafkaRouter } from "@alt-stack/kafka";
+
+const { procedure } = init<AppContext>();
+
+const userRouter = kafkaRouter<AppContext>({
+  created: procedure.input({ message: UserCreatedSchema }).subscribe(handleUserCreated),
+  updated: procedure.input({ message: UserUpdatedSchema }).subscribe(handleUserUpdated),
+});
+
+const orderRouter = kafkaRouter<AppContext>({
+  created: procedure.input({ message: OrderCreatedSchema }).subscribe(handleOrderCreated),
+  cancelled: procedure.input({ message: OrderCancelledSchema }).subscribe(handleOrderCancelled),
+});
+
+// Topics become: users/created, users/updated, orders/created, orders/cancelled
+const mainRouter = kafkaRouter<AppContext>({
   users: userRouter,
   orders: orderRouter,
 });
 ```
 
-## Multiple Routers with Same Prefix
+## Merging Flat Routers
 
-Combine multiple routers under the same prefix:
-
-```typescript
-const v1Router = createKafkaRouter()
-  .topic("user-events-v1", { /* ... */ })
-  .handler(handleV1);
-
-const v2Router = createKafkaRouter()
-  .topic("user-events-v2", { /* ... */ })
-  .handler(handleV2);
-
-const mainRouter = createKafkaRouter({
-  users: [v1Router, v2Router],
-});
-```
-
-## Shared Context
-
-All routers share the same context type:
+Use `mergeKafkaRouters` to combine routers without prefixing:
 
 ```typescript
-interface AppContext {
-  logger: Logger;
-  db: Database;
-}
+import { mergeKafkaRouters } from "@alt-stack/kafka";
 
-const userRouter = createKafkaRouter<AppContext>()
-  .topic("user-events", { /* ... */ })
-  .handler((ctx) => {
-    ctx.logger.log("Processing user event");
-    // ctx.input is the parsed message
-    ctx.db.save(ctx.input);
-  });
-
-const orderRouter = createKafkaRouter<AppContext>()
-  .topic("order-events", { /* ... */ })
-  .handler((ctx) => {
-    ctx.logger.log("Processing order event");
-    // ctx.input is the parsed message
-    ctx.db.save(ctx.input);
-  });
-
-const mainRouter = mergeKafkaRouters({
-  users: userRouter,
-  orders: orderRouter,
+const router1 = kafkaRouter({
+  "user-events": procedure.input({ message: UserSchema }).subscribe(() => {}),
 });
 
-const consumer = await createConsumer(mainRouter, {
-  kafka: new Kafka({
-    brokers: ["localhost:9092"],
-  }),
-  groupId: "my-consumer-group",
-  createContext: (baseCtx) => ({
-    logger: getLogger(),
-    db: getDatabase(),
-  }),
+const router2 = kafkaRouter({
+  "order-events": procedure.input({ message: OrderSchema }).subscribe(() => {}),
 });
+
+// Topics remain: user-events, order-events (no prefix)
+const mainRouter = mergeKafkaRouters(router1, router2);
 ```
 
+## Using init() Factory
+
+```typescript
+const { router, mergeRouters, procedure } = init<AppContext>();
+
+const r1 = router();
+r1.registerProcedure("events", procedure.input({ message: Schema }).subscribe(() => {}));
+
+const r2 = router();
+r2.registerProcedure("other", procedure.input({ message: Schema }).subscribe(() => {}));
+
+const merged = mergeRouters(r1, r2);
+```

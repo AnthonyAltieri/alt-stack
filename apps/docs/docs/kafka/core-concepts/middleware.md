@@ -1,69 +1,91 @@
 # Middleware
 
-Apply middleware to procedures to add cross-cutting concerns like logging, metrics, or error handling.
+Add cross-cutting concerns like logging, metrics, or authentication.
 
-## Procedure-Level Middleware
-
-Apply middleware to specific topics:
+## Basic Middleware
 
 ```typescript
-const router = createKafkaRouter()
-  .topic("sensitive-events", {
-    input: {
-      message: z.object({
-        data: z.string(),
-      }),
-    },
-  })
-  .use(async ({ ctx, next }) => {
-    // Log before handler
-    console.log(`Processing sensitive event from partition ${ctx.partition}`);
-    return next();
-  })
-  .handler((ctx) => {
-    // ctx.input is the parsed message
-    processSensitiveData(ctx.input);
-  });
-```
+const { procedure } = init();
 
-## Context Extension
+const loggedProcedure = procedure.use(async ({ ctx, next }) => {
+  console.log(`Processing message from ${ctx.topic}`);
+  const result = await next();
+  console.log(`Completed processing`);
+  return result;
+});
 
-Middleware can extend the context by passing updated context to `next()`:
-
-```typescript
-const metricsMiddleware = createMiddleware<AppContext>(
-  async ({ ctx, next }) => {
-    const start = Date.now();
-    const result = await next();
-    const duration = Date.now() - start;
-    metrics.recordDuration(ctx.topic, duration);
-    return result;
-  },
-);
-
-const userMiddleware = createMiddleware<AppContext>(
-  async ({ ctx, next }) => {
-    const user = await getUserFromMessage(ctx.input.message);
-    return next({ ctx: { user } });
-  },
-);
-```
-
-## Multiple Middleware
-
-Chain multiple middleware on the same procedure:
-
-```typescript
 const router = kafkaRouter({
-  "user-events": procedure
-    .input({ message: UserEventSchema })
-    .use(loggingMiddleware)
-    .use(metricsMiddleware)
-    .subscribe(({ input, ctx }) => {
-      // handle message
+  events: loggedProcedure
+    .input({ message: EventSchema })
+    .subscribe(({ input }) => {
+      // Logging middleware runs before/after this
     }),
 });
 ```
 
-Middleware executes in the order they're defined.
+## Context Extension
 
+Middleware can add properties to context:
+
+```typescript
+const authMiddleware = procedure.use(async ({ ctx, next }) => {
+  const user = await getUserFromMessage(ctx.message);
+  return next({ ctx: { user } });
+});
+
+const router = kafkaRouter({
+  "protected-events": authMiddleware
+    .input({ message: EventSchema })
+    .subscribe(({ input, ctx }) => {
+      // ctx.user is available and typed
+      console.log(`User: ${ctx.user.name}`);
+    }),
+});
+```
+
+## Reusable Middleware with createMiddleware
+
+```typescript
+import { createMiddleware } from "@alt-stack/kafka";
+
+interface AppContext {
+  logger: Logger;
+}
+
+const metricsMiddleware = createMiddleware<AppContext>()(async ({ ctx, next }) => {
+  const start = Date.now();
+  const result = await next();
+  const duration = Date.now() - start;
+  metrics.recordDuration(ctx.topic, duration);
+  return result;
+});
+```
+
+## Chaining Middleware
+
+```typescript
+const { procedure } = init<AppContext>();
+
+const protectedProcedure = procedure
+  .use(loggingMiddleware)
+  .use(authMiddleware)
+  .use(metricsMiddleware);
+
+// All three middleware run in order
+const router = kafkaRouter({
+  events: protectedProcedure
+    .input({ message: EventSchema })
+    .subscribe(({ input, ctx }) => {}),
+});
+```
+
+## Piping Middleware Builders
+
+```typescript
+const authChain = createMiddleware<AppContext>()
+  .pipe(validateSession)
+  .pipe(loadUser);
+
+// Use the chain
+const protectedProcedure = procedure.use(authChain);
+```

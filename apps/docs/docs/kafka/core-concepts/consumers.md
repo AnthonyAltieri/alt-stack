@@ -1,27 +1,22 @@
 # Consumers
 
-Create and configure Kafka consumers to process messages from your routers.
+Create Kafka consumers from routers.
 
-## Basic Consumer Setup
-
-Use `createConsumer` to create a Kafka consumer from a router:
+## Basic Setup
 
 ```typescript
-import { createConsumer, createKafkaRouter } from "@alt-stack/kafka";
+import { createConsumer, kafkaRouter, init } from "@alt-stack/kafka";
 import { Kafka } from "kafkajs";
-import { z } from "zod";
 
-const router = createKafkaRouter()
-  .topic("user-events", {
-    input: {
-      message: z.object({
-        userId: z.string(),
-      }),
-    },
-  })
-  .handler((ctx) => {
-    console.log(ctx.input.message.userId);
-  });
+const { procedure } = init();
+
+const router = kafkaRouter({
+  "user-events": procedure
+    .input({ message: z.object({ userId: z.string() }) })
+    .subscribe(({ input }) => {
+      console.log(input.userId);
+    }),
+});
 
 const consumer = await createConsumer(router, {
   kafka: new Kafka({
@@ -31,13 +26,12 @@ const consumer = await createConsumer(router, {
   groupId: "my-consumer-group",
 });
 
-// Consumer is automatically connected and started
-// Messages are automatically validated and routed to handlers
+// Consumer is connected and running
 ```
 
-## Kafka Configuration
+## Kafka Config Options
 
-Pass Kafka configuration directly:
+Pass config directly instead of a Kafka instance:
 
 ```typescript
 const consumer = await createConsumer(router, {
@@ -55,48 +49,29 @@ const consumer = await createConsumer(router, {
 });
 ```
 
-## Consumer Configuration
-
-Customize consumer behavior:
+## Consumer Options
 
 ```typescript
 const consumer = await createConsumer(router, {
-  kafka: new Kafka({
-    brokers: ["localhost:9092"],
-  }),
+  kafka: new Kafka({ brokers: ["localhost:9092"] }),
   groupId: "my-consumer-group",
   consumerConfig: {
     sessionTimeout: 30000,
     heartbeatInterval: 3000,
     maxBytesPerPartition: 1048576,
   },
+  createContext: (baseCtx) => ({ logger: getLogger() }),
+  onError: (error) => console.error("Consumer error:", error),
 });
 ```
 
-## Error Handling
-
-Handle errors during message processing:
+## Graceful Shutdown
 
 ```typescript
-import { ProcessingError } from "@alt-stack/kafka";
+const consumer = await createConsumer(router, options);
 
-const consumer = await createConsumer(router, {
-  kafka: new Kafka({
-    brokers: ["localhost:9092"],
-  }),
-  groupId: "my-consumer-group",
-  onError: (error) => {
-    if (error instanceof ProcessingError) {
-      // Handle processing errors
-      console.error("Processing error:", error.code, error.data);
-    } else {
-      // Handle other errors
-      console.error("Consumer error:", error);
-    }
-    // Implement retry logic or alerting
-  },
+process.on("SIGTERM", async () => {
+  await consumer.disconnect();
+  process.exit(0);
 });
 ```
-
-Note: The consumer automatically connects and starts consuming messages when created. No manual `connect()` or `run()` calls are needed.
-

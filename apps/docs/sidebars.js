@@ -109,6 +109,7 @@ module.exports = {
           items: [
             'kafka/core-concepts/topics-and-procedures',
             'kafka/core-concepts/consumers',
+            'kafka/core-concepts/producers',
             'kafka/core-concepts/middleware',
             'kafka/core-concepts/custom-context',
             'kafka/core-concepts/error-handling',
