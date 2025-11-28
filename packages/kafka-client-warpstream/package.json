@@ -1,6 +1,6 @@
 {
   "name": "@alt-stack/kafka-client-warpstream",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "WarpStream binding for type-safe Kafka client with optimized defaults",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -17,7 +17,13 @@
     "test": "vitest",
     "check-types": "tsc --noEmit"
   },
-  "keywords": ["kafka", "warpstream", "client", "typescript", "zod"],
+  "keywords": [
+    "kafka",
+    "warpstream",
+    "client",
+    "typescript",
+    "zod"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {

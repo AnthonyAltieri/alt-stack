@@ -1,6 +1,6 @@
 {
   "name": "@alt-stack/kafka-client-core",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Core types and interfaces for type-safe Kafka clients",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -16,7 +16,13 @@
     "build": "tsup",
     "check-types": "tsc --noEmit"
   },
-  "keywords": ["kafka", "client", "typescript", "zod", "asyncapi"],
+  "keywords": [
+    "kafka",
+    "client",
+    "typescript",
+    "zod",
+    "asyncapi"
+  ],
   "author": "",
   "license": "MIT",
   "peerDependencies": {
