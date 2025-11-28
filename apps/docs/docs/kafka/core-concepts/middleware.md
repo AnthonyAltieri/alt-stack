@@ -1,45 +1,6 @@
 # Middleware
 
-Apply middleware at router-level or procedure-level to add cross-cutting concerns like logging, metrics, or error handling.
-
-## Router-Level Middleware
-
-Apply middleware to all topics in a router:
-
-```typescript
-import { createKafkaRouter, createMiddleware } from "@alt-stack/kafka";
-import { z } from "zod";
-
-interface AppContext {
-  logger: {
-    log: (message: string) => void;
-  };
-}
-
-const loggingMiddleware = createMiddleware<AppContext>(
-  async ({ ctx, next }) => {
-    ctx.logger.log(`Processing message from topic ${ctx.topic}`);
-    const result = await next();
-    ctx.logger.log(`Completed processing message from topic ${ctx.topic}`);
-    return result;
-  },
-);
-
-const router = createKafkaRouter<AppContext>()
-  .use(loggingMiddleware)
-  .topic("user-events", {
-    input: {
-      message: z.object({
-        userId: z.string(),
-      }),
-    },
-  })
-  .handler((ctx) => {
-    // ctx.logger is available from middleware
-    // ctx.input is the parsed message
-    ctx.logger.log(`Processing user ${ctx.input.userId}`);
-  });
-```
+Apply middleware to procedures to add cross-cutting concerns like logging, metrics, or error handling.
 
 ## Procedure-Level Middleware
 
@@ -90,18 +51,18 @@ const userMiddleware = createMiddleware<AppContext>(
 
 ## Multiple Middleware
 
-Chain multiple middleware on the same router or procedure:
+Chain multiple middleware on the same procedure:
 
 ```typescript
-const router = createKafkaRouter<AppContext>()
-  .use(loggingMiddleware)
-  .use(metricsMiddleware)
-  .topic("user-events", {
-    input: {
-      message: UserEventSchema,
-    },
-  })
-  .handler(/* ... */);
+const router = kafkaRouter({
+  "user-events": procedure
+    .input({ message: UserEventSchema })
+    .use(loggingMiddleware)
+    .use(metricsMiddleware)
+    .subscribe(({ input, ctx }) => {
+      // handle message
+    }),
+});
 ```
 
 Middleware executes in the order they're defined.

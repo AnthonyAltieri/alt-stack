@@ -37,7 +37,7 @@ Altstack's server framework is split into a core package and framework-specific 
 - **Builder pattern**: Fluent API for defining routes with `.get()`, `.post()`, etc.
 - **Type-safe errors**: `ctx.error()` with automatic status code inference from error schemas
 - **Reusable procedures**: Create reusable procedures with middleware (tRPC-style pattern)
-- **Middleware support**: Router-level and procedure-level middleware with context extension
+- **Middleware support**: Procedure-level middleware with context extension
 - **Router combination**: Merge multiple routers with `.merge()`
 - **Validation**: Automatic Zod validation for inputs and optional outputs
 - **OpenAPI generation**: Generate OpenAPI specs and interactive Swagger UI

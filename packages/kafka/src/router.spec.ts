@@ -69,25 +69,6 @@ describe("KafkaRouter", () => {
     expect(procedures.map((p) => p.topic)).toContain("users");
   });
 
-  it("should use middleware", async () => {
-    const { procedure } = init();
-    const middlewareCalls: string[] = [];
-
-    const router = kafkaRouter({
-      test: procedure
-        .input({ message: z.object({ value: z.string() }) })
-        .subscribe(() => {
-          middlewareCalls.push("handler");
-        }),
-    }).use(async ({ next }) => {
-      middlewareCalls.push("router-middleware");
-      return next();
-    });
-
-    const middleware = router.getMiddleware();
-    expect(middleware).toHaveLength(1);
-  });
-
   it("should handle procedure middleware", async () => {
     const { procedure } = init();
     const calls: string[] = [];

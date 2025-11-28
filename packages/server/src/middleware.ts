@@ -1,5 +1,3 @@
-import type { BaseContext } from "./types/context.js";
-
 /**
  * Overwrites properties in TType with properties from TWith
  * This is used to merge context types when middleware narrows context
@@ -155,48 +153,4 @@ function createMiddlewareFactory<TContext>() {
  */
 export function createMiddleware<TContext>() {
   return createMiddlewareFactory<TContext>();
-}
-
-/**
- * Legacy middleware type for router-level middleware
- * This type doesn't provide the same level of type inference
- * @deprecated Use MiddlewareFunction and createMiddleware instead
- */
-export type Middleware<
-  TContextIn extends BaseContext,
-  TContextOut extends BaseContext = TContextIn,
-> = (opts: {
-  ctx: TContextIn;
-  next: (opts?: {
-    ctx: Partial<TContextOut>;
-  }) => Promise<TContextOut | Response>;
-}) => Promise<TContextOut | Response>;
-
-/**
- * Helper function to create middleware with proper context typing.
- * Eliminates the need for type assertions when using middleware with routers.
- *
- * @example
- * ```typescript
- * const requireAuth = createLegacyMiddleware<AppContext>(async ({ ctx, next }) => {
- *   // ctx is automatically typed as BaseContext & AppContext
- *   if (!ctx.user) {
- *     return ctx.hono.json({ error: "Unauthorized" }, 401) as Response;
- *   }
- *   return next();
- * });
- *
- * const router = createRouter<AppContext>()
- *   .use(requireAuth)
- *   .get("/profile", { ... })
- * ```
- * @deprecated Use createMiddleware instead
- */
-export function createLegacyMiddleware<TCustomContext extends object>(
-  middleware: Middleware<
-    BaseContext & TCustomContext,
-    BaseContext & TCustomContext
-  >,
-): Middleware<BaseContext, BaseContext> {
-  return middleware as unknown as Middleware<BaseContext, BaseContext>;
 }

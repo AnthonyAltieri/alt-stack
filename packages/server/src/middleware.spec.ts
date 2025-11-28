@@ -1,6 +1,6 @@
 import { describe, it, expectTypeOf } from "vitest";
 import type { MiddlewareFunction, Overwrite, MiddlewareResult } from "./middleware.js";
-import type { BaseContext, TypedContext } from "./types/context.js";
+import type { TypedContext } from "./types/context.js";
 
 describe("Middleware Types", () => {
   describe("Overwrite", () => {

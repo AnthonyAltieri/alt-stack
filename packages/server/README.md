@@ -23,42 +23,18 @@ pnpm add @alt-stack/server-express express zod
 ```typescript
 // Before
 import { createServer, router, init } from "@alt-stack/server";
-import type { BaseContext, Middleware } from "@alt-stack/server";
+import type { BaseContext } from "@alt-stack/server";
 
 // After (Hono)
 import { createServer, router, init } from "@alt-stack/server-hono";
-import type { HonoBaseContext, Middleware } from "@alt-stack/server-hono";
+import type { HonoBaseContext } from "@alt-stack/server-hono";
 
 // After (Express)
 import { createServer, router, init } from "@alt-stack/server-express";
-import type { ExpressBaseContext, Middleware } from "@alt-stack/server-express";
+import type { ExpressBaseContext } from "@alt-stack/server-express";
 ```
 
-### Step 3: Update context types
-
-If you're using `BaseContext` in middleware types, update to the framework-specific version:
-
-```typescript
-// Before
-const middleware: Middleware<BaseContext & AppContext> = async ({ ctx, next }) => {
-  console.log(ctx.hono.req.url);
-  return next();
-};
-
-// After (Hono)
-const middleware: Middleware<HonoBaseContext & AppContext> = async ({ ctx, next }) => {
-  console.log(ctx.hono.req.url);
-  return next();
-};
-
-// After (Express)
-const middleware: Middleware<ExpressBaseContext & AppContext> = async ({ ctx, next }) => {
-  console.log(ctx.express.req.url);
-  return next();
-};
-```
-
-### Step 4: Handler code
+### Step 3: Handler code
 
 Handler code remains the same! The `ctx.hono` property is still available in the Hono adapter.
 

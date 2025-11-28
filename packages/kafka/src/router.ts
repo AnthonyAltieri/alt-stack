@@ -1,13 +1,11 @@
 import type { z } from "zod";
 import type {
   InputConfig,
-  BaseKafkaContext,
   KafkaProcedure,
   ReadyKafkaProcedure,
   PendingKafkaProcedure,
 } from "./types.js";
 import { BaseKafkaProcedureBuilder } from "./procedure.js";
-import type { Middleware } from "./middleware.js";
 
 function normalizePrefix(prefix: string): string {
   // Remove trailing slash if present
@@ -24,7 +22,6 @@ export class KafkaRouter<
     Record<string, z.ZodTypeAny> | undefined,
     TCustomContext
   >[] = [];
-  private middleware: Middleware<BaseKafkaContext, BaseKafkaContext>[] = [];
 
   /** Type-only property to preserve topic->message type mapping */
   declare readonly _topicTypes: TTopicMap;
@@ -40,13 +37,6 @@ export class KafkaRouter<
         }
       }
     }
-  }
-
-  use<TContextIn extends BaseKafkaContext, TContextOut extends BaseKafkaContext>(
-    middleware: Middleware<TContextIn, TContextOut>,
-  ): this {
-    this.middleware.push(middleware as unknown as Middleware<BaseKafkaContext, BaseKafkaContext>);
-    return this;
   }
 
   /**
@@ -136,7 +126,6 @@ export class KafkaRouter<
       topic: normalizedPrefix ? `${normalizedPrefix}/${proc.topic}` : proc.topic,
     }));
     this.procedures.push(...mergedProcedures);
-    this.middleware.push(...router.middleware);
     return this;
   }
 
@@ -147,10 +136,6 @@ export class KafkaRouter<
     TCustomContext
   >[] {
     return this.procedures;
-  }
-
-  getMiddleware(): Middleware<BaseKafkaContext, BaseKafkaContext>[] {
-    return this.middleware;
   }
 
   get procedure(): BaseKafkaProcedureBuilder<
@@ -275,11 +260,7 @@ export function kafkaRouter<
   },
 >(
   config: TConfig,
-): KafkaRouter<TCustomContext, BuildTopicMap<TConfig>> & {
-  use<TContextIn extends BaseKafkaContext, TContextOut extends BaseKafkaContext>(
-    middleware: Middleware<TContextIn, TContextOut>,
-  ): KafkaRouter<TCustomContext, BuildTopicMap<TConfig>>;
-} {
+): KafkaRouter<TCustomContext, BuildTopicMap<TConfig>> {
   const routerInstance = new KafkaRouter<TCustomContext>();
 
   for (const [key, value] of Object.entries(config)) {
@@ -292,28 +273,7 @@ export function kafkaRouter<
     }
   }
 
-  type ReturnRouter = KafkaRouter<TCustomContext, BuildTopicMap<TConfig>> & {
-    use<TContextIn extends BaseKafkaContext, TContextOut extends BaseKafkaContext>(
-      middleware: Middleware<TContextIn, TContextOut>,
-    ): KafkaRouter<TCustomContext, BuildTopicMap<TConfig>>;
-  };
-
-  // Add use method that returns the router for chaining
-  const routerWithUse = routerInstance as unknown as ReturnRouter;
-
-  const originalUse = routerInstance.use.bind(routerInstance);
-
-  routerWithUse.use = function <
-    TContextIn extends BaseKafkaContext,
-    TContextOut extends BaseKafkaContext,
-  >(
-    middleware: Middleware<TContextIn, TContextOut>,
-  ): KafkaRouter<TCustomContext, BuildTopicMap<TConfig>> {
-    originalUse(middleware);
-    return routerInstance as unknown as KafkaRouter<TCustomContext, BuildTopicMap<TConfig>>;
-  };
-
-  return routerWithUse;
+  return routerInstance as unknown as KafkaRouter<TCustomContext, BuildTopicMap<TConfig>>;
 }
 
 export function createKafkaRouter<TCustomContext extends object = Record<string, never>>(
@@ -328,12 +288,8 @@ export function mergeKafkaRouters<TCustomContext extends object = Record<string,
   const mergedRouter = new KafkaRouter<TCustomContext>();
   for (const router of routers) {
     const routerProcedures = router.getProcedures();
-    const routerMiddleware = router.getMiddleware();
     for (const procedure of routerProcedures) {
       mergedRouter.register(procedure);
-    }
-    for (const middleware of routerMiddleware) {
-      mergedRouter.use(middleware);
     }
   }
   return mergedRouter;

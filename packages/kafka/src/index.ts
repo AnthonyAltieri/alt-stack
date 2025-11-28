@@ -34,7 +34,6 @@ export * from "./errors.js";
 // Middleware exports
 export { createMiddleware } from "./middleware.js";
 export type {
-  Middleware,
   MiddlewareFunction,
   MiddlewareBuilder,
   MiddlewareResult,

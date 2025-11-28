@@ -1,13 +1,11 @@
 import type { z } from "zod";
 import type {
-  BaseContext,
   InputConfig,
   Procedure,
   ReadyProcedure,
   PendingProcedure,
 } from "./types/index.js";
 import { BaseProcedureBuilder } from "./procedure-builder.js";
-import type { Middleware } from "./middleware.js";
 
 function normalizePrefix(prefix: string): string {
   // Remove trailing slash if present, ensure leading slash
@@ -27,7 +25,6 @@ export class Router<TCustomContext extends object = Record<string, never>> {
     Record<number, z.ZodTypeAny> | undefined,
     TCustomContext
   >[] = [];
-  private middleware: Middleware<BaseContext, BaseContext>[] = [];
 
   constructor(
     config?: Record<string, Router<TCustomContext> | Router<TCustomContext>[]>,
@@ -41,15 +38,6 @@ export class Router<TCustomContext extends object = Record<string, never>> {
         }
       }
     }
-  }
-
-  use<TContextIn extends BaseContext, TContextOut extends BaseContext>(
-    middleware: Middleware<TContextIn, TContextOut>,
-  ): this {
-    this.middleware.push(
-      middleware as unknown as Middleware<BaseContext, BaseContext>,
-    );
-    return this;
   }
 
   // Helper method to register a ReadyProcedure with a path
@@ -154,7 +142,6 @@ export class Router<TCustomContext extends object = Record<string, never>> {
       path: `${normalizedPrefix}${proc.path}`,
     }));
     this.procedures.push(...mergedProcedures);
-    this.middleware.push(...router.middleware);
     return this;
   }
 
@@ -165,10 +152,6 @@ export class Router<TCustomContext extends object = Record<string, never>> {
     TCustomContext
   >[] {
     return this.procedures;
-  }
-
-  getMiddleware(): Middleware<BaseContext, BaseContext>[] {
-    return this.middleware;
   }
 
   get procedure(): BaseProcedureBuilder<
@@ -232,11 +215,7 @@ export function router<
   },
 >(
   config: TConfig,
-): Router<TCustomContext> & {
-  use<TContextIn extends BaseContext, TContextOut extends BaseContext>(
-    middleware: Middleware<TContextIn, TContextOut>,
-  ): Router<TCustomContext>;
-} {
+): Router<TCustomContext> {
   const routerInstance = new Router<TCustomContext>();
 
   // Helper to check if a value is a methods object
@@ -286,24 +265,7 @@ export function router<
     }
   }
 
-  // Add use method that returns the router for chaining
-  const routerWithUse = routerInstance as Router<TCustomContext> & {
-    use<TContextIn extends BaseContext, TContextOut extends BaseContext>(
-      middleware: Middleware<TContextIn, TContextOut>,
-    ): Router<TCustomContext>;
-  };
-
-  const originalUse = routerInstance.use.bind(routerInstance);
-
-  routerWithUse.use = function <
-    TContextIn extends BaseContext,
-    TContextOut extends BaseContext,
-  >(middleware: Middleware<TContextIn, TContextOut>): Router<TCustomContext> {
-    originalUse(middleware);
-    return routerInstance;
-  };
-
-  return routerWithUse;
+  return routerInstance;
 }
 
 export function createRouter<
@@ -320,12 +282,8 @@ export function mergeRouters<
   const mergedRouter = new Router<TCustomContext>();
   for (const router of routers) {
     const routerProcedures = router.getProcedures();
-    const routerMiddleware = router.getMiddleware();
     for (const procedure of routerProcedures) {
       mergedRouter.register(procedure);
-    }
-    for (const middleware of routerMiddleware) {
-      mergedRouter.use(middleware);
     }
   }
   return mergedRouter;

@@ -2,7 +2,7 @@ import express from "express";
 import type { Express, Request, Response, NextFunction } from "express";
 import type { z } from "zod";
 import type { ZodError } from "zod";
-import type { TypedContext, InputConfig, BaseContext } from "@alt-stack/server-core";
+import type { TypedContext, InputConfig } from "@alt-stack/server-core";
 import type { Procedure } from "@alt-stack/server-core";
 import type { Router } from "@alt-stack/server-core";
 import {
@@ -57,71 +57,31 @@ export function createServer<TCustomContext extends object = Record<string, neve
   // Parse JSON bodies
   app.use(express.json());
 
-  // Collect all procedures and middleware from all routers
-  const allProcedures: Procedure<
+  // Collect all procedures from all routers
+  const procedures: Procedure<
     InputConfig,
     z.ZodTypeAny | undefined,
     Record<number, z.ZodTypeAny> | undefined,
     TCustomContext
   >[] = [];
-  const allMiddleware: Array<
-    (opts: {
-      ctx: BaseContext & TCustomContext;
-      next: () => Promise<(BaseContext & TCustomContext) | globalThis.Response>;
-    }) => Promise<(BaseContext & TCustomContext) | globalThis.Response>
-  > = [];
 
   for (const [prefix, routerOrRouters] of Object.entries(config)) {
     const routers = Array.isArray(routerOrRouters) ? routerOrRouters : [routerOrRouters];
 
     for (const router of routers) {
       const routerProcedures = router.getProcedures();
-      const routerMiddleware = router.getMiddleware();
 
       for (const procedure of routerProcedures) {
-        allProcedures.push({
+        procedures.push({
           ...procedure,
           path: normalizePath(prefix, procedure.path),
         });
       }
-
-      allMiddleware.push(...(routerMiddleware as typeof allMiddleware));
     }
   }
 
-  // Apply router-level middleware
-  for (const middleware of allMiddleware) {
-    app.use(async (req: Request, res: Response, next: NextFunction) => {
-      try {
-        const customContext = options?.createContext
-          ? await options.createContext(req, res)
-          : ({} as TCustomContext);
-        let baseCtx = { express: { req, res }, ...customContext } as BaseContext & TCustomContext;
-
-        const result = await middleware({
-          ctx: baseCtx,
-          next: async (opts?: { ctx: Partial<BaseContext & TCustomContext> }) => {
-            if (opts?.ctx) {
-              baseCtx = { ...baseCtx, ...opts.ctx } as BaseContext & TCustomContext;
-            }
-            return baseCtx;
-          },
-        });
-
-        if (result instanceof globalThis.Response) {
-          // Response already sent
-          return;
-        }
-
-        next();
-      } catch (error) {
-        next(error);
-      }
-    });
-  }
-
   // Register all procedures as Express routes
-  for (const procedure of allProcedures) {
+  for (const procedure of procedures) {
     const expressPath = convertPathToExpress(procedure.path);
 
     const handler = async (req: Request, res: Response, _next: NextFunction) => {

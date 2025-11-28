@@ -43,7 +43,6 @@ export async function createConsumer<
   await consumer.connect();
 
   const procedures = router.getProcedures();
-  const routerMiddleware = router.getMiddleware();
 
   // Get unique topics from procedures
   const topics = Array.from(new Set(procedures.map((p) => p.topic)));
@@ -168,23 +167,6 @@ export async function createConsumer<
             currentCtx = result as ProcedureContext;
             return currentCtx;
           };
-
-          // Run router middleware first
-          for (const middleware of routerMiddleware) {
-            const result = await middleware({
-              ctx: currentCtx as BaseKafkaContext,
-              next: async (opts?: { ctx: Partial<BaseKafkaContext> }) => {
-                if (opts?.ctx) {
-                  currentCtx = {
-                    ...currentCtx,
-                    ...opts.ctx,
-                  } as ProcedureContext;
-                }
-                return currentCtx as BaseKafkaContext;
-              },
-            });
-            currentCtx = result as ProcedureContext;
-          }
 
           // Run procedure middleware
           currentCtx = await runMiddleware();

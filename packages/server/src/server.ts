@@ -2,7 +2,7 @@ import type { Context, Hono } from "hono";
 import { Hono as HonoClass } from "hono";
 import type { z } from "zod";
 import type { ZodError } from "zod";
-import type { TypedContext, InputConfig, BaseContext } from "./types/index.js";
+import type { TypedContext, InputConfig } from "./types/index.js";
 import type { Procedure } from "./types/procedure.js";
 import type { Router } from "./router.js";
 import { validateInput } from "./validation.js";
@@ -92,19 +92,13 @@ export function createServer<
     }
   }
 
-  // Collect all procedures and middleware from all routers
-  const allProcedures: Procedure<
+  // Collect all procedures from all routers
+  const procedures: Procedure<
     InputConfig,
     z.ZodTypeAny | undefined,
     Record<number, z.ZodTypeAny> | undefined,
     TCustomContext
   >[] = [];
-  const allMiddleware: Array<
-    (opts: {
-      ctx: BaseContext & TCustomContext;
-      next: () => Promise<(BaseContext & TCustomContext) | Response>;
-    }) => Promise<(BaseContext & TCustomContext) | Response>
-  > = [];
 
   for (const [prefix, routerOrRouters] of Object.entries(config)) {
     const routers = Array.isArray(routerOrRouters)
@@ -113,47 +107,15 @@ export function createServer<
 
     for (const router of routers) {
       const routerProcedures = router.getProcedures();
-      const routerMiddleware = router.getMiddleware();
 
       // Add procedures with prefixed paths
       for (const procedure of routerProcedures) {
-        allProcedures.push({
+        procedures.push({
           ...procedure,
           path: normalizePath(prefix, procedure.path),
         });
       }
-
-      // Add middleware (cast to the expected type since we'll provide TCustomContext)
-      allMiddleware.push(...(routerMiddleware as typeof allMiddleware));
     }
-  }
-
-  const routerMiddleware = allMiddleware;
-  const procedures = allProcedures;
-
-  for (const middleware of routerMiddleware) {
-    app.use("*", async (c, next) => {
-      const customContext = options?.createContext
-        ? await options.createContext(c)
-        : ({} as TCustomContext);
-      let baseCtx = { hono: c, ...customContext } as BaseContext &
-        TCustomContext;
-      const result = await middleware({
-        ctx: baseCtx,
-        next: async (opts?: { ctx: Partial<BaseContext & TCustomContext> }) => {
-          // Merge context updates if provided (tRPC pattern)
-          if (opts?.ctx) {
-            baseCtx = { ...baseCtx, ...opts.ctx } as BaseContext &
-              TCustomContext;
-          }
-          await next();
-          return baseCtx;
-        },
-      });
-      if (result instanceof Response) {
-        return result;
-      }
-    });
   }
 
   for (const procedure of procedures) {

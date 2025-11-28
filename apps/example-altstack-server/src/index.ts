@@ -1,4 +1,3 @@
-import type { HonoBaseContext, Middleware } from "@alt-stack/server-hono";
 import { createDocsRouter, createServer, init, router } from "@alt-stack/server-hono";
 import type { Context } from "hono";
 import { z } from "zod";
@@ -467,27 +466,11 @@ export const adminRouter = router<AppContext>({
 });
 
 // ============================================================================
-// Router-Level Middleware
-// ============================================================================
-
-// Logging middleware for all routes
-const loggingMiddleware: Middleware<HonoBaseContext & AppContext> = async ({ ctx, next }) => {
-  const start = Date.now();
-  const result = await next();
-  const duration = Date.now() - start;
-  console.log(`[${ctx.hono.req.method}] ${ctx.hono.req.url} - ${duration}ms`);
-  return result;
-};
-
-// Apply middleware to todo router
-const todoRouterWithLogging = todoRouter.use(loggingMiddleware);
-
-// ============================================================================
 // Combine Routers
 // ============================================================================
 
 const appRouter = router<AppContext>({
-  todos: todoRouterWithLogging, // /todos/*
+  todos: todoRouter, // /todos/*
   users: userRouter, // /users/*
   admin: adminRouter, // /admin/*
 });

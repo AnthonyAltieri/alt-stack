@@ -1,5 +1,3 @@
-import type { BaseKafkaContext } from "./types.js";
-
 /**
  * Overwrites properties in TType with properties from TWith
  * Used to merge context types when middleware narrows context
@@ -141,14 +139,3 @@ function createMiddlewareFactory<TContext>() {
 export function createMiddleware<TContext>() {
   return createMiddlewareFactory<TContext>();
 }
-
-/**
- * Middleware type for router-level middleware
- */
-export type Middleware<
-  TContextIn extends BaseKafkaContext,
-  TContextOut extends BaseKafkaContext = TContextIn,
-> = (opts: {
-  ctx: TContextIn;
-  next: (opts?: { ctx: Partial<TContextOut> }) => Promise<TContextOut>;
-}) => Promise<TContextOut>;

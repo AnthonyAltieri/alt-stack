@@ -5,7 +5,6 @@ export type { InitOptions, InitResult } from "./init.js";
 export * from "./errors.js";
 export { createMiddleware, middlewareMarker } from "./middleware.js";
 export type {
-  Middleware,
   MiddlewareFunction,
   MiddlewareBuilder,
   MiddlewareResult,

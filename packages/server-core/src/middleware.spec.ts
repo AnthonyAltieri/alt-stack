@@ -1,6 +1,5 @@
 import { describe, it, expectTypeOf } from "vitest";
-import type { Middleware, Overwrite, MiddlewareResult } from "./middleware.js";
-import type { BaseContext, TypedContext } from "./types/context.js";
+import type { Overwrite, MiddlewareResult } from "./middleware.js";
 
 describe("Middleware Types", () => {
   describe("Overwrite", () => {
@@ -60,97 +59,6 @@ describe("Middleware Types", () => {
       expectTypeOf<Result>().toHaveProperty("marker");
       expectTypeOf<Result>().toHaveProperty("ok");
       expectTypeOf<Result>().toHaveProperty("data");
-    });
-  });
-
-  describe("Middleware (legacy type)", () => {
-    it("should accept valid middleware function", () => {
-      interface AppContext extends BaseContext {
-        user: { id: string; email: string } | null;
-      }
-
-      const middleware: Middleware<AppContext, AppContext> = async (opts) => {
-        const { ctx, next } = opts;
-
-        if (!ctx.user) {
-          return new Response("Unauthorized", { status: 401 });
-        }
-
-        return next();
-      };
-
-      expectTypeOf(middleware).toBeFunction();
-    });
-
-    it("should allow returning Response", () => {
-      interface AppContext extends BaseContext {
-        user: string | null;
-      }
-
-      const middleware: Middleware<AppContext> = async (opts) => {
-        const { ctx } = opts;
-
-        if (!ctx.user) {
-          return new Response("Unauthorized", { status: 401 });
-        }
-
-        return opts.next();
-      };
-
-      expectTypeOf(middleware).toBeFunction();
-    });
-
-    it("should support context extension via next", () => {
-      interface BaseCtx extends BaseContext {
-        user: { id: string; role: string } | null;
-      }
-
-      interface AuthedCtx extends BaseContext {
-        user: { id: string; role: string };
-      }
-
-      const authMiddleware: Middleware<BaseCtx, AuthedCtx> = async (opts) => {
-        const { ctx, next } = opts;
-        if (!ctx.user) {
-          return new Response("Unauthorized", { status: 401 });
-        }
-        return next({ ctx: { user: ctx.user } });
-      };
-
-      expectTypeOf(authMiddleware).toBeFunction();
-    });
-
-    it("should infer types when next called without args", () => {
-      interface AppContext extends BaseContext {
-        user: string;
-      }
-
-      const middleware: Middleware<AppContext> = async (opts) => {
-        const { next } = opts;
-        return next();
-      };
-
-      expectTypeOf(middleware).toBeFunction();
-    });
-
-    it("should work with typed context from procedure", () => {
-      interface AppContext {
-        user: { id: string } | null;
-      }
-
-      type Ctx = TypedContext<{}, undefined, AppContext> & BaseContext;
-
-      const middleware: Middleware<Ctx, Ctx> = async (opts) => {
-        const { ctx, next } = opts;
-
-        if (!ctx.user) {
-          return new Response("Unauthorized", { status: 401 });
-        }
-
-        return next({ ctx: { user: ctx.user } });
-      };
-
-      expectTypeOf(middleware).toBeFunction();
     });
   });
 });

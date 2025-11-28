@@ -19,7 +19,7 @@ A comprehensive example demonstrating all features of Altstack with the tRPC-sty
 
 ```typescript
 import { router, publicProcedure, init, createServer } from "@alt-stack/server-hono";
-import type { HonoBaseContext, Middleware } from "@alt-stack/server-hono";
+import type { HonoBaseContext } from "@alt-stack/server-hono";
 import type { Context } from "hono";
 import { z } from "zod";
 
@@ -485,30 +485,11 @@ export const adminRouter = router<AppContext>({
 });
 
 // ============================================================================
-// Router-Level Middleware
-// ============================================================================
-
-// Logging middleware for all routes
-const loggingMiddleware: Middleware<HonoBaseContext & AppContext> = async ({
-  ctx,
-  next,
-}) => {
-  const start = Date.now();
-  const result = await next();
-  const duration = Date.now() - start;
-  console.log(`[${ctx.hono.req.method}] ${ctx.hono.req.url} - ${duration}ms`);
-  return result;
-};
-
-// Apply middleware to todo router
-const todoRouterWithLogging = todoRouter.use(loggingMiddleware);
-
-// ============================================================================
 // Combine Routers
 // ============================================================================
 
 const appRouter = router<AppContext>({
-  todos: todoRouterWithLogging, // /todos/*
+  todos: todoRouter, // /todos/*
   users: userRouter, // /users/*
   admin: adminRouter, // /admin/*
 });
@@ -640,13 +621,7 @@ const adminProcedure = protectedProcedure
 ```
 Middleware can be chained to build up context and permissions.
 
-### 5. **Router-Level Middleware**
-```typescript
-const todoRouterWithLogging = todoRouter.use(loggingMiddleware);
-```
-Apply middleware to all routes in a router.
-
-### 6. **Nested Routers**
+### 5. **Nested Routers**
 ```typescript
 const appRouter = router<AppContext>({
   todos: todoRouterWithLogging, // /todos/*
@@ -656,7 +631,7 @@ const appRouter = router<AppContext>({
 ```
 Routers can be nested, and paths combine automatically.
 
-### 7. **Output Validation**
+### 6. **Output Validation**
 ```typescript
 .output(TodoSchema)
 ```

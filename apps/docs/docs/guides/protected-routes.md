@@ -128,67 +128,6 @@ export const protectedRouter = router({
 });
 ```
 
-## Router-Level Middleware Pattern
-
-You can also use router-level middleware to protect all routes in a router:
-
-```typescript
-import { router, publicProcedure, createMiddleware, init } from "@alt-stack/server-hono";
-import { z } from "zod";
-
-interface AppContext {
-  user: { id: string; email: string } | null;
-}
-
-const factory = init<AppContext>();
-
-// Middleware that requires authentication
-const requireAuth = createMiddleware<AppContext>(async ({ ctx, next }) => {
-  // ctx is automatically typed as BaseContext & AppContext
-  if (!ctx.user) {
-    return ctx.hono.json(
-      {
-        error: {
-          code: "UNAUTHORIZED",
-          message: "Authentication required",
-        },
-      },
-      401
-    ) as Response;
-  }
-  return next({ ctx: { user: ctx.user } });
-});
-
-// Use on router level (protects all routes)
-export const protectedRouter = router({
-  profile: factory.procedure
-    .input({})
-    .output(
-      z.object({
-        id: z.string(),
-        email: z.string(),
-      })
-    )
-    .get((opts) => {
-      const { ctx } = opts;
-      // Additional null check recommended for type safety
-      if (!ctx.user) {
-        throw ctx.error({
-          error: {
-            code: "UNAUTHORIZED" as const,
-            message: "Authentication required",
-          },
-        });
-      }
-
-      return {
-        id: ctx.user.id,
-        email: ctx.user.email,
-      };
-    }),
-}).use(requireAuth);
-```
-
 ## Mixed Public and Protected Routes
 
 You can mix public and protected routes in the same router:

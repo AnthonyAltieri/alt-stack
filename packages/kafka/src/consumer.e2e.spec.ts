@@ -281,51 +281,6 @@ describe("Consumer e2e", () => {
     await consumer.disconnect();
   });
 
-  it("should handle router middleware", async () => {
-    if (!container || !producer) {
-      throw new Error("Container or producer not initialized");
-    }
-
-    const topic = "middleware-topic";
-    const calls: string[] = [];
-
-    const router = kafkaRouter({
-      [topic]: publicProcedure
-        .input({
-          message: z.object({ id: z.string() }),
-        })
-        .subscribe(() => {
-          calls.push("handler");
-        }),
-    }).use(async ({ next }) => {
-      calls.push("router-middleware");
-      return next();
-    });
-
-    const consumer = await createConsumer(router, {
-      kafka: kafka!,
-      groupId: "middleware-group",
-    });
-
-    await waitForConsumerReady(consumer);
-
-    await producer.send({
-      topic,
-      messages: [
-        {
-          value: JSON.stringify({ id: "1" }),
-        },
-      ],
-    });
-
-    await createMessageWaiter(calls, 2);
-
-    expect(calls).toContain("router-middleware");
-    expect(calls).toContain("handler");
-
-    await consumer.disconnect();
-  });
-
   it("should handle procedure middleware", async () => {
     if (!container || !producer) {
       throw new Error("Container or producer not initialized");

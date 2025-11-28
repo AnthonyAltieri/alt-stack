@@ -1,48 +1,6 @@
 # Middleware
 
-Apply middleware at router-level or procedure-level to add cross-cutting concerns like authentication, logging, or rate limiting.
-
-## Router-Level Middleware
-
-Apply middleware to all routes in a router using the `.use()` method:
-
-```typescript
-import { router, publicProcedure, createMiddleware } from "@alt-stack/server-hono";
-import { z } from "zod";
-
-interface AppContext {
-  user: { id: string; name: string } | null;
-}
-
-const authMiddleware = createMiddleware<AppContext>(async ({ ctx, next }) => {
-  // ctx is automatically typed as BaseContext & AppContext
-  const user = await authenticate(ctx.hono.req);
-  if (!user) {
-    return ctx.hono.json({ error: "Unauthorized" }, 401);
-  }
-  // Extend context with user
-  return next({ ctx: { user } });
-});
-
-export const userRouter = router({
-  profile: publicProcedure
-    .input({})
-    .output(
-      z.object({
-        id: z.string(),
-        name: z.string(),
-      })
-    )
-    .get((opts) => {
-      // opts.ctx.user is typed (from authMiddleware)
-      const { ctx } = opts;
-      return {
-        id: ctx.user!.id,
-        name: ctx.user!.name,
-      };
-    }),
-}).use(authMiddleware);
-```
+Apply middleware to procedures to add cross-cutting concerns like authentication, logging, or rate limiting.
 
 ## Procedure-Level Middleware
 

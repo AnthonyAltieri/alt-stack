@@ -1,23 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import { Router, router, createRouter, mergeRouters } from "./router.js";
-import type { Middleware } from "./middleware.js";
-import type { BaseContext } from "./types/context.js";
 
 describe("Router", () => {
   describe("Router class", () => {
     it("should create an empty router", () => {
       const r = new Router();
       expect(r.getProcedures()).toEqual([]);
-      expect(r.getMiddleware()).toEqual([]);
-    });
-
-    it("should register middleware", () => {
-      const r = new Router();
-      const middleware: Middleware<BaseContext, BaseContext> = async ({ next }) => next();
-      r.use(middleware);
-
-      expect(r.getMiddleware()).toHaveLength(1);
     });
 
     it("should merge nested routers from config", () => {
@@ -117,14 +106,6 @@ describe("Router", () => {
       expect(r.getProcedures()).toHaveLength(1);
       expect(r.getProcedures()[0]?.path).toBe("/prefix/nested");
     });
-
-    it("should support use method for middleware", () => {
-      const middleware: Middleware<BaseContext, BaseContext> = async ({ next }) => next();
-
-      const r = router({}).use(middleware);
-
-      expect(r.getMiddleware()).toHaveLength(1);
-    });
   });
 
   describe("createRouter function", () => {
@@ -162,21 +143,6 @@ describe("Router", () => {
       const merged = mergeRouters(router1, router2);
 
       expect(merged.getProcedures()).toHaveLength(2);
-    });
-
-    it("should merge middleware from all routers", () => {
-      const mw1: Middleware<BaseContext, BaseContext> = async ({ next }) => next();
-      const mw2: Middleware<BaseContext, BaseContext> = async ({ next }) => next();
-
-      const router1 = new Router();
-      router1.use(mw1);
-
-      const router2 = new Router();
-      router2.use(mw2);
-
-      const merged = mergeRouters(router1, router2);
-
-      expect(merged.getMiddleware()).toHaveLength(2);
     });
   });
 
