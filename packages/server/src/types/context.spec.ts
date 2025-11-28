@@ -11,42 +11,52 @@ import type { Context } from "hono";
 
 describe("Context Types", () => {
   describe("InferInput", () => {
-    it("should infer empty object when no input config provided", () => {
+    it("should infer structured object when no input config provided", () => {
       type EmptyInput = InferInput<{}>;
-      expectTypeOf<EmptyInput>().toEqualTypeOf<{}>();
+      expectTypeOf<EmptyInput>().toEqualTypeOf<{
+        params: undefined;
+        query: undefined;
+        body: undefined;
+      }>();
     });
 
     it("should infer params from input config", () => {
       type Input = InferInput<{
         params: z.ZodObject<{ id: z.ZodString }>;
       }>;
-      expectTypeOf<Input>().toMatchTypeOf<{ id: string }>();
+      expectTypeOf<Input["params"]>().toMatchTypeOf<{ id: string }>();
+      expectTypeOf<Input["query"]>().toEqualTypeOf<undefined>();
+      expectTypeOf<Input["body"]>().toEqualTypeOf<undefined>();
     });
 
     it("should infer query from input config", () => {
       type Input = InferInput<{
         query: z.ZodObject<{ page: z.ZodNumber }>;
       }>;
-      expectTypeOf<Input>().toMatchTypeOf<{ page: number }>();
+      expectTypeOf<Input["params"]>().toEqualTypeOf<undefined>();
+      expectTypeOf<Input["query"]>().toMatchTypeOf<{ page: number }>();
+      expectTypeOf<Input["body"]>().toEqualTypeOf<undefined>();
     });
 
     it("should infer body from input config", () => {
       type Input = InferInput<{
         body: z.ZodObject<{ title: z.ZodString }>;
       }>;
-      expectTypeOf<Input>().toMatchTypeOf<{ title: string }>();
+      expectTypeOf<Input["params"]>().toEqualTypeOf<undefined>();
+      expectTypeOf<Input["query"]>().toEqualTypeOf<undefined>();
+      expectTypeOf<Input["body"]>().toMatchTypeOf<{ title: string }>();
     });
 
-    it("should merge params, query, and body", () => {
+    it("should have separate params, query, and body properties", () => {
       type Input = InferInput<{
         params: z.ZodObject<{ id: z.ZodString }>;
         query: z.ZodObject<{ page: z.ZodNumber }>;
         body: z.ZodObject<{ title: z.ZodString }>;
       }>;
       expectTypeOf<Input>().toMatchTypeOf<{
-        id: string;
-        page: number;
-        title: string;
+        params: { id: string };
+        query: { page: number };
+        body: { title: string };
       }>();
     });
   });
@@ -98,7 +108,7 @@ describe("Context Types", () => {
       expectTypeOf<Ctx>().toMatchTypeOf<{
         hono: Context;
         user: { id: string; email: string };
-        input: {};
+        input: { params: undefined; query: undefined; body: undefined };
       }>();
     });
 
@@ -112,8 +122,9 @@ describe("Context Types", () => {
       >;
 
       expectTypeOf<Ctx["input"]>().toMatchTypeOf<{
-        id: string;
-        page: number;
+        params: { id: string };
+        query: { page: number };
+        body: undefined;
       }>();
     });
 
@@ -157,7 +168,7 @@ describe("Context Types", () => {
         hono: Context;
         user: { id: string } | null;
         session: string;
-        input: { id: string };
+        input: { params: { id: string }; query: undefined; body: undefined };
         error: (error: { message: string }) => never;
       }>();
     });

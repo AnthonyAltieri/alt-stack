@@ -32,7 +32,7 @@ import type {
   AcceptsStringInput,
   InferInput,
   ErrorUnion,
-} from "./types.js";
+} from "./types/index.js";
 
 // Type testing utilities
 type Equal<X, Y> =
@@ -96,20 +96,20 @@ type MergedInput = {
   }>;
 };
 
-// Test InferInput - verify properties exist on inferred types
-// Note: Intersection types don't simplify, so we check property existence using a more lenient check
+// Test InferInput - verify properties exist in structured output
+// InferInput now returns { params, query, body } structure instead of flat intersection
 type TestInferInputWithParams = Expect<
-  IsAssignable<{ id: string }, InferInput<ParamsOnly>>
+  IsAssignable<{ id: string }, InferInput<ParamsOnly>["params"]>
 >;
 type TestInferInputWithQuery = Expect<
-  IsAssignable<{ limit?: string }, InferInput<QueryOnly>>
+  IsAssignable<{ limit?: string }, InferInput<QueryOnly>["query"]>
 >;
 type TestInferInputWithBody = Expect<
-  IsAssignable<{ name: string; age: number }, InferInput<BodyOnly>>
+  IsAssignable<{ name: string; age: number }, InferInput<BodyOnly>["body"]>
 >;
 type TestInferInputMerged = Expect<
   IsAssignable<
-    { id: string; limit?: string; name: string },
+    { params: { id: string }; query: { limit?: string }; body: { name: string } },
     InferInput<MergedInput>
   >
 >;

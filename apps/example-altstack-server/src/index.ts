@@ -111,20 +111,20 @@ export const todoRouter = router<AppContext>({
       .output(z.array(TodoSchema))
       .handler((opts) => {
         const { input } = opts;
-        // ✅ input.completed is typed as "true" | "false" | undefined
-        // ✅ input.limit and input.offset are typed
+        // ✅ input.query.completed is typed as "true" | "false" | undefined
+        // ✅ input.query.limit and input.query.offset are typed
         let todos = getAllTodos();
 
-        if (input.completed === "true") {
+        if (input.query.completed === "true") {
           todos = todos.filter((t) => t.completed);
-        } else if (input.completed === "false") {
+        } else if (input.query.completed === "false") {
           todos = todos.filter((t) => !t.completed);
         }
 
-        if (input.limit) {
+        if (input.query.limit) {
           todos = todos.slice(
-            input.offset ?? 0,
-            (input.offset ?? 0) + input.limit,
+            input.query.offset ?? 0,
+            (input.query.offset ?? 0) + input.query.limit,
           );
         }
 
@@ -143,13 +143,13 @@ export const todoRouter = router<AppContext>({
       // ✅ 500 internal server error is also automatically included
       .handler((opts) => {
         const { input, ctx } = opts;
-        // ✅ input.title is string (min 1, max 200)
-        // ✅ input.description is string | undefined (max 1000)
+        // ✅ input.body.title is string (min 1, max 200)
+        // ✅ input.body.description is string | undefined (max 1000)
         // ✅ ctx.user is guaranteed non-null (from middleware)
 
         const todo = createTodo({
-          title: input.title,
-          description: input.description,
+          title: input.body.title,
+          description: input.body.description,
           userId: ctx.user!.id,
         });
 
@@ -179,8 +179,8 @@ export const todoRouter = router<AppContext>({
       })
       .handler((opts) => {
         const { input, ctx } = opts;
-        // ✅ input.id is typed as string (from params)
-        const todo = getTodoById(input.id);
+        // ✅ input.params.id is typed as string (from params)
+        const todo = getTodoById(input.params.id);
 
         if (!todo) {
           throw ctx.error({
@@ -188,7 +188,7 @@ export const todoRouter = router<AppContext>({
             // ✅ Status code (404) is automatically inferred!
             error: {
               code: "NOT_FOUND",
-              message: `Todo with id ${input.id} not found`,
+              message: `Todo with id ${input.params.id} not found`,
             },
           });
         }
@@ -238,16 +238,16 @@ export const todoRouter = router<AppContext>({
       .handler((opts) => {
         const { input, ctx } = opts;
         // ✅ All inputs are available and typed:
-        // input.id (from params)
-        // input.notify (from query, optional)
-        // input.title, input.description, input.completed (from body, all optional)
+        // input.params.id (from params)
+        // input.query.notify (from query, optional)
+        // input.body.title, input.body.description, input.body.completed (from body, all optional)
 
-        const todo = getTodoById(input.id);
+        const todo = getTodoById(input.params.id);
         if (!todo) {
           throw ctx.error({
             error: {
               code: "NOT_FOUND",
-              message: `Todo with id ${input.id} not found`,
+              message: `Todo with id ${input.params.id} not found`,
             },
           });
         }
@@ -262,13 +262,13 @@ export const todoRouter = router<AppContext>({
           });
         }
 
-        const updated = updateTodo(input.id, {
-          title: input.title,
-          description: input.description,
-          completed: input.completed,
+        const updated = updateTodo(input.params.id, {
+          title: input.body.title,
+          description: input.body.description,
+          completed: input.body.completed,
         });
 
-        if (input.notify) {
+        if (input.query.notify) {
           // Send notification
         }
 
@@ -296,17 +296,17 @@ export const todoRouter = router<AppContext>({
       })
       .handler((opts) => {
         const { input, ctx } = opts;
-        const todo = getTodoById(input.id);
+        const todo = getTodoById(input.params.id);
         if (!todo) {
           throw ctx.error({
             error: {
               code: "NOT_FOUND",
-              message: `Todo with id ${input.id} not found`,
+              message: `Todo with id ${input.params.id} not found`,
             },
           });
         }
 
-        deleteTodo(input.id);
+        deleteTodo(input.params.id);
         return { success: true };
       }),
   },
@@ -332,16 +332,16 @@ export const todoRouter = router<AppContext>({
     })
     .patch((opts) => {
       const { input } = opts;
-      const todo = getTodoById(input.id);
+      const todo = getTodoById(input.params.id);
       if (!todo) {
         throw opts.ctx.error({
           error: {
             code: "NOT_FOUND",
-            message: `Todo with id ${input.id} not found`,
+            message: `Todo with id ${input.params.id} not found`,
           },
         });
       }
-      return updateTodo(input.id, { completed: input.completed });
+      return updateTodo(input.params.id, { completed: input.body.completed });
     }),
 });
 
@@ -390,12 +390,12 @@ export const userRouter = router<AppContext>({
     })
     .get((opts) => {
       const { input, ctx } = opts;
-      const user = getUserById(input.id);
+      const user = getUserById(input.params.id);
       if (!user) {
         throw ctx.error({
           error: {
             code: "NOT_FOUND",
-            message: `User with id ${input.id} not found`,
+            message: `User with id ${input.params.id} not found`,
           },
         });
       }
@@ -424,8 +424,8 @@ export const adminRouter = router<AppContext>({
     .get((opts) => {
       const { input } = opts;
       let users = getAllUsers();
-      if (input.role) {
-        users = users.filter((u) => u.role === input.role);
+      if (input.query.role) {
+        users = users.filter((u) => u.role === input.query.role);
       }
       return users;
     }),
@@ -452,16 +452,16 @@ export const adminRouter = router<AppContext>({
     })
     .delete((opts) => {
       const { input, ctx } = opts;
-      const user = getUserById(input.id);
+      const user = getUserById(input.params.id);
       if (!user) {
         throw ctx.error({
           error: {
             code: "NOT_FOUND",
-            message: `User with id ${input.id} not found`,
+            message: `User with id ${input.params.id} not found`,
           },
         });
       }
-      deleteUser(input.id);
+      deleteUser(input.params.id);
       return { success: true };
     }),
 });
@@ -471,10 +471,7 @@ export const adminRouter = router<AppContext>({
 // ============================================================================
 
 // Logging middleware for all routes
-const loggingMiddleware: Middleware<BaseContext & AppContext> = async ({
-  ctx,
-  next,
-}) => {
+const loggingMiddleware: Middleware<BaseContext & AppContext> = async ({ ctx, next }) => {
   const start = Date.now();
   const result = await next();
   const duration = Date.now() - start;
@@ -558,11 +555,7 @@ function getTodoById(id: string): Todo | null {
   return db.todos.get(id) ?? null;
 }
 
-function createTodo(data: {
-  title: string;
-  description?: string;
-  userId: string;
-}): Todo {
+function createTodo(data: { title: string; description?: string; userId: string }): Todo {
   const todo: Todo = {
     id: crypto.randomUUID(),
     title: data.title,

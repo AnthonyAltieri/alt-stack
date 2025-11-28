@@ -69,7 +69,7 @@ describe("generateOpenAPISpec", () => {
         }),
       })
       .handler((ctx) => {
-        return { id: ctx.input.id, name: "Test" };
+        return { id: ctx.input.params.id, name: "Test" };
       });
 
     const spec = generateOpenAPISpec({ api: router });

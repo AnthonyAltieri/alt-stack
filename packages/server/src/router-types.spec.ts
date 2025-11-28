@@ -46,8 +46,8 @@ const testValidPathParams = <T extends typeof createRouter>(router: T) => {
       output: z.object({ id: z.string() }),
     })
     .handler((ctx) => {
-      // ctx.input.id should be string
-      const id: string = ctx.input.id;
+      // ctx.input.params.id should be string
+      const id: string = ctx.input.params.id;
       return { id };
     });
 };
@@ -65,7 +65,7 @@ const testValidPathParams = <T extends typeof createRouter>(router: T) => {
 //       output: z.object({ id: z.string() }),
 //     })
 //     .handler((ctx) => {
-//       return { id: ctx.input.name };
+//       return { id: ctx.input.params.name };
 //     });
 // };
 
@@ -81,7 +81,7 @@ const testParamsWithString = <T extends typeof createRouter>(router: T) => {
       output: z.object({ id: z.string() }),
     })
     .handler((ctx) => {
-      return { id: ctx.input.id };
+      return { id: ctx.input.params.id };
     });
 };
 
@@ -97,7 +97,7 @@ const testParamsWithCoerce = <T extends typeof createRouter>(router: T) => {
       output: z.object({ id: z.number() }),
     })
     .handler((ctx) => {
-      const id: number = ctx.input.id;
+      const id: number = ctx.input.params.id;
       return { id };
     });
 };
@@ -114,7 +114,7 @@ const testQueryWithString = <T extends typeof createRouter>(router: T) => {
       output: z.object({ limit: z.string() }),
     })
     .handler((ctx) => {
-      const limit: string = ctx.input.limit;
+      const limit: string = ctx.input.query.limit;
       return { limit };
     });
 };
@@ -131,7 +131,7 @@ const testQueryWithCoerce = <T extends typeof createRouter>(router: T) => {
       output: z.object({ limit: z.number() }),
     })
     .handler((ctx) => {
-      const limit: number = ctx.input.limit;
+      const limit: number = ctx.input.query.limit;
       return { limit };
     });
 };
@@ -148,7 +148,7 @@ const testBodyWithNumber = <T extends typeof createRouter>(router: T) => {
       output: z.object({ age: z.number() }),
     })
     .handler((ctx) => {
-      const age: number = ctx.input.age;
+      const age: number = ctx.input.body.age;
       return { age };
     });
 };
@@ -180,7 +180,7 @@ const testErrorThrowing = <T extends typeof createRouter>(router: T) => {
           message: "User not found",
         },
       });
-      return { id: ctx.input.id };
+      return { id: ctx.input.params.id };
     });
 };
 
@@ -203,9 +203,9 @@ const testInputInference = <T extends typeof createRouter>(router: T) => {
     })
     .handler((ctx) => {
       // All should be properly typed
-      const id: string = ctx.input.id;
-      const _limit: number | undefined = ctx.input.limit;
-      const _name: string = ctx.input.name;
+      const id: string = ctx.input.params.id;
+      const _limit: number | undefined = ctx.input.query.limit;
+      const _name: string = ctx.input.body.name;
       return { id };
     });
 };

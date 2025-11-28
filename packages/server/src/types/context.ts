@@ -16,21 +16,23 @@ export interface InputConfig {
   body?: z.ZodTypeAny;
 }
 
-export type InferInput<T extends InputConfig> = (T extends { params: infer P }
-  ? P extends z.ZodTypeAny
-    ? z.infer<P>
-    : {}
-  : {}) &
-  (T extends { query: infer Q }
+export type InferInput<T extends InputConfig> = {
+  params: T extends { params: infer P }
+    ? P extends z.ZodTypeAny
+      ? z.infer<P>
+      : undefined
+    : undefined;
+  query: T extends { query: infer Q }
     ? Q extends z.ZodTypeAny
       ? z.infer<Q>
-      : {}
-    : {}) &
-  (T extends { body: infer B }
+      : undefined
+    : undefined;
+  body: T extends { body: infer B }
     ? B extends z.ZodTypeAny
       ? z.infer<B>
-      : {}
-    : {});
+      : undefined
+    : undefined;
+};
 
 export interface BaseContext {
   hono: Context;

@@ -51,14 +51,22 @@ export function mergeInputs(
   };
 }
 
+export interface StructuredInput {
+  params: unknown;
+  query: unknown;
+  body: unknown;
+}
+
 export async function validateInput<T extends InputConfig>(
   config: T,
   params: Record<string, unknown>,
   query: Record<string, unknown>,
   body: unknown,
-): Promise<Record<string, unknown>> {
-  const validated: Record<string, unknown> = {};
+): Promise<StructuredInput> {
   const validationErrors: Array<[z.ZodError, "body" | "param" | "query", unknown]> = [];
+  let validatedParams: unknown = undefined;
+  let validatedQuery: unknown = undefined;
+  let validatedBody: unknown = undefined;
 
   if (config.params) {
     const result = await parseSchema(config.params, params);
@@ -68,7 +76,7 @@ export async function validateInput<T extends InputConfig>(
         validationErrors.push([zodError, "param", params]);
       }
     } else {
-      Object.assign(validated, result.data);
+      validatedParams = result.data;
     }
   }
 
@@ -80,7 +88,7 @@ export async function validateInput<T extends InputConfig>(
         validationErrors.push([zodError, "query", query]);
       }
     } else {
-      Object.assign(validated, result.data);
+      validatedQuery = result.data;
     }
   }
 
@@ -92,11 +100,7 @@ export async function validateInput<T extends InputConfig>(
         validationErrors.push([zodError, "body", body]);
       }
     } else {
-      if (result.data && typeof result.data === "object" && !Array.isArray(result.data)) {
-        Object.assign(validated, result.data);
-      } else {
-        validated.body = result.data;
-      }
+      validatedBody = result.data;
     }
   }
 
@@ -110,6 +114,10 @@ export async function validateInput<T extends InputConfig>(
     );
   }
 
-  return validated;
+  return {
+    params: validatedParams,
+    query: validatedQuery,
+    body: validatedBody,
+  };
 }
 

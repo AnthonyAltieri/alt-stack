@@ -19,7 +19,7 @@ describe("server", () => {
         }),
       })
       .handler((ctx) => {
-        return { id: ctx.input.id, name: "Test" };
+        return { id: ctx.input.params.id, name: "Test" };
       });
 
     const app = createServer({ test: router });
@@ -49,7 +49,7 @@ describe("server", () => {
         },
       })
       .handler((ctx) => {
-        if (ctx.input.id === "invalid") {
+        if (ctx.input.params.id === "invalid") {
           throw ctx.error({
             error: {
               code: "NOT_FOUND",
@@ -57,7 +57,7 @@ describe("server", () => {
             },
           });
         }
-        return { id: ctx.input.id };
+        return { id: ctx.input.params.id };
       });
 
     const app = createServer({ test: router });
@@ -79,7 +79,7 @@ describe("server", () => {
         }),
       })
       .handler((ctx) => {
-        return { id: ctx.input.id };
+        return { id: ctx.input.params.id };
       });
 
     const postsRouter = t

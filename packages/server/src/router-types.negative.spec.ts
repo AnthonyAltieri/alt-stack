@@ -30,7 +30,7 @@ const testMissingPathParam = <T extends typeof createRouter>(router: T) => {
       output: z.object({ id: z.string() }),
     })
     .handler((ctx) => {
-      return { id: ctx.input.name };
+      return { id: ctx.input.params.name };
     });
 };
 
@@ -48,7 +48,7 @@ const testMissingRequiredParam = <T extends typeof createRouter>(router: T) => {
       output: z.object({ id: z.string() }),
     })
     .handler((ctx) => {
-      return { id: ctx.input.id };
+      return { id: ctx.input.params.id };
     });
 };
 
@@ -79,7 +79,7 @@ const testWrongErrorType = <T extends typeof createRouter>(router: T) => {
           message: "Bad request",
         },
       });
-      return { id: ctx.input.id };
+      return { id: ctx.input.params.id };
     });
 };
 
@@ -95,9 +95,9 @@ const testNonExistentProperty = <T extends typeof createRouter>(router: T) => {
       output: z.object({ id: z.string() }),
     })
     .handler((ctx) => {
-      // @ts-expect-error - 'name' doesn't exist in input
-      const _name: string = ctx.input.name;
-      return { id: ctx.input.id };
+      // @ts-expect-error - 'name' doesn't exist in input.params
+      const _name: string = ctx.input.params.name;
+      return { id: ctx.input.params.id };
     });
 };
 
@@ -113,9 +113,9 @@ const testWrongTypeAssignment = <T extends typeof createRouter>(router: T) => {
       output: z.object({ id: z.string() }),
     })
     .handler((ctx) => {
-      // @ts-expect-error - ctx.input.id is string, not number
-      const _id: number = ctx.input.id;
-      return { id: ctx.input.id };
+      // @ts-expect-error - ctx.input.params.id is string, not number
+      const _id: number = ctx.input.params.id;
+      return { id: ctx.input.params.id };
     });
 };
 
