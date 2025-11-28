@@ -102,13 +102,73 @@ const result = await client.get("/users/{id}", {
 });
 ```
 
-Retries are automatically performed for:
+By default, retries are automatically performed for:
 - Network errors
-- Server errors (5xx status codes)
 
-Retries are **not** performed for:
+Retries are **not** performed by default for:
 - Validation errors
 - Client errors (4xx status codes)
+- Server errors (5xx status codes) - these are valid HTTP responses
+
+### Custom Retry Logic
+
+Use the `shouldRetry` option to customize retry behavior:
+
+```typescript
+const result = await client.get("/users/{id}", {
+  params: { id: "123" },
+  retries: 3,
+  shouldRetry: ({ attempt, error, response }) => {
+    // Retry on 5xx server errors
+    if (response?.status >= 500) return true;
+    // Retry on rate limiting
+    if (response?.status === 429) return true;
+    // Retry on network errors
+    if (error) return true;
+    return false;
+  },
+});
+```
+
+The `shouldRetry` callback receives a context object with:
+- `attempt` - Current attempt number (0-indexed)
+- `error` - Error thrown during request (network errors, timeouts)
+- `response` - HTTP response received (status, statusText, data)
+
+#### Examples
+
+**Retry on 5xx server errors:**
+
+```typescript
+shouldRetry: ({ response }) => response?.status !== undefined && response.status >= 500
+```
+
+**Limit retries regardless of `retries` option:**
+
+```typescript
+shouldRetry: ({ attempt }) => attempt < 2
+```
+
+**Retry on specific error codes:**
+
+```typescript
+shouldRetry: ({ response }) => {
+  const retryableCodes = [500, 502, 503, 504, 429];
+  return response?.status !== undefined && retryableCodes.includes(response.status);
+}
+```
+
+**Custom logic combining error and response:**
+
+```typescript
+shouldRetry: ({ error, response }) => {
+  // Always retry network errors
+  if (error) return true;
+  // Retry rate limits and server errors
+  if (response?.status === 429 || (response?.status ?? 0) >= 500) return true;
+  return false;
+}
+```
 
 ## Timeouts
 

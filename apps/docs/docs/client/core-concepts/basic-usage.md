@@ -89,6 +89,19 @@ const result = await client.get("/users/{id}", {
   },
   timeout: 5000, // milliseconds
   retries: 3, // number of retry attempts
+  shouldRetry: ({ response }) => response?.status >= 500, // custom retry logic
 });
 ```
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `params` | `object` | Path parameters to interpolate into the URL |
+| `query` | `object` | Query parameters to append to the URL |
+| `body` | `object` | Request body (for POST, PUT, PATCH) |
+| `headers` | `object` | Additional headers to include |
+| `timeout` | `number` | Request timeout in milliseconds |
+| `retries` | `number` | Number of retry attempts |
+| `shouldRetry` | `function` | Custom retry logic callback |
+
+See [Error Handling](./error-handling.md#custom-retry-logic) for more details on `shouldRetry`.
 

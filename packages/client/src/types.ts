@@ -8,12 +8,11 @@ import type { z } from "zod";
  * Extracts path parameters from an endpoint string
  * @example ExtractPathParams<'/users/{id}/posts/{postId}'> → 'id' | 'postId'
  */
-export type ExtractPathParams<T extends string> =
-  T extends `${string}{${infer Param}}${infer Rest}`
-    ? Param extends `${infer Key}`
-      ? Key | ExtractPathParams<Rest>
-      : ExtractPathParams<Rest>
-    : never;
+export type ExtractPathParams<T extends string> = T extends `${string}{${infer Param}}${infer Rest}`
+  ? Param extends `${infer Key}`
+    ? Key | ExtractPathParams<Rest>
+    : ExtractPathParams<Rest>
+  : never;
 
 // ============================================================================
 // Request Type Extraction
@@ -101,10 +100,7 @@ export type EndpointsWithMethod<
  * Extracts all status codes from Response object for an endpoint/method
  */
 export type ExtractStatusCodes<
-  TResponse extends Record<
-    string,
-    Record<string, Record<string, z.ZodTypeAny>>
-  >,
+  TResponse extends Record<string, Record<string, Record<string, z.ZodTypeAny>>>,
   TEndpoint extends keyof TResponse,
   TMethod extends keyof TResponse[TEndpoint],
 > =
@@ -116,10 +112,7 @@ export type ExtractStatusCodes<
  * Extracts success status codes (2xx) from Response object
  */
 export type ExtractSuccessCodes<
-  TResponse extends Record<
-    string,
-    Record<string, Record<string, z.ZodTypeAny>>
-  >,
+  TResponse extends Record<string, Record<string, Record<string, z.ZodTypeAny>>>,
   TEndpoint extends keyof TResponse,
   TMethod extends keyof TResponse[TEndpoint],
 > =
@@ -135,10 +128,7 @@ export type ExtractSuccessCodes<
  * Extracts error status codes (non-2xx) from Response object
  */
 export type ExtractErrorCodes<
-  TResponse extends Record<
-    string,
-    Record<string, Record<string, z.ZodTypeAny>>
-  >,
+  TResponse extends Record<string, Record<string, Record<string, z.ZodTypeAny>>>,
   TEndpoint extends keyof TResponse,
   TMethod extends keyof TResponse[TEndpoint],
 > =
@@ -154,10 +144,7 @@ export type ExtractErrorCodes<
  * Extracts response schema for a specific status code
  */
 export type ExtractResponseSchema<
-  TResponse extends Record<
-    string,
-    Record<string, Record<string, z.ZodTypeAny>>
-  >,
+  TResponse extends Record<string, Record<string, Record<string, z.ZodTypeAny>>>,
   TEndpoint extends keyof TResponse,
   TMethod extends keyof TResponse[TEndpoint],
   TCode extends string,
@@ -172,24 +159,14 @@ export type ExtractResponseSchema<
  * Infers the success response body type (uses first success code, typically 200)
  */
 export type ExtractSuccessBody<
-  TResponse extends Record<
-    string,
-    Record<string, Record<string, z.ZodTypeAny>>
-  >,
+  TResponse extends Record<string, Record<string, Record<string, z.ZodTypeAny>>>,
   TEndpoint extends keyof TResponse,
   TMethod extends keyof TResponse[TEndpoint],
 > =
   ExtractSuccessCodes<TResponse, TEndpoint, TMethod> extends infer SuccessCode
     ? SuccessCode extends string
-      ? ExtractResponseSchema<
-          TResponse,
-          TEndpoint,
-          TMethod,
-          SuccessCode
-        > extends z.ZodTypeAny
-        ? z.infer<
-            ExtractResponseSchema<TResponse, TEndpoint, TMethod, SuccessCode>
-          >
+      ? ExtractResponseSchema<TResponse, TEndpoint, TMethod, SuccessCode> extends z.ZodTypeAny
+        ? z.infer<ExtractResponseSchema<TResponse, TEndpoint, TMethod, SuccessCode>>
         : never
       : never
     : never;
@@ -229,20 +206,13 @@ export type UnexpectedErrorResponse = {
  * Builds the complete discriminated union response type
  */
 export type ApiResponse<
-  TResponse extends Record<
-    string,
-    Record<string, Record<string, z.ZodTypeAny>>
-  >,
+  TResponse extends Record<string, Record<string, Record<string, z.ZodTypeAny>>>,
   TEndpoint extends string,
   TMethod extends string,
 > = TEndpoint extends keyof TResponse
   ? TMethod extends keyof TResponse[TEndpoint]
     ? // Success responses (one per success code)
-        | (ExtractSuccessCodes<
-            TResponse,
-            TEndpoint,
-            TMethod
-          > extends infer SuccessCode
+        | (ExtractSuccessCodes<TResponse, TEndpoint, TMethod> extends infer SuccessCode
             ? SuccessCode extends string
               ? ExtractResponseSchema<
                   TResponse,
@@ -251,25 +221,14 @@ export type ApiResponse<
                   SuccessCode
                 > extends z.ZodTypeAny
                 ? SuccessResponse<
-                    z.infer<
-                      ExtractResponseSchema<
-                        TResponse,
-                        TEndpoint,
-                        TMethod,
-                        SuccessCode
-                      >
-                    >,
+                    z.infer<ExtractResponseSchema<TResponse, TEndpoint, TMethod, SuccessCode>>,
                     SuccessCode
                   >
                 : never
               : never
             : never)
         // Error responses (one per error code)
-        | (ExtractErrorCodes<
-            TResponse,
-            TEndpoint,
-            TMethod
-          > extends infer ErrorCodes
+        | (ExtractErrorCodes<TResponse, TEndpoint, TMethod> extends infer ErrorCodes
             ? ErrorCodes extends string
               ? ExtractResponseSchema<
                   TResponse,
@@ -278,14 +237,7 @@ export type ApiResponse<
                   ErrorCodes
                 > extends z.ZodTypeAny
                 ? ErrorResponse<
-                    z.infer<
-                      ExtractResponseSchema<
-                        TResponse,
-                        TEndpoint,
-                        TMethod,
-                        ErrorCodes
-                      >
-                    >,
+                    z.infer<ExtractResponseSchema<TResponse, TEndpoint, TMethod, ErrorCodes>>,
                     ErrorCodes
                   >
                 : never
@@ -301,6 +253,18 @@ export type ApiResponse<
 // ============================================================================
 
 /**
+ * Context passed to shouldRetry callback
+ */
+export type RetryContext = {
+  /** Current attempt number (0-indexed) */
+  attempt: number;
+  /** Error thrown during request (network errors, timeouts, etc.) */
+  error?: unknown;
+  /** HTTP response received (for retrying based on status codes) */
+  response?: { status: number; statusText: string; data: unknown };
+};
+
+/**
  * Request options with conditional required fields
  */
 export type RequestOptions<
@@ -311,6 +275,8 @@ export type RequestOptions<
   timeout?: number;
   retries?: number;
   headers?: Record<string, unknown>;
+  /** Custom retry logic - return true to retry, false to stop */
+  shouldRetry?: (context: RetryContext) => boolean;
 } & (ExtractRequestQuery<TRequest, TEndpoint, TMethod> extends never
   ? { query?: never }
   : { query?: ExtractRequestQuery<TRequest, TEndpoint, TMethod> }) &

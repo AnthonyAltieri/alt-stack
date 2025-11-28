@@ -7,6 +7,7 @@ import type {
   ErrorResponse,
   UnexpectedErrorResponse,
   EndpointsWithMethod,
+  RetryContext,
 } from "./types.js";
 import { TimeoutError, UnexpectedApiClientError, ValidationError } from "./errors.js";
 
@@ -137,6 +138,7 @@ export class ApiClient<
       timeout,
       retries = 0,
       headers: requestHeaders = {},
+      shouldRetry,
     } = options;
 
     // Validate and interpolate path
@@ -164,11 +166,27 @@ export class ApiClient<
 
     // Make request with retry logic
     let lastError: unknown;
+    let lastResult: { status: number; statusText: string; data: unknown } | undefined;
     let attempt = 0;
 
     while (attempt <= retries) {
       try {
         const result = await this.makeFetchRequest(method, url, headers, body, timeout);
+
+        // Check custom shouldRetry for response-based retry (e.g., 5xx errors)
+        if (shouldRetry && attempt < retries) {
+          const retryContext: RetryContext = {
+            attempt,
+            response: { status: result.status, statusText: result.statusText, data: result.data },
+          };
+          if (shouldRetry(retryContext)) {
+            lastResult = result;
+            const delay = calculateBackoff(attempt);
+            await sleep(delay);
+            attempt++;
+            continue;
+          }
+        }
 
         return this.handleResponse(result, endpoint, method) as ApiResponse<
           TResponse,
@@ -178,19 +196,37 @@ export class ApiClient<
       } catch (error: unknown) {
         lastError = error;
 
-        // Don't retry on validation errors or client errors (4xx)
-        if (
-          error instanceof ValidationError ||
-          (error instanceof UnexpectedApiClientError &&
-            error.code !== undefined &&
-            error.code >= 400 &&
-            error.code < 500)
-        ) {
+        // Don't retry on validation errors
+        if (error instanceof ValidationError) {
           throw error;
         }
 
-        // Retry on network errors or server errors (5xx)
+        // Check custom shouldRetry or fall back to default behavior
         if (attempt < retries) {
+          const retryContext: RetryContext = { attempt, error };
+
+          if (shouldRetry) {
+            if (shouldRetry(retryContext)) {
+              const delay = calculateBackoff(attempt);
+              await sleep(delay);
+              attempt++;
+              continue;
+            }
+            // Custom shouldRetry returned false, stop retrying
+            break;
+          }
+
+          // Default behavior: don't retry on 4xx client errors
+          if (
+            error instanceof UnexpectedApiClientError &&
+            error.code !== undefined &&
+            error.code >= 400 &&
+            error.code < 500
+          ) {
+            throw error;
+          }
+
+          // Default: retry on network errors
           const delay = calculateBackoff(attempt);
           await sleep(delay);
           attempt++;
@@ -198,6 +234,15 @@ export class ApiClient<
           break;
         }
       }
+    }
+
+    // If we have a last result (from response-based retry), return it
+    if (lastResult) {
+      return this.handleResponse(lastResult, endpoint, method) as ApiResponse<
+        TResponse,
+        TEndpoint,
+        TMethod
+      >;
     }
 
     // If we get here, all retries failed
