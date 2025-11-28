@@ -148,8 +148,8 @@ const result = await client.get("/users/{id}", {
 });
 
 if (result.success) {
-  // result.data is typed based on your output schema
-  console.log(result.data.name); // ✅ Type-safe
+  // result.body is typed based on your output schema
+  console.log(result.body.name); // ✅ Type-safe
 }
 ```
 

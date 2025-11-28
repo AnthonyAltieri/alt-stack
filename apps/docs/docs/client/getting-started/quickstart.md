@@ -60,9 +60,9 @@ const result = await client.get("/users/{id}", {
 });
 
 if (result.success) {
-  // TypeScript knows the shape of result.data
-  console.log(result.data.name); // ✅ Type-safe
-  console.log(result.data.email); // ✅ Type-safe
+  // TypeScript knows the shape of result.body
+  console.log(result.body.name); // ✅ Type-safe
+  console.log(result.body.email); // ✅ Type-safe
 } else {
   // Handle error
   console.error(result.error);

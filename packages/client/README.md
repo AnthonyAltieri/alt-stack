@@ -1,37 +1,22 @@
 # @alt-stack/client
 
-A type-safe API client that integrates with zod-openapi generated Request/Response objects. Full TypeScript inference for requests, responses, and error handling.
+Type-safe API client with full TypeScript inference from zod-openapi generated Request/Response schemas.
 
-## Documentation
-
-📚 **Full documentation is available at:** [Client Docs](./../../apps/docs/)
-
-The documentation website includes:
-
-- Getting started guide
-- Core concepts (validation, error handling, retries)
-- Integration guides
-
-## Quick Installation
+## Installation
 
 ```bash
 pnpm add @alt-stack/client zod
-# or
-npm install @alt-stack/client zod
-# or
-yarn add @alt-stack/client zod
 ```
 
 ## Features
 
-- **Type-safe requests**: Full TypeScript inference from Request/Response schemas
-- **Discriminated responses**: Success and error responses are typed based on status codes
-- **Automatic validation**: Request params, query, and body are validated against schemas
-- **Retry logic**: Built-in exponential backoff with customizable `shouldRetry` callback
-- **Timeout support**: Configurable request timeouts
-- **Path interpolation**: Automatic path parameter substitution
+- **Type inference** from Request/Response schemas
+- **Discriminated responses** typed by status code
+- **Automatic validation** of params, query, body, and responses
+- **Retry logic** with exponential backoff
+- **Timeout support**
 
-## Quick Example
+## Usage
 
 ```typescript
 import { createApiClient } from "@alt-stack/client";
@@ -44,11 +29,8 @@ const client = createApiClient({
   headers: { Authorization: "Bearer token" },
 });
 
-// Type-safe GET request
 const result = await client.get("/users/{id}", {
   params: { id: "123" },
-  retries: 3,
-  shouldRetry: ({ response }) => response?.status >= 500,
 });
 
 if (result.success) {
@@ -72,22 +54,24 @@ if (result.success) {
 
 ## Custom Retry Logic
 
-The `shouldRetry` callback receives context about the request attempt:
-
 ```typescript
 await client.get("/users", {
   retries: 3,
   shouldRetry: ({ attempt, error, response }) => {
-    // Retry on 5xx server errors
-    if (response?.status >= 500) return true;
-    // Retry on rate limiting
-    if (response?.status === 429) return true;
-    // Retry on network errors
-    if (error) return true;
+    if (response?.status >= 500) return true; // Server errors
+    if (response?.status === 429) return true; // Rate limiting
+    if (error) return true; // Network errors
     return false;
   },
 });
 ```
 
-For complete documentation, see the [docs website](./../../apps/docs/).
+## Error Classes
+
+| Class | Description |
+|-------|-------------|
+| `ValidationError` | Schema validation failed |
+| `TimeoutError` | Request exceeded timeout |
+| `UnexpectedApiClientError` | Network error or unexpected response |
+| `ApiClientError` | Base class for all errors |
 

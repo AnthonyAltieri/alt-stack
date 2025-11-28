@@ -119,6 +119,40 @@ export class ApiClient<
   }
 
   /**
+   * Makes a PUT request
+   */
+  async put<TEndpoint extends EndpointsWithMethod<TRequest, "PUT">>(
+    endpoint: TEndpoint,
+    options: RequestOptions<TRequest, TEndpoint, "PUT"> & {
+      body: ExtractRequestBody<TRequest, TEndpoint, "PUT">;
+    },
+  ): Promise<ApiResponse<TResponse, TEndpoint, "PUT">> {
+    return this.request("PUT", endpoint as string, options);
+  }
+
+  /**
+   * Makes a PATCH request
+   */
+  async patch<TEndpoint extends EndpointsWithMethod<TRequest, "PATCH">>(
+    endpoint: TEndpoint,
+    options: RequestOptions<TRequest, TEndpoint, "PATCH"> & {
+      body: ExtractRequestBody<TRequest, TEndpoint, "PATCH">;
+    },
+  ): Promise<ApiResponse<TResponse, TEndpoint, "PATCH">> {
+    return this.request("PATCH", endpoint as string, options);
+  }
+
+  /**
+   * Makes a DELETE request
+   */
+  async delete<TEndpoint extends EndpointsWithMethod<TRequest, "DELETE">>(
+    endpoint: TEndpoint,
+    options: RequestOptions<TRequest, TEndpoint, "DELETE">,
+  ): Promise<ApiResponse<TResponse, TEndpoint, "DELETE">> {
+    return this.request("DELETE", endpoint as string, options);
+  }
+
+  /**
    * Internal request method
    */
   private async request<
