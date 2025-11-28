@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { readFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { asyncApiToZodTsCode } from "./to-typescript.js";
 import type { AsyncAPISpec } from "./types.js";
 
@@ -13,11 +14,13 @@ Usage: npx zod-asyncapi <input> [options]
 Generate TypeScript types from AsyncAPI schema
 
 Arguments:
-  input                 AsyncAPI schema file path or URL
+  input                    AsyncAPI schema file path or URL
 
 Options:
-  -o, --output <file>   Output file path (default: generated-types.ts)
-  -h, --help           Show this help message
+  -o, --output <file>      Output file path (default: generated-types.ts)
+  -r, --registry <file>    Registry file that registers custom schemas
+  -i, --include <file>     TypeScript file to include at top of generated output
+  -h, --help               Show this help message
 
 Examples:
   # Generate from local file
@@ -28,7 +31,22 @@ Examples:
 
   # Specify output file
   npx zod-asyncapi asyncapi.json -o src/kafka-types.ts
+
+  # Use custom registry for format mappings
+  npx zod-asyncapi asyncapi.json -r ./my-registry.ts
+
+  # Include custom imports/schemas in generated output
+  npx zod-asyncapi asyncapi.json -i ./custom-schemas.ts
+
+  # Combine registry and include
+  npx zod-asyncapi asyncapi.json -r ./my-registry.ts -i ./custom-schemas.ts -o src/kafka-types.ts
 `);
+}
+
+function getArgValue(shortFlag: string, longFlag: string): string | undefined {
+  let idx = args.indexOf(shortFlag);
+  if (idx === -1) idx = args.indexOf(longFlag);
+  return idx !== -1 && idx + 1 < args.length ? args[idx + 1] : undefined;
 }
 
 async function fetchSchema(url: string): Promise<AsyncAPISpec> {
@@ -63,17 +81,24 @@ async function main() {
     process.exit(1);
   }
 
-  let outputIndex = args.indexOf("-o");
-  if (outputIndex === -1) {
-    outputIndex = args.indexOf("--output");
-  }
-  const outputArg =
-    outputIndex !== -1 && outputIndex + 1 < args.length
-      ? args[outputIndex + 1]
-      : undefined;
-  const output = typeof outputArg === "string" ? outputArg : "generated-types.ts";
+  const output = getArgValue("-o", "--output") ?? "generated-types.ts";
+  const registryFile = getArgValue("-r", "--registry");
+  const includeFile = getArgValue("-i", "--include");
 
   try {
+    // Load registry file if provided (populates global schema registry)
+    if (registryFile) {
+      console.log(`Loading registry from ${registryFile}...`);
+      await import(resolve(registryFile));
+    }
+
+    // Read include file contents if provided
+    let includeContent: string | undefined;
+    if (includeFile) {
+      console.log(`Reading include file from ${includeFile}...`);
+      includeContent = readFileSync(includeFile, "utf8");
+    }
+
     let schema: AsyncAPISpec;
     if (input.startsWith("http://") || input.startsWith("https://")) {
       console.log(`Fetching schema from ${input}...`);
@@ -84,7 +109,8 @@ async function main() {
     }
 
     console.log("Generating TypeScript types...");
-    const tsCode = asyncApiToZodTsCode(schema);
+    const customImportLines = includeContent ? [includeContent] : undefined;
+    const tsCode = asyncApiToZodTsCode(schema, customImportLines);
 
     writeFileSync(output, tsCode);
     console.log(`✓ Successfully generated types in ${output}`);
@@ -95,4 +121,3 @@ async function main() {
 }
 
 main();
-

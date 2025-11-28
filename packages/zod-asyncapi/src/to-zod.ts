@@ -1,3 +1,4 @@
+import { getSchemaExportedVariableNameForStringFormat } from "./registry.js";
 import type { AnySchema } from "./types.js";
 
 // ============================================================================
@@ -10,9 +11,18 @@ function convertStringToZod(schema: AnySchema): string {
     return `z.enum([${values.map((v) => `'${v}'`).join(", ")}])`;
   }
 
+  const format = schema["format"] as string | undefined;
+
+  // Check registry for custom format handler
+  if (format) {
+    const registeredSchemaName = getSchemaExportedVariableNameForStringFormat(format as any);
+    if (registeredSchemaName) {
+      return registeredSchemaName;
+    }
+  }
+
   let result = "z.string()";
 
-  const format = schema["format"];
   if (format === "email") result += ".email()";
   else if (format === "url" || format === "uri") result += ".url()";
   else if (format === "uuid") result += ".uuid()";

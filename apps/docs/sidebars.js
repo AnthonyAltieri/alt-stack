@@ -56,6 +56,7 @@ module.exports = {
             'guides/client-side-usage',
             'guides/openapi-documentation',
             'guides/openapi-to-typescript',
+            'guides/asyncapi-to-typescript',
           ],
         },
       ],
