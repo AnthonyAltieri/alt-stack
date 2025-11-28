@@ -34,14 +34,14 @@ try {
 } catch (error) {
   if (error instanceof ValidationError) {
     console.error("Validation failed:", error.message);
-    console.error("Details:", error.details);
+    console.error("Validation errors:", error.validationErrors);
   }
 }
 ```
 
 The `ValidationError` includes:
 - `message`: Human-readable error message
-- `details`: Validation error details from Zod
+- `validationErrors`: Validation error details from Zod
 - `endpoint`: The endpoint that failed validation
 - `method`: The HTTP method that failed validation
 
@@ -71,8 +71,8 @@ const result = await client.get("/users/{id}", {
 });
 
 if (result.success) {
-  // result.data is validated and typed
-  console.log(result.data.name); // ✅ Type-safe
+  // result.body is validated and typed
+  console.log(result.body.name); // ✅ Type-safe
 }
 ```
 

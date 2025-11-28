@@ -1,7 +1,7 @@
 {
-  "name": "@alt-stack/client",
-  "version": "2.0.0",
-  "description": "Type-safe API client that integrates with zod-openapi generated Request/Response objects",
+  "name": "@alt-stack/kafka-client-warpstream",
+  "version": "0.1.0",
+  "description": "WarpStream binding for type-safe Kafka client with optimized defaults",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -17,16 +17,29 @@
     "test": "vitest",
     "check-types": "tsc --noEmit"
   },
-  "keywords": [],
+  "keywords": [
+    "kafka",
+    "warpstream",
+    "client",
+    "typescript",
+    "zod"
+  ],
   "author": "",
   "license": "MIT",
+  "dependencies": {
+    "@alt-stack/kafka-client-core": "workspace:*"
+  },
   "peerDependencies": {
-    "zod": "^4.0.0"
+    "kafkajs": "^2.0.0",
+    "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
+    "kafkajs": "^2.0.0",
     "oxlint": "^1.24.0",
     "tsup": "^8.0.0",
     "typescript": "^5.9.2",
-    "vitest": "^4.0.3"
+    "vitest": "^4.0.3",
+    "zod": "^4.0.0"
   }
 }

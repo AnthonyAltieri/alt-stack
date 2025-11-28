@@ -64,28 +64,35 @@ if (!result.success && typeof result.code === "number") {
 
 ## Error Classes
 
-The client also throws error classes for programmatic handling:
+The client exports error classes for programmatic handling:
+
+| Class | Description |
+|-------|-------------|
+| `ApiClientError` | Base class for all client errors |
+| `ValidationError` | Request/response validation failed |
+| `UnexpectedApiClientError` | Network error or unexpected response |
+| `TimeoutError` | Request exceeded timeout |
 
 ```typescript
 import {
   ValidationError,
   UnexpectedApiClientError,
+  TimeoutError,
   ApiClientError,
 } from "@alt-stack/client";
 
 try {
   await client.get("/users/{id}", {
-    params: { id: 123 }, // Invalid type
+    params: { id: 123 },
   });
 } catch (error) {
   if (error instanceof ValidationError) {
-    // Validation failed
-    console.error("Validation error:", error.details);
+    console.error("Validation error:", error.validationErrors);
+  } else if (error instanceof TimeoutError) {
+    console.error(`Request timed out after ${error.timeout}ms`);
   } else if (error instanceof UnexpectedApiClientError) {
-    // Network or unexpected error
-    console.error("Request failed:", error.message);
+    console.error("Request failed:", error.message, error.code);
   } else if (error instanceof ApiClientError) {
-    // Base class for all client errors
     console.error("Client error:", error.message);
   }
 }
@@ -181,5 +188,5 @@ const result = await client.get("/users/{id}", {
 });
 ```
 
-If the request takes longer than the timeout, it will throw an error.
+If the request exceeds the timeout, a `TimeoutError` is thrown with the `timeout` property indicating the configured timeout in milliseconds.
 

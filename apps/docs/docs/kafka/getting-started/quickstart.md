@@ -1,6 +1,6 @@
 # Quickstart
 
-## Basic Consumer
+## Consumer
 
 ```typescript
 import { init, kafkaRouter, createConsumer } from "@alt-stack/kafka";
@@ -13,60 +13,59 @@ const UserEventSchema = z.object({
   timestamp: z.number(),
 });
 
-// Initialize procedure builder
 const { procedure } = init();
 
-// Define router with topics as keys
 const router = kafkaRouter({
   "user-events": procedure
     .input({ message: UserEventSchema })
     .subscribe(({ input, ctx }) => {
-      // input is typed: { userId: string, eventType: ..., timestamp: number }
       console.log(`Event: ${input.eventType} for user ${input.userId}`);
     }),
 });
 
-// Create and start consumer
 const consumer = await createConsumer(router, {
   kafka: new Kafka({
-    clientId: "my-app",
+    clientId: "my-consumer",
     brokers: ["localhost:9092"],
   }),
   groupId: "my-consumer-group",
 });
 ```
 
-## Basic Producer
+## Producer (using Kafka Client)
+
+For producers, use the Kafka client packages with AsyncAPI-generated types:
 
 ```typescript
-import { init, kafkaRouter, createProducer } from "@alt-stack/kafka";
-import { Kafka } from "kafkajs";
-import { z } from "zod";
+// 1. Generate types: npx zod-asyncapi asyncapi.json -o ./generated-types.ts
+import { Topics } from "./generated-types";
+import { createKafkaClient } from "@alt-stack/kafka-client-kafkajs";
 
-const UserEventSchema = z.object({
-  userId: z.string(),
-  eventType: z.enum(["created", "updated", "deleted"]),
-  timestamp: z.number(),
+const client = await createKafkaClient({
+  kafka: { brokers: ["localhost:9092"], clientId: "my-producer" },
+  topics: Topics,
 });
 
-const { procedure } = init();
+// Type-safe sending
+await client.send("user-events", {
+  userId: "user-123",
+  eventType: "created",
+  timestamp: Date.now(),
+});
+```
 
-// Define the same router for type-safe producing
-const router = kafkaRouter({
-  "user-events": procedure
-    .input({ message: UserEventSchema })
-    .subscribe(() => {}), // Handler not needed for producer
+Or with WarpStream:
+
+```typescript
+import { Topics } from "./generated-types";
+import { createWarpStreamClient } from "@alt-stack/kafka-client-warpstream";
+
+const client = await createWarpStreamClient({
+  bootstrapServer: "my-cluster.warpstream.com:9092",
+  topics: Topics,
 });
 
-const producer = await createProducer(router, {
-  kafka: new Kafka({
-    clientId: "my-app",
-    brokers: ["localhost:9092"],
-  }),
-});
-
-// Type-safe: only valid topics and message shapes allowed
-await producer.send("user-events", {
+await client.send("user-events", {
   userId: "user-123",
   eventType: "created",
   timestamp: Date.now(),

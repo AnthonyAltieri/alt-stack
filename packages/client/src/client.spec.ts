@@ -201,6 +201,127 @@ describe("ApiClient", () => {
     });
   });
 
+  describe("PUT requests", () => {
+    it("makes a PUT request with body", async () => {
+      const mockResponse = { id: "1", name: "John Updated" };
+      globalThis.fetch = createMockFetch(mockResponse, 200);
+
+      const client = createApiClient({
+        baseUrl: "https://api.example.com",
+        Request: {
+          "/users/{id}": {
+            PUT: {
+              params: z.object({ id: z.string() }),
+              body: z.object({ name: z.string() }),
+            },
+          },
+        },
+        Response: {
+          "/users/{id}": {
+            PUT: { "200": z.object({ id: z.string(), name: z.string() }) },
+          },
+        },
+      });
+      const result = await client.put("/users/{id}", {
+        params: { id: "1" },
+        body: { name: "John Updated" },
+      });
+
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        "https://api.example.com/users/1",
+        expect.objectContaining({
+          method: "PUT",
+          body: JSON.stringify({ name: "John Updated" }),
+        }),
+      );
+      expect(result).toEqual({ success: true, body: mockResponse, code: "200" });
+    });
+  });
+
+  describe("PATCH requests", () => {
+    it("makes a PATCH request with body", async () => {
+      const mockResponse = { id: "1", name: "John", email: "new@example.com" };
+      globalThis.fetch = createMockFetch(mockResponse, 200);
+
+      const client = createApiClient({
+        baseUrl: "https://api.example.com",
+        Request: {
+          "/users/{id}": {
+            PATCH: {
+              params: z.object({ id: z.string() }),
+              body: z.object({ email: z.string().email().optional() }),
+            },
+          },
+        },
+        Response: {
+          "/users/{id}": {
+            PATCH: { "200": z.object({ id: z.string(), name: z.string(), email: z.string() }) },
+          },
+        },
+      });
+      const result = await client.patch("/users/{id}", {
+        params: { id: "1" },
+        body: { email: "new@example.com" },
+      });
+
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        "https://api.example.com/users/1",
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({ email: "new@example.com" }),
+        }),
+      );
+      expect(result).toEqual({ success: true, body: mockResponse, code: "200" });
+    });
+  });
+
+  describe("DELETE requests", () => {
+    it("makes a DELETE request", async () => {
+      globalThis.fetch = createMockFetch(null, 204, "No Content");
+
+      const client = createApiClient({
+        baseUrl: "https://api.example.com",
+        Request: {
+          "/users/{id}": {
+            DELETE: {
+              params: z.object({ id: z.string() }),
+            },
+          },
+        },
+        Response: {
+          "/users/{id}": {
+            DELETE: { "204": z.null() },
+          },
+        },
+      });
+      const result = await client.delete("/users/{id}", {
+        params: { id: "1" },
+      });
+
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        "https://api.example.com/users/1",
+        expect.objectContaining({ method: "DELETE" }),
+      );
+      expect(result.success).toBe(true);
+    });
+
+    it("does not include body in DELETE request", async () => {
+      globalThis.fetch = createMockFetch(null, 204);
+
+      const client = createApiClient({
+        baseUrl: "https://api.example.com",
+        Request: { "/items/{id}": { DELETE: { params: z.object({ id: z.string() }) } } },
+        Response: { "/items/{id}": { DELETE: { "204": z.null() } } },
+      });
+      await client.delete("/items/{id}", { params: { id: "1" } });
+
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        "https://api.example.com/items/1",
+        expect.not.objectContaining({ body: expect.anything() }),
+      );
+    });
+  });
+
   describe("validation", () => {
     it("throws ValidationError for invalid path params", async () => {
       const client = createApiClient({ baseUrl: "https://api.example.com", Request, Response });

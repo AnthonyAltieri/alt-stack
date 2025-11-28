@@ -1,7 +1,7 @@
 {
-  "name": "@alt-stack/client",
-  "version": "2.0.0",
-  "description": "Type-safe API client that integrates with zod-openapi generated Request/Response objects",
+  "name": "@alt-stack/workers-core",
+  "version": "0.0.1",
+  "description": "Framework-agnostic core for type-safe background workers with Zod validation",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -27,6 +27,7 @@
     "oxlint": "^1.24.0",
     "tsup": "^8.0.0",
     "typescript": "^5.9.2",
-    "vitest": "^4.0.3"
+    "vitest": "^4.0.3",
+    "zod": "^4.0.0"
   }
 }

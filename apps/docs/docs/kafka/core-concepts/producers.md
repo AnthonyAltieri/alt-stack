@@ -1,33 +1,76 @@
 # Producers
 
-Create type-safe Kafka producers from routers.
+Create type-safe Kafka producers using AsyncAPI-generated types.
+
+## Installation
+
+```bash
+# Core + KafkaJS binding
+pnpm add @alt-stack/kafka-client-core @alt-stack/kafka-client-kafkajs kafkajs zod
+
+# Or for WarpStream
+pnpm add @alt-stack/kafka-client-core @alt-stack/kafka-client-warpstream kafkajs zod
+```
 
 ## Basic Setup
 
+Use types generated from your AsyncAPI spec with `zod-asyncapi`:
+
 ```typescript
-import { createProducer, kafkaRouter, init } from "@alt-stack/kafka";
-import { Kafka } from "kafkajs";
-import { z } from "zod";
+// 1. Generate types from AsyncAPI spec
+// npx zod-asyncapi asyncapi.json -o ./generated-types.ts
 
-const { procedure } = init();
+// 2. Import generated types
+import { Topics } from "./generated-types";
+import { createKafkaClient } from "@alt-stack/kafka-client-kafkajs";
 
-const router = kafkaRouter({
-  "user-events": procedure
-    .input({
-      message: z.object({
-        userId: z.string(),
-        eventType: z.enum(["created", "updated", "deleted"]),
-        timestamp: z.number(),
-      }),
-    })
-    .subscribe(() => {}), // Handler not needed for producer
+// 3. Create type-safe client
+const client = await createKafkaClient({
+  kafka: { brokers: ["localhost:9092"], clientId: "my-producer" },
+  topics: Topics,
 });
 
-const producer = await createProducer(router, {
-  kafka: new Kafka({
-    clientId: "my-app",
+// 4. Send messages with full type safety
+await client.send("user-events", {
+  userId: "user-123",
+  eventType: "created",
+  timestamp: Date.now(),
+});
+```
+
+## KafkaJS Client
+
+```typescript
+import { Topics } from "./generated-types";
+import { createKafkaClient } from "@alt-stack/kafka-client-kafkajs";
+
+const client = await createKafkaClient({
+  kafka: {
     brokers: ["localhost:9092"],
-  }),
+    clientId: "my-app",
+    ssl: true,
+    sasl: { mechanism: "plain", username: "user", password: "pass" },
+  },
+  topics: Topics,
+  producerConfig: {
+    allowAutoTopicCreation: false,
+  },
+  onError: (error) => console.error("Producer error:", error),
+});
+```
+
+## WarpStream Client
+
+Optimized for WarpStream with recommended defaults (LZ4 compression, extended timeouts):
+
+```typescript
+import { Topics } from "./generated-types";
+import { createWarpStreamClient } from "@alt-stack/kafka-client-warpstream";
+
+const client = await createWarpStreamClient({
+  bootstrapServer: "my-cluster.warpstream.com:9092",
+  topics: Topics,
+  clientId: "my-producer",
 });
 ```
 
@@ -35,23 +78,23 @@ const producer = await createProducer(router, {
 
 ```typescript
 // TypeScript enforces valid topics and message shapes
-await producer.send("user-events", {
+await client.send("user-events", {
   userId: "user-123",
   eventType: "created",
   timestamp: Date.now(),
 });
 
 // Type error: "invalid-topic" doesn't exist
-await producer.send("invalid-topic", { data: "test" });
+await client.send("invalid-topic", { data: "test" });
 
 // Type error: missing required field
-await producer.send("user-events", { userId: "123" });
+await client.send("user-events", { userId: "123" });
 ```
 
 ## Batch Sending
 
 ```typescript
-await producer.sendBatch("user-events", [
+await client.sendBatch("user-events", [
   { userId: "user-1", eventType: "created", timestamp: Date.now() },
   { userId: "user-2", eventType: "created", timestamp: Date.now() },
   { userId: "user-1", eventType: "updated", timestamp: Date.now() },
@@ -61,42 +104,55 @@ await producer.sendBatch("user-events", [
 ## Send Options
 
 ```typescript
-await producer.send(
+await client.send(
   "user-events",
   { userId: "123", eventType: "created", timestamp: Date.now() },
   {
-    key: "user-123",           // Message key for partitioning
-    partition: 0,              // Explicit partition
-    headers: { source: "api" }, // Custom headers
+    key: "user-123",              // Message key for partitioning
+    partition: 0,                 // Explicit partition
+    headers: { source: "api" },   // Custom headers
     timestamp: Date.now().toString(),
   }
 );
 ```
 
-## Producer Options
-
-```typescript
-const producer = await createProducer(router, {
-  kafka: new Kafka({ brokers: ["localhost:9092"] }),
-  producerConfig: {
-    allowAutoTopicCreation: false,
-    transactionTimeout: 30000,
-  },
-  onError: (error) => {
-    console.error("Producer error:", error);
-  },
-});
-```
-
 ## Disconnecting
 
 ```typescript
-await producer.disconnect();
+await client.disconnect();
 ```
 
 ## Accessing Raw Producer
 
+For advanced use cases (transactions, producer events, etc.), access the underlying KafkaJS producer:
+
 ```typescript
-// Access the underlying kafkajs Producer if needed
-const rawProducer = producer.producer;
+// Access the raw kafkajs Producer
+const rawProducer = client.producer;
+
+// Use kafkajs features directly
+await rawProducer.send({
+  topic: "my-topic",
+  messages: [{ value: "raw message" }],
+  acks: -1,
+  timeout: 30000,
+});
+```
+
+## Error Handling
+
+```typescript
+import { ValidationError, SendError, ConnectionError } from "@alt-stack/kafka-client-kafkajs";
+
+try {
+  await client.send("user-events", invalidData);
+} catch (error) {
+  if (error instanceof ValidationError) {
+    console.error("Invalid message:", error.topic, error.details);
+  } else if (error instanceof SendError) {
+    console.error("Failed to send:", error.topic, error.cause);
+  } else if (error instanceof ConnectionError) {
+    console.error("Connection failed:", error.cause);
+  }
+}
 ```
