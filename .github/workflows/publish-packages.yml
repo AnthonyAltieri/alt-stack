@@ -397,6 +397,12 @@ jobs:
               
               // Calculate what the new version would be
               const versionParts = currentVersion.split('.');
+              
+              // Don't bump to major while on 0.x.x - treat breaking changes as minor
+              if (bumpType === 'major' && parseInt(versionParts[0]) === 0) {
+                console.log(`Package ${pkgName} is pre-1.0, treating breaking change as minor bump`);
+                bumpType = 'minor';
+              }
               let newVersion;
               if (bumpType === 'major') {
                 newVersion = `${parseInt(versionParts[0]) + 1}.0.0`;
