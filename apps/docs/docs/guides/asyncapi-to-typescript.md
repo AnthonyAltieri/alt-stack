@@ -80,6 +80,49 @@ export type TopicName = keyof typeof Topics;
 export type MessageType<T extends TopicName> = z.infer<typeof Topics[T]>;
 ```
 
+## Using Generated Types with Kafka Client
+
+The generated `Topics` object works directly with `@alt-stack/kafka-client-kafkajs` or `@alt-stack/kafka-client-warpstream`:
+
+### KafkaJS Producer
+
+```typescript
+import { Topics } from "./generated-types";
+import { createKafkaClient } from "@alt-stack/kafka-client-kafkajs";
+
+const client = await createKafkaClient({
+  kafka: { brokers: ["localhost:9092"], clientId: "my-producer" },
+  topics: Topics,
+});
+
+// Type-safe sending - topic names and message shapes are validated
+await client.send("user-events", {
+  id: "123",
+  name: "John",
+  email: "john@example.com",
+});
+
+await client.disconnect();
+```
+
+### WarpStream Producer
+
+```typescript
+import { Topics } from "./generated-types";
+import { createWarpStreamClient } from "@alt-stack/kafka-client-warpstream";
+
+const client = await createWarpStreamClient({
+  bootstrapServer: "my-cluster.warpstream.com:9092",
+  topics: Topics,
+});
+
+await client.send("user-events", {
+  id: "123",
+  name: "John",
+  email: "john@example.com",
+});
+```
+
 ## Custom String Formats
 
 For custom type mappings (e.g., using Luxon `DateTime` for `iso-date` format), use the `--registry` and `--include` flags.
@@ -141,38 +184,18 @@ The following string formats can be registered:
 - `url`
 - `uuid`
 
-## Integration with @alt-stack/kafka
+## Workflow: Server to Client
 
-A typical workflow with `@alt-stack/kafka`:
+A typical workflow:
 
-1. **Define your Kafka topics** with Zod schemas on the producer
-2. **Generate AsyncAPI spec** using `createAsyncAPISpec`
-3. **Generate consumer types** using the `zod-asyncapi` CLI
+1. **Server defines Kafka topics** with Zod schemas using `@alt-stack/kafka`
+2. **Server exposes AsyncAPI spec** at an endpoint
+3. **Client generates types** using `zod-asyncapi`
+4. **Client uses Kafka client** with generated types
 
 ```bash
-# Fetch AsyncAPI from your running producer and generate types
+# Generate types from running server
 npx zod-asyncapi http://localhost:3000/asyncapi.json -o src/kafka-types.ts
-```
-
-This gives you fully typed message schemas that match your producer's API exactly.
-
-### Using Generated Types with Consumer
-
-```typescript
-import { Topics, TopicName, MessageType } from "./kafka-types";
-import { initKafka } from "@alt-stack/kafka";
-
-const kafka = initKafka({
-  brokers: ["localhost:9092"],
-  clientId: "my-consumer",
-});
-
-// Type-safe topic names
-const topicName: TopicName = "user-events";
-
-// Type-safe message validation
-const schema = Topics[topicName];
-const message: MessageType<"user-events"> = schema.parse(rawMessage);
 ```
 
 ## Programmatic Usage
@@ -219,4 +242,3 @@ const generatedCode = asyncApiToZodTsCode(
 
 console.log(generatedCode);
 ```
-
