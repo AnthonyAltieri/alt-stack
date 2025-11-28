@@ -44,11 +44,31 @@ const result = await client.post("/users", {
 });
 ```
 
-### Supported Methods
+### PUT Requests
 
-The client currently supports:
-- `get()` - GET requests
-- `post()` - POST requests
+```typescript
+const result = await client.put("/users/{id}", {
+  params: { id: "123" },
+  body: { name: "Alice Updated", email: "alice@example.com" },
+});
+```
+
+### PATCH Requests
+
+```typescript
+const result = await client.patch("/users/{id}", {
+  params: { id: "123" },
+  body: { email: "newemail@example.com" },
+});
+```
+
+### DELETE Requests
+
+```typescript
+const result = await client.delete("/users/{id}", {
+  params: { id: "123" },
+});
+```
 
 ## Handling Responses
 
@@ -95,7 +115,7 @@ const result = await client.get("/users/{id}", {
 |--------|------|-------------|
 | `params` | `object` | Path parameters to interpolate into the URL |
 | `query` | `object` | Query parameters to append to the URL |
-| `body` | `object` | Request body (for POST, PUT, PATCH) |
+| `body` | `object` | Request body (required for POST, PUT, PATCH) |
 | `headers` | `object` | Additional headers to include |
 | `timeout` | `number` | Request timeout in milliseconds |
 | `retries` | `number` | Number of retry attempts |

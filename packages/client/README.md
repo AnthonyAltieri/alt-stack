@@ -46,7 +46,7 @@ if (result.success) {
 |--------|------|-------------|
 | `params` | `object` | Path parameters |
 | `query` | `object` | Query parameters |
-| `body` | `object` | Request body (POST) |
+| `body` | `object` | Request body (POST, PUT, PATCH) |
 | `headers` | `object` | Additional headers |
 | `timeout` | `number` | Timeout in milliseconds |
 | `retries` | `number` | Number of retry attempts |
