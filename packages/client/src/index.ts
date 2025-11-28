@@ -5,5 +5,6 @@ export {
   ApiClientError,
   UnexpectedApiClientError,
   ValidationError,
+  TimeoutError,
 } from "./errors.js";
 export type * from "./types.js";

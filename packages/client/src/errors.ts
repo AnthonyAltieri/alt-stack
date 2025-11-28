@@ -47,3 +47,19 @@ export class ValidationError extends ApiClientError {
     Object.setPrototypeOf(this, ValidationError.prototype);
   }
 }
+
+/**
+ * Timeout error when request exceeds configured timeout
+ */
+export class TimeoutError extends ApiClientError {
+  constructor(
+    public readonly timeout: number,
+    endpoint?: string,
+    method?: string,
+    cause?: unknown,
+  ) {
+    super(`Request timeout after ${timeout}ms`, endpoint, method, cause);
+    this.name = "TimeoutError";
+    Object.setPrototypeOf(this, TimeoutError.prototype);
+  }
+}

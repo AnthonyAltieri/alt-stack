@@ -8,7 +8,7 @@ import type {
   UnexpectedErrorResponse,
   EndpointsWithMethod,
 } from "./types.js";
-import { UnexpectedApiClientError, ValidationError } from "./errors.js";
+import { TimeoutError, UnexpectedApiClientError, ValidationError } from "./errors.js";
 
 // ============================================================================
 // Types
@@ -16,10 +16,7 @@ import { UnexpectedApiClientError, ValidationError } from "./errors.js";
 
 export interface ApiClientOptions<
   TRequest extends Record<string, Record<string, unknown>>,
-  TResponse extends Record<
-    string,
-    Record<string, Record<string, z.ZodTypeAny>>
-  >,
+  TResponse extends Record<string, Record<string, Record<string, z.ZodTypeAny>>>,
 > {
   baseUrl: string;
   headers?: Record<string, unknown>;
@@ -34,10 +31,7 @@ export interface ApiClientOptions<
 /**
  * Interpolates path parameters into endpoint string
  */
-function interpolatePath(
-  endpoint: string,
-  params: Record<string, unknown>,
-): string {
+function interpolatePath(endpoint: string, params: Record<string, unknown>): string {
   let result = endpoint;
   for (const [key, value] of Object.entries(params)) {
     result = result.replace(`{${key}}`, String(value));
@@ -85,12 +79,7 @@ function validate<TSchema extends z.ZodTypeAny>(
     return schema.parse(data);
   } catch (error: unknown) {
     if (error instanceof z.ZodError) {
-      throw new ValidationError(
-        errorMessage,
-        error.issues,
-        undefined,
-        undefined,
-      );
+      throw new ValidationError(errorMessage, error.issues, undefined, undefined);
     }
     throw error;
   }
@@ -102,10 +91,7 @@ function validate<TSchema extends z.ZodTypeAny>(
 
 export class ApiClient<
   TRequest extends Record<string, Record<string, unknown>>,
-  TResponse extends Record<
-    string,
-    Record<string, Record<string, z.ZodTypeAny>>
-  >,
+  TResponse extends Record<string, Record<string, Record<string, z.ZodTypeAny>>>,
 > {
   constructor(public readonly options: ApiClientOptions<TRequest, TResponse>) {}
 
@@ -182,13 +168,7 @@ export class ApiClient<
 
     while (attempt <= retries) {
       try {
-        const result = await this.makeFetchRequest(
-          method,
-          url,
-          headers,
-          body,
-          timeout,
-        );
+        const result = await this.makeFetchRequest(method, url, headers, body, timeout);
 
         return this.handleResponse(result, endpoint, method) as ApiResponse<
           TResponse,
@@ -258,11 +238,10 @@ export class ApiClient<
 
     const paramsSchema = (requestDef as { params?: z.ZodTypeAny }).params;
     if (paramsSchema) {
-      return validate(
-        paramsSchema,
-        params,
-        "Path parameters validation failed",
-      ) as Record<string, unknown>;
+      return validate(paramsSchema, params, "Path parameters validation failed") as Record<
+        string,
+        unknown
+      >;
     }
 
     // Check if endpoint requires params but none provided
@@ -294,11 +273,10 @@ export class ApiClient<
 
     const querySchema = (requestDef as { query?: z.ZodTypeAny }).query;
     if (querySchema) {
-      return validate(
-        querySchema,
-        query,
-        "Query parameters validation failed",
-      ) as Record<string, unknown>;
+      return validate(querySchema, query, "Query parameters validation failed") as Record<
+        string,
+        unknown
+      >;
     }
 
     return query;
@@ -324,9 +302,7 @@ export class ApiClient<
    */
   private getPathParamNames(endpoint: string): string[] {
     const matches = endpoint.matchAll(/\{([^}]+)\}/g);
-    return Array.from(matches, (m) => m[1]).filter(
-      (name): name is string => name !== undefined,
-    );
+    return Array.from(matches, (m) => m[1]).filter((name): name is string => name !== undefined);
   }
 
   /**
@@ -353,10 +329,7 @@ export class ApiClient<
         signal: controller.signal,
       };
 
-      if (
-        body !== undefined &&
-        (method === "POST" || method === "PUT" || method === "PATCH")
-      ) {
+      if (body !== undefined && (method === "POST" || method === "PUT" || method === "PATCH")) {
         fetchOptions.body = JSON.stringify(body);
       }
 
@@ -381,13 +354,7 @@ export class ApiClient<
       };
     } catch (error: unknown) {
       if (error instanceof Error && error.name === "AbortError") {
-        throw new UnexpectedApiClientError(
-          `Request timeout after ${timeout}ms`,
-          undefined,
-          url,
-          method,
-          error,
-        );
+        throw new TimeoutError(timeout!, url, method, error);
       }
       throw new UnexpectedApiClientError(
         `Network error: ${error instanceof Error ? error.message : String(error)}`,
@@ -410,10 +377,7 @@ export class ApiClient<
     result: { status: number; statusText: string; data: unknown },
     endpoint: string,
     method: string,
-  ):
-    | SuccessResponse<unknown, string>
-    | ErrorResponse<unknown, string>
-    | UnexpectedErrorResponse {
+  ): SuccessResponse<unknown, string> | ErrorResponse<unknown, string> | UnexpectedErrorResponse {
     const { status, statusText, data } = result;
     const statusCode = String(status);
 
@@ -488,12 +452,7 @@ export class ApiClient<
  */
 export function createApiClient<
   TRequest extends Record<string, Record<string, unknown>>,
-  TResponse extends Record<
-    string,
-    Record<string, Record<string, z.ZodTypeAny>>
-  >,
->(
-  options: ApiClientOptions<TRequest, TResponse>,
-): ApiClient<TRequest, TResponse> {
+  TResponse extends Record<string, Record<string, Record<string, z.ZodTypeAny>>>,
+>(options: ApiClientOptions<TRequest, TResponse>): ApiClient<TRequest, TResponse> {
   return new ApiClient(options);
 }
