@@ -1,0 +1,22 @@
+{
+  "name": "example-workers",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npx trigger dev",
+    "build": "tsc",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@alt-stack/workers-trigger": "workspace:*",
+    "@trigger.dev/sdk": "^3.3.16",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@alt-stack/typescript-config": "workspace:*",
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "5.9.2"
+  }
+}
