@@ -91,8 +91,21 @@ const result = await client.get("/users/{id}", {
   },
   timeout: 5000, // milliseconds
   retries: 3, // number of retry attempts
+  shouldRetry: ({ response }) => response?.status >= 500, // custom retry logic
 });
 ```
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `params` | `object` | Path parameters to interpolate into the URL |
+| `query` | `object` | Query parameters to append to the URL |
+| `body` | `object` | Request body (for POST, PUT, PATCH) |
+| `headers` | `object` | Additional headers to include |
+| `timeout` | `number` | Request timeout in milliseconds |
+| `retries` | `number` | Number of retry attempts |
+| `shouldRetry` | `function` | Custom retry logic callback |
+
+See [Error Handling](./error-handling.md#custom-retry-logic) for more details on `shouldRetry`.
 
 ---
 
@@ -202,13 +215,73 @@ const result = await client.get("/users/{id}", {
 });
 ```
 
-Retries are automatically performed for:
+By default, retries are automatically performed for:
 - Network errors
-- Server errors (5xx status codes)
 
-Retries are **not** performed for:
+Retries are **not** performed by default for:
 - Validation errors
 - Client errors (4xx status codes)
+- Server errors (5xx status codes) - these are valid HTTP responses
+
+### Custom Retry Logic
+
+Use the `shouldRetry` option to customize retry behavior:
+
+```typescript
+const result = await client.get("/users/{id}", {
+  params: { id: "123" },
+  retries: 3,
+  shouldRetry: ({ attempt, error, response }) => {
+    // Retry on 5xx server errors
+    if (response?.status >= 500) return true;
+    // Retry on rate limiting
+    if (response?.status === 429) return true;
+    // Retry on network errors
+    if (error) return true;
+    return false;
+  },
+});
+```
+
+The `shouldRetry` callback receives a context object with:
+- `attempt` - Current attempt number (0-indexed)
+- `error` - Error thrown during request (network errors, timeouts)
+- `response` - HTTP response received (status, statusText, data)
+
+#### Examples
+
+**Retry on 5xx server errors:**
+
+```typescript
+shouldRetry: ({ response }) => response?.status !== undefined && response.status >= 500
+```
+
+**Limit retries regardless of `retries` option:**
+
+```typescript
+shouldRetry: ({ attempt }) => attempt < 2
+```
+
+**Retry on specific error codes:**
+
+```typescript
+shouldRetry: ({ response }) => {
+  const retryableCodes = [500, 502, 503, 504, 429];
+  return response?.status !== undefined && retryableCodes.includes(response.status);
+}
+```
+
+**Custom logic combining error and response:**
+
+```typescript
+shouldRetry: ({ error, response }) => {
+  // Always retry network errors
+  if (error) return true;
+  // Retry rate limits and server errors
+  if (response?.status === 429 || (response?.status ?? 0) >= 500) return true;
+  return false;
+}
+```
 
 ## Timeouts
 
@@ -331,7 +404,7 @@ The client requires:
 ## Requirements
 
 To use the client, you need:
-1. A server built with `@alt-stack/server` that exposes an OpenAPI spec
+1. A server built with `@alt-stack/server-hono` or `@alt-stack/server-express` that exposes an OpenAPI spec
 2. Generated `Request` and `Response` types from your server's OpenAPI spec
 3. The OpenAPI spec object from your server
 
@@ -349,7 +422,7 @@ First, ensure your server generates an OpenAPI spec and Request/Response types:
 
 ```typescript
 // server.ts
-import { init, createServer, generateOpenAPISpec } from "@alt-stack/server";
+import { init, createServer, generateOpenAPISpec } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 const factory = init();
@@ -440,7 +513,7 @@ On your server, generate the OpenAPI spec:
 
 ```typescript
 // server.ts
-import { init, createServer, generateOpenAPISpec } from "@alt-stack/server";
+import { init, createServer, generateOpenAPISpec } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 const factory = init();
@@ -625,7 +698,7 @@ Organize your API by combining multiple routers using the new tRPC-style `router
 ## Basic Router Combination
 
 ```typescript
-import { router, publicProcedure, createServer } from "@alt-stack/server";
+import { router, publicProcedure, createServer } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 // User routes
@@ -700,7 +773,7 @@ const app = createServer({
 Routers can be nested within other routers. Paths combine automatically:
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 
 const productRouter = router({
   "favorites/me": publicProcedure.get(() => {
@@ -730,7 +803,7 @@ const appRouter = router({
 You can pass arrays of routers for the same prefix in `createServer`:
 
 ```typescript
-import { router, publicProcedure, createServer } from "@alt-stack/server";
+import { router, publicProcedure, createServer } from "@alt-stack/server-hono";
 
 const v1Router = router({
   users: publicProcedure.get(() => []),
@@ -752,7 +825,7 @@ This is useful for versioning APIs or organizing routes by feature.
 To achieve nested routes like `/api/v1/*` and `/api/v2/*`, use compound prefixes in `createServer`:
 
 ```typescript
-import { router, publicProcedure, createServer } from "@alt-stack/server";
+import { router, publicProcedure, createServer } from "@alt-stack/server-hono";
 
 const v1Router = router({
   users: publicProcedure.get(() => []),
@@ -783,7 +856,7 @@ Results in routes like:
 You can apply middleware to entire routers:
 
 ```typescript
-import { router, publicProcedure, createMiddleware } from "@alt-stack/server";
+import { router, publicProcedure, createMiddleware } from "@alt-stack/server-hono";
 
 const authMiddleware = createMiddleware(async ({ ctx, next }) => {
   // Auth logic
@@ -818,7 +891,7 @@ Define custom context (similar to tRPC) to pass data like database connections o
 Create a context type and a function to create it:
 
 ```typescript
-import { init, createServer } from "@alt-stack/server";
+import { init, createServer } from "@alt-stack/server-hono";
 import type { Context } from "hono";
 import { z } from "zod";
 
@@ -1031,7 +1104,7 @@ Inputs can be validated from three sources:
 ## Example
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 export const userRouter = router({
@@ -1129,7 +1202,7 @@ The `body` field has no string input constraint since request bodies are parsed 
 When using path parameters in the route key (e.g., `{id}`), TypeScript enforces that you must provide a `params` schema with matching keys:
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 export const userRouter = router({
@@ -1170,7 +1243,7 @@ The handler is only called if all inputs pass validation, ensuring type safety a
 You can combine params, query, and body validation:
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 export const userRouter = router({
@@ -1211,7 +1284,7 @@ Apply middleware at router-level or procedure-level to add cross-cutting concern
 Apply middleware to all routes in a router using the `.use()` method:
 
 ```typescript
-import { router, publicProcedure, createMiddleware } from "@alt-stack/server";
+import { router, publicProcedure, createMiddleware } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 interface AppContext {
@@ -1253,7 +1326,7 @@ export const userRouter = router({
 Apply middleware to specific procedures using `.use()`:
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 export const userRouter = router({
@@ -1286,7 +1359,7 @@ export const userRouter = router({
 Middleware can extend the context by passing updated context to `next()`. This follows the tRPC pattern:
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server";
+import { router, publicProcedure, init } from "@alt-stack/server-hono";
 
 interface AppContext {
   user: { id: string; name: string } | null;
@@ -1339,7 +1412,7 @@ export const appRouter = router({
 Chain multiple middleware on the same procedure:
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server";
+import { router, publicProcedure, init } from "@alt-stack/server-hono";
 
 interface AppContext {
   user: { id: string; role: string } | null;
@@ -1383,7 +1456,7 @@ Middleware executes in the order they're defined.
 Create reusable procedures with middleware to reuse authentication or other middleware across multiple routes. See the [Reusable Procedures guide](/core-concepts/reusable-procedures) for details:
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server";
+import { router, publicProcedure, init } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 interface AppContext {
@@ -1425,7 +1498,7 @@ export const appRouter = router({
 Middleware can chain together, with each middleware able to extend the context:
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server";
+import { router, publicProcedure, init } from "@alt-stack/server-hono";
 
 interface AppContext {
   user: { id: string; role: string } | null;
@@ -1545,7 +1618,7 @@ Create reusable procedures with middleware to follow the tRPC pattern. This allo
 Use `publicProcedure` or `init()` to create procedures:
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server";
+import { router, publicProcedure, init } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 interface AppContext {
@@ -1627,7 +1700,7 @@ Procedures support the same configuration methods as regular routes:
 ### Setting Default Input
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 const validatedProcedure = publicProcedure.input({
@@ -1654,7 +1727,7 @@ export const dataRouter = router({
 ### Setting Default Output
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 const jsonProcedure = publicProcedure.output(
@@ -1678,7 +1751,7 @@ export const actionRouter = router({
 ### Setting Default Errors
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 const errorProcedure = publicProcedure.errors({
@@ -1714,7 +1787,7 @@ export const protectedRouter = router({
 Errors defined on procedures are automatically merged with errors defined on routes. Route errors take precedence when the same status code is defined in both:
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 // Procedure defines common authentication error
@@ -1837,7 +1910,7 @@ export const settingsRouter = router({
 Middleware can be chained to build up context:
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 interface AppContext {
@@ -1879,7 +1952,7 @@ export const adminRouter = router({
 ### Public and Protected Routes
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server";
+import { router, publicProcedure, init } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 interface AppContext {
@@ -1905,7 +1978,7 @@ export const appRouter = router({
 ### Role-Based Procedures
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server";
+import { router, publicProcedure, init } from "@alt-stack/server-hono";
 
 interface AppContext {
   user: { role: string } | null;
@@ -1937,7 +2010,7 @@ export const moderatorRouter = router({
 ### Rate Limited Procedures
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 
 const rateLimitedProcedure = publicProcedure.use(async (opts) => {
   const { ctx, next } = opts;
@@ -1980,8 +2053,8 @@ A comprehensive example demonstrating all features of Altstack with the tRPC-sty
 ## Complete Server Implementation
 
 ```typescript
-import { router, publicProcedure, init, createServer } from "@alt-stack/server";
-import type { BaseContext, Middleware } from "@alt-stack/server";
+import { router, publicProcedure, init, createServer } from "@alt-stack/server-hono";
+import type { HonoBaseContext, Middleware } from "@alt-stack/server-hono";
 import type { Context } from "hono";
 import { z } from "zod";
 
@@ -2451,7 +2524,7 @@ export const adminRouter = router<AppContext>({
 // ============================================================================
 
 // Logging middleware for all routes
-const loggingMiddleware: Middleware<BaseContext & AppContext> = async ({
+const loggingMiddleware: Middleware<HonoBaseContext & AppContext> = async ({
   ctx,
   next,
 }) => {
@@ -2654,7 +2727,7 @@ Define routes using the tRPC-style API with support for all HTTP methods.
 The router supports all standard HTTP methods:
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 export const userRouter = router({
@@ -2685,7 +2758,7 @@ export const userRouter = router({
 Extract parameters from the URL path. Path parameters in the route key (e.g., `{id}`) are automatically validated:
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 export const userRouter = router({
@@ -2724,7 +2797,7 @@ You must include `params: z.object({ id: z.string() })` (or the appropriate type
 Extract query string parameters:
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 export const userRouter = router({
@@ -2753,7 +2826,7 @@ Query strings are always strings in HTTP. Use `z.coerce.number()` to automatical
 Handle POST/PUT/PATCH requests with typed request bodies:
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 export const userRouter = router({
@@ -2780,7 +2853,7 @@ export const userRouter = router({
 You can combine params, query, and body:
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 export const userRouter = router({
@@ -2813,7 +2886,7 @@ export const userRouter = router({
 You can specify output schemas for validation:
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 const UserSchema = z.object({
@@ -2844,21 +2917,82 @@ export const userRouter = router({
 
 # Installation
 
-Install the server framework and its peer dependencies:
+Choose an adapter based on your preferred HTTP framework.
+
+## Hono Adapter (Recommended)
+
+Best for new projects, edge deployments, and serverless environments.
 
 ```bash
-pnpm add @alt-stack/server hono zod
+pnpm add @alt-stack/server-hono hono zod
 # or
-npm install @alt-stack/server hono zod
+npm install @alt-stack/server-hono hono zod
 # or
-yarn add @alt-stack/server hono zod
+yarn add @alt-stack/server-hono hono zod
 ```
 
-## Peer Dependencies
+### Peer Dependencies
 
-The framework requires:
 - **hono**: `^4.0.0` - The underlying HTTP framework
 - **zod**: `^4.0.0` - For schema validation and type inference
+
+## Express Adapter
+
+Best for existing Express applications or teams familiar with Express.
+
+```bash
+pnpm add @alt-stack/server-express express zod
+# or
+npm install @alt-stack/server-express express zod
+# or
+yarn add @alt-stack/server-express express zod
+```
+
+For TypeScript users:
+```bash
+pnpm add -D @types/express
+```
+
+### Peer Dependencies
+
+- **express**: `^4.0.0 || ^5.0.0` - The underlying HTTP framework
+- **zod**: `^4.0.0` - For schema validation and type inference
+
+## Which Adapter Should I Choose?
+
+| Feature | Hono | Express |
+|---------|------|---------|
+| Performance | Faster (Web Standards API) | Mature, well-tested |
+| Bundle size | Smaller | Larger ecosystem |
+| Edge/Serverless | Native support (Cloudflare, Vercel) | Requires adapters |
+| Middleware ecosystem | Growing | Extensive |
+| Learning curve | Familiar if you know fetch | Familiar if you know Express |
+
+**Recommendation**: Use `@alt-stack/server-hono` for new projects. Use `@alt-stack/server-express` if you're adding to an existing Express app or need specific Express middleware.
+
+## Migration from @alt-stack/server
+
+If you're using the deprecated `@alt-stack/server` package:
+
+```bash
+# Remove old package
+pnpm remove @alt-stack/server
+
+# Install new package
+pnpm add @alt-stack/server-hono hono zod
+```
+
+Then update your imports:
+
+```typescript
+// Before
+import { createServer, router } from "@alt-stack/server";
+
+// After
+import { createServer, router } from "@alt-stack/server-hono";
+```
+
+The API remains the same - only the import path changes.
 
 ---
 
@@ -2871,7 +3005,7 @@ Get started with a simple example that demonstrates the core concepts.
 ## Basic Example
 
 ```typescript
-import { init, createServer } from "@alt-stack/server";
+import { init, createServer } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 const factory = init();
@@ -2929,6 +3063,232 @@ This example shows:
 - Automatic input validation from params, query, and body
 - Type inference in handlers
 - Combining routes into a server
+
+---
+
+// File: guides/asyncapi-to-typescript
+
+# AsyncAPI to TypeScript
+
+Generate TypeScript types and Zod schemas from AsyncAPI specifications using the `zod-asyncapi` CLI.
+
+## Installation
+
+```bash
+pnpm add @alt-stack/zod-asyncapi
+# or
+npm install @alt-stack/zod-asyncapi
+```
+
+## CLI Usage
+
+```bash
+npx zod-asyncapi <input> [options]
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `-o, --output <file>` | Output file path (default: `generated-types.ts`) |
+| `-r, --registry <file>` | Registry file that registers custom schemas |
+| `-i, --include <file>` | TypeScript file to include at top of generated output |
+| `-h, --help` | Show help message |
+
+### Basic Examples
+
+```bash
+# Generate from local file
+npx zod-asyncapi asyncapi.json
+
+# Generate from URL (e.g., from your running Kafka producer)
+npx zod-asyncapi http://localhost:3000/asyncapi.json
+
+# Specify output file
+npx zod-asyncapi asyncapi.json -o src/kafka-types.ts
+```
+
+## Generated Output
+
+Given an AsyncAPI spec, the CLI generates:
+
+- **Zod schemas** for all component schemas
+- **TypeScript types** inferred from the Zod schemas
+- **Message schemas** for each topic
+- **Topics lookup object** for easy schema access
+
+### Example
+
+For an AsyncAPI spec with a `User` schema and `user-events` topic:
+
+```typescript
+/**
+ * This file was automatically generated from AsyncAPI schema
+ * Do not manually edit this file
+ */
+
+import { z } from 'zod';
+
+// Component Schemas
+export const UserSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  email: z.string().email(),
+});
+export type User = z.infer<typeof UserSchema>;
+
+// Topic Message Schemas
+export const UserEventsMessageSchema = UserSchema;
+export type UserEventsMessage = z.infer<typeof UserEventsMessageSchema>;
+
+// Topics Object
+export const Topics = {
+  'user-events': UserEventsMessageSchema
+} as const;
+
+export type TopicName = keyof typeof Topics;
+export type MessageType<T extends TopicName> = z.infer<typeof Topics[T]>;
+```
+
+## Custom String Formats
+
+For custom type mappings (e.g., using Luxon `DateTime` for `iso-date` format), use the `--registry` and `--include` flags.
+
+### Step 1: Create a Registry File
+
+The registry file registers format-to-schema mappings that the CLI uses during code generation:
+
+```typescript title="registry.ts"
+import { z } from "zod";
+import { registerZodSchemaToAsyncApiSchema } from "@alt-stack/zod-asyncapi";
+
+// Register DateTimeSchema for iso-date and iso-date-time formats
+const dateTimeSchema = z.string();
+registerZodSchemaToAsyncApiSchema(dateTimeSchema, {
+  schemaExportedVariableName: "DateTimeSchema",
+  type: "string",
+  formats: ["iso-date", "iso-date-time"],
+});
+```
+
+### Step 2: Create an Include File
+
+The include file contains imports and schema definitions that will be injected at the top of the generated output:
+
+```typescript title="custom-schemas.ts"
+import { DateTime } from "luxon";
+
+export const DateTimeSchema = z
+  .string()
+  .transform((v) => DateTime.fromISO(v));
+```
+
+### Step 3: Run the CLI
+
+```bash
+npx zod-asyncapi asyncapi.json \
+  -r ./registry.ts \
+  -i ./custom-schemas.ts \
+  -o src/kafka-types.ts
+```
+
+The generated output will:
+1. Include the contents of `custom-schemas.ts` at the top
+2. Use `DateTimeSchema` for any fields with `format: "iso-date"` or `format: "iso-date-time"`
+
+### Supported String Formats
+
+The following string formats can be registered:
+
+- `color-hex`
+- `date`
+- `date-time`
+- `email`
+- `iso-date`
+- `iso-date-time`
+- `objectid`
+- `uri`
+- `url`
+- `uuid`
+
+## Integration with @alt-stack/kafka
+
+A typical workflow with `@alt-stack/kafka`:
+
+1. **Define your Kafka topics** with Zod schemas on the producer
+2. **Generate AsyncAPI spec** using `createAsyncAPISpec`
+3. **Generate consumer types** using the `zod-asyncapi` CLI
+
+```bash
+# Fetch AsyncAPI from your running producer and generate types
+npx zod-asyncapi http://localhost:3000/asyncapi.json -o src/kafka-types.ts
+```
+
+This gives you fully typed message schemas that match your producer's API exactly.
+
+### Using Generated Types with Consumer
+
+```typescript
+import { Topics, TopicName, MessageType } from "./kafka-types";
+import { initKafka } from "@alt-stack/kafka";
+
+const kafka = initKafka({
+  brokers: ["localhost:9092"],
+  clientId: "my-consumer",
+});
+
+// Type-safe topic names
+const topicName: TopicName = "user-events";
+
+// Type-safe message validation
+const schema = Topics[topicName];
+const message: MessageType<"user-events"> = schema.parse(rawMessage);
+```
+
+## Programmatic Usage
+
+You can also use the library programmatically:
+
+```typescript
+import { asyncApiToZodTsCode } from "@alt-stack/zod-asyncapi";
+
+const asyncApiSpec = {
+  asyncapi: "3.0.0",
+  info: { title: "My API", version: "1.0.0" },
+  channels: {
+    userEvents: {
+      address: "user-events",
+      messages: {
+        UserCreated: { $ref: "#/components/messages/UserCreated" },
+      },
+    },
+  },
+  components: {
+    messages: {
+      UserCreated: {
+        payload: { $ref: "#/components/schemas/User" },
+      },
+    },
+    schemas: {
+      User: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          name: { type: "string" },
+        },
+        required: ["id", "name"],
+      },
+    },
+  },
+};
+
+const generatedCode = asyncApiToZodTsCode(
+  asyncApiSpec,
+  ['import { DateTime } from "luxon";'], // custom imports
+);
+
+console.log(generatedCode);
+```
 
 ---
 
@@ -3029,7 +3389,7 @@ Mount Better Auth routes alongside your server framework routes. Better Auth han
 
 ```typescript
 import { Hono } from "hono";
-import { createServer } from "@alt-stack/server";
+import { createServer } from "@alt-stack/server-hono";
 import { auth } from "./auth.js";
 import { todosRouter } from "./routes/todos.js";
 
@@ -3056,7 +3416,7 @@ export default app;
 Add the authenticated user to your custom context so it's available in all handlers. Use Zod validation to ensure type safety:
 
 ```typescript
-import { createServer } from "@alt-stack/server";
+import { createServer } from "@alt-stack/server-hono";
 import { getAuthUser, type User } from "./auth.js";
 import type { Context } from "hono";
 import { z } from "zod";
@@ -3204,7 +3564,7 @@ For most applications, applying CORS globally with credentials support works bes
 ```typescript
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { createServer } from "@alt-stack/server";
+import { createServer } from "@alt-stack/server-hono";
 import { auth, getAuthUser } from "./auth.js";
 import { todosRouter } from "./routes/todos.js";
 import type { Context } from "hono";
@@ -3254,7 +3614,7 @@ Use the `middleware` option in `createServer` to apply global middleware like CO
 
 ```typescript
 import { cors } from "hono/cors";
-import { createServer } from "@alt-stack/server";
+import { createServer } from "@alt-stack/server-hono";
 import { auth } from "./auth.js";
 import { todosRouter } from "./routes/todos.js";
 
@@ -3302,7 +3662,7 @@ If you need more control, you can still apply CORS manually after `createServer`
 ```typescript
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { createServer } from "@alt-stack/server";
+import { createServer } from "@alt-stack/server-hono";
 import { auth } from "./auth.js";
 import { todosRouter } from "./routes/todos.js";
 
@@ -3340,7 +3700,7 @@ Apply CORS to server framework routes only:
 ```typescript
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { createServer } from "@alt-stack/server";
+import { createServer } from "@alt-stack/server-hono";
 import { auth } from "./auth.js";
 import { todosRouter } from "./routes/todos.js";
 
@@ -3385,7 +3745,7 @@ Automatically generate and serve OpenAPI 3.0 documentation for your API using Zo
 Use `createDocsRouter` to automatically generate and serve OpenAPI documentation:
 
 ```typescript
-import { init, createServer, createDocsRouter } from "@alt-stack/server";
+import { init, createServer, createDocsRouter } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 const factory = init();
@@ -3450,7 +3810,7 @@ Now you can access:
 The `createDocsRouter` function takes the same router configuration as `createServer`, allowing it to automatically discover all your routes and generate complete OpenAPI documentation.
 
 ```typescript
-import { init, createDocsRouter } from "@alt-stack/server";
+import { init, createDocsRouter } from "@alt-stack/server-hono";
 
 const factory = init();
 const router = factory.router()
@@ -3491,7 +3851,7 @@ const docsRouter = createDocsRouter(
 The docs router integrates seamlessly with `createServer`:
 
 ```typescript
-import { init, createServer, createDocsRouter } from "@alt-stack/server";
+import { init, createServer, createDocsRouter } from "@alt-stack/server-hono";
 
 const factory = init();
 const todosRouter = factory.router()
@@ -3524,7 +3884,7 @@ With this setup:
 If you need the OpenAPI spec object directly (e.g., for external tools or custom documentation), use `generateOpenAPISpec`:
 
 ```typescript
-import { generateOpenAPISpec } from "@alt-stack/server";
+import { generateOpenAPISpec } from "@alt-stack/server-hono";
 
 const spec = generateOpenAPISpec(
   { api: router },
@@ -3556,7 +3916,7 @@ The OpenAPI documentation automatically includes:
 Here's a complete example with multiple route types:
 
 ```typescript
-import { init, createServer, createDocsRouter } from "@alt-stack/server";
+import { init, createServer, createDocsRouter } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 const factory = init();
@@ -3841,7 +4201,7 @@ The following string formats can be registered:
 
 ## Integration with @alt-stack/server
 
-A typical workflow with `@alt-stack/server`:
+A typical workflow with `@alt-stack/server-hono`:
 
 1. **Define your API** with Zod schemas on the server
 2. **Generate OpenAPI spec** using `createDocsRouter`
@@ -3916,7 +4276,7 @@ Follow the tRPC authorization pattern for type-safe protected routes. The middle
 The recommended way to create protected routes is using reusable procedures:
 
 ```typescript
-import { router, publicProcedure, init, createServer } from "@alt-stack/server";
+import { router, publicProcedure, init, createServer } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 interface AppContext {
@@ -3979,7 +4339,7 @@ See the [Reusable Procedures guide](/core-concepts/reusable-procedures) for more
 The middleware can narrow the context type by passing an updated context to `next()`:
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server";
+import { router, publicProcedure, init } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 interface AppContext {
@@ -4042,7 +4402,7 @@ export const protectedRouter = router({
 You can also use router-level middleware to protect all routes in a router:
 
 ```typescript
-import { router, publicProcedure, createMiddleware, init } from "@alt-stack/server";
+import { router, publicProcedure, createMiddleware, init } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 interface AppContext {
@@ -4103,7 +4463,7 @@ export const protectedRouter = router({
 You can mix public and protected routes in the same router:
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server";
+import { router, publicProcedure, init } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 interface AppContext {
@@ -4147,7 +4507,7 @@ export const appRouter = router({
 You can validate user roles, permissions, or other attributes:
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server";
+import { router, publicProcedure, init } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 interface AppContext {
@@ -4198,7 +4558,7 @@ export const moderatorRouter = router({
 For better type safety, use Zod's type inference to create authenticated context types:
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server";
+import { router, publicProcedure, init } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 // Your validated user schema
@@ -4249,14 +4609,32 @@ export const appRouter = router({
 
 # Introduction
 
-Altstack is a type-safe full-stack framework with separate server and client packages, built on Hono with Zod validation. Inspired by tRPC's builder pattern, providing full type inference from a central router definition.
+Altstack is a type-safe full-stack framework with separate server and client packages, built with Zod validation. Inspired by tRPC's builder pattern, providing full type inference from a central router definition.
 
 ## Architecture
 
-Altstack consists of two main packages:
+Altstack's server framework is split into a core package and framework-specific adapters:
 
-- **`@alt-stack/server`**: A lightweight, type-safe server framework for building APIs
+### Server Packages
+
+- **`@alt-stack/server-core`**: Framework-agnostic core containing types, router, middleware, and validation logic. Used as a dependency by the adapter packages.
+
+- **`@alt-stack/server-hono`**: [Hono](https://hono.dev/) adapter - creates a Hono app with full type inference. **Recommended for new projects.**
+
+- **`@alt-stack/server-express`**: [Express](https://expressjs.com/) adapter - creates an Express app with the same type-safe API.
+
+### Client Package
+
 - **`@alt-stack/client`**: A type-safe API client that works seamlessly with server-generated types
+
+## Choosing an Adapter
+
+| Feature | Hono | Express |
+|---------|------|---------|
+| Performance | Faster (Web Standards) | Mature ecosystem |
+| Edge/Serverless | Native support | Requires adapters |
+| Context access | `ctx.hono` | `ctx.express.req/res` |
+| Best for | New projects, edge | Existing Express apps |
 
 ## Server Features
 
@@ -4267,8 +4645,8 @@ Altstack consists of two main packages:
 - **Middleware support**: Router-level and procedure-level middleware with context extension
 - **Router combination**: Merge multiple routers with `.merge()`
 - **Validation**: Automatic Zod validation for inputs and optional outputs
-- **OpenAPI generation**: Generate OpenAPI specs and type-safe Request/Response objects
-- **Lightweight**: Minimal abstraction over Hono - easy to audit and understand
+- **OpenAPI generation**: Generate OpenAPI specs and interactive Swagger UI
+- **Native framework access**: Full access to underlying framework APIs
 
 ## Client Features
 
@@ -4277,6 +4655,24 @@ Altstack consists of two main packages:
 - **Retry logic**: Built-in exponential backoff for failed requests
 - **Path interpolation**: Automatic handling of path parameters
 - **Error handling**: Typed error responses with detailed error information
+
+## Quick Example
+
+```typescript
+import { init, createServer, router } from "@alt-stack/server-hono";
+import { z } from "zod";
+
+const factory = init();
+
+const appRouter = router({
+  "/hello": factory.procedure
+    .output(z.object({ message: z.string() }))
+    .get(() => ({ message: "Hello, World!" })),
+});
+
+const app = createServer({ api: appRouter });
+export default app;
+```
 
 ---
 

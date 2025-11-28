@@ -7,7 +7,7 @@ Apply middleware at router-level or procedure-level to add cross-cutting concern
 Apply middleware to all routes in a router using the `.use()` method:
 
 ```typescript
-import { router, publicProcedure, createMiddleware } from "@alt-stack/server";
+import { router, publicProcedure, createMiddleware } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 interface AppContext {
@@ -49,7 +49,7 @@ export const userRouter = router({
 Apply middleware to specific procedures using `.use()`:
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 export const userRouter = router({
@@ -82,7 +82,7 @@ export const userRouter = router({
 Middleware can extend the context by passing updated context to `next()`. This follows the tRPC pattern:
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server";
+import { router, publicProcedure, init } from "@alt-stack/server-hono";
 
 interface AppContext {
   user: { id: string; name: string } | null;
@@ -135,7 +135,7 @@ export const appRouter = router({
 Chain multiple middleware on the same procedure:
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server";
+import { router, publicProcedure, init } from "@alt-stack/server-hono";
 
 interface AppContext {
   user: { id: string; role: string } | null;
@@ -179,7 +179,7 @@ Middleware executes in the order they're defined.
 Create reusable procedures with middleware to reuse authentication or other middleware across multiple routes. See the [Reusable Procedures guide](/core-concepts/reusable-procedures) for details:
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server";
+import { router, publicProcedure, init } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 interface AppContext {
@@ -221,7 +221,7 @@ export const appRouter = router({
 Middleware can chain together, with each middleware able to extend the context:
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server";
+import { router, publicProcedure, init } from "@alt-stack/server-hono";
 
 interface AppContext {
   user: { id: string; role: string } | null;

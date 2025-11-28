@@ -8,7 +8,7 @@ First, ensure your server generates an OpenAPI spec and Request/Response types:
 
 ```typescript
 // server.ts
-import { init, createServer, generateOpenAPISpec } from "@alt-stack/server";
+import { init, createServer, generateOpenAPISpec } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 const factory = init();

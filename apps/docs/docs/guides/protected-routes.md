@@ -7,7 +7,7 @@ Follow the tRPC authorization pattern for type-safe protected routes. The middle
 The recommended way to create protected routes is using reusable procedures:
 
 ```typescript
-import { router, publicProcedure, init, createServer } from "@alt-stack/server";
+import { router, publicProcedure, init, createServer } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 interface AppContext {
@@ -70,7 +70,7 @@ See the [Reusable Procedures guide](/core-concepts/reusable-procedures) for more
 The middleware can narrow the context type by passing an updated context to `next()`:
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server";
+import { router, publicProcedure, init } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 interface AppContext {
@@ -133,7 +133,7 @@ export const protectedRouter = router({
 You can also use router-level middleware to protect all routes in a router:
 
 ```typescript
-import { router, publicProcedure, createMiddleware, init } from "@alt-stack/server";
+import { router, publicProcedure, createMiddleware, init } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 interface AppContext {
@@ -194,7 +194,7 @@ export const protectedRouter = router({
 You can mix public and protected routes in the same router:
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server";
+import { router, publicProcedure, init } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 interface AppContext {
@@ -238,7 +238,7 @@ export const appRouter = router({
 You can validate user roles, permissions, or other attributes:
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server";
+import { router, publicProcedure, init } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 interface AppContext {
@@ -289,7 +289,7 @@ export const moderatorRouter = router({
 For better type safety, use Zod's type inference to create authenticated context types:
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server";
+import { router, publicProcedure, init } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 // Your validated user schema

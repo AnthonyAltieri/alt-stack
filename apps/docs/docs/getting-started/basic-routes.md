@@ -7,7 +7,7 @@ Define routes using the tRPC-style API with support for all HTTP methods.
 The router supports all standard HTTP methods:
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 export const userRouter = router({
@@ -38,7 +38,7 @@ export const userRouter = router({
 Extract parameters from the URL path. Path parameters in the route key (e.g., `{id}`) are automatically validated:
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 export const userRouter = router({
@@ -77,7 +77,7 @@ You must include `params: z.object({ id: z.string() })` (or the appropriate type
 Extract query string parameters:
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 export const userRouter = router({
@@ -106,7 +106,7 @@ Query strings are always strings in HTTP. Use `z.coerce.number()` to automatical
 Handle POST/PUT/PATCH requests with typed request bodies:
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 export const userRouter = router({
@@ -133,7 +133,7 @@ export const userRouter = router({
 You can combine params, query, and body:
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 export const userRouter = router({
@@ -166,7 +166,7 @@ export const userRouter = router({
 You can specify output schemas for validation:
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 const UserSchema = z.object({

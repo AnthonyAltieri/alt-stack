@@ -7,7 +7,7 @@ Create reusable procedures with middleware to follow the tRPC pattern. This allo
 Use `publicProcedure` or `init()` to create procedures:
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server";
+import { router, publicProcedure, init } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 interface AppContext {
@@ -89,7 +89,7 @@ Procedures support the same configuration methods as regular routes:
 ### Setting Default Input
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 const validatedProcedure = publicProcedure.input({
@@ -116,7 +116,7 @@ export const dataRouter = router({
 ### Setting Default Output
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 const jsonProcedure = publicProcedure.output(
@@ -140,7 +140,7 @@ export const actionRouter = router({
 ### Setting Default Errors
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 const errorProcedure = publicProcedure.errors({
@@ -176,7 +176,7 @@ export const protectedRouter = router({
 Errors defined on procedures are automatically merged with errors defined on routes. Route errors take precedence when the same status code is defined in both:
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 // Procedure defines common authentication error
@@ -299,7 +299,7 @@ export const settingsRouter = router({
 Middleware can be chained to build up context:
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 interface AppContext {
@@ -341,7 +341,7 @@ export const adminRouter = router({
 ### Public and Protected Routes
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server";
+import { router, publicProcedure, init } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 interface AppContext {
@@ -367,7 +367,7 @@ export const appRouter = router({
 ### Role-Based Procedures
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server";
+import { router, publicProcedure, init } from "@alt-stack/server-hono";
 
 interface AppContext {
   user: { role: string } | null;
@@ -399,7 +399,7 @@ export const moderatorRouter = router({
 ### Rate Limited Procedures
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 
 const rateLimitedProcedure = publicProcedure.use(async (opts) => {
   const { ctx, next } = opts;

@@ -150,7 +150,7 @@ The following string formats can be registered:
 
 ## Integration with @alt-stack/server
 
-A typical workflow with `@alt-stack/server`:
+A typical workflow with `@alt-stack/server-hono`:
 
 1. **Define your API** with Zod schemas on the server
 2. **Generate OpenAPI spec** using `createDocsRouter`

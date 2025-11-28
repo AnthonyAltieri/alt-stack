@@ -13,7 +13,7 @@ Inputs can be validated from three sources:
 ## Example
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 export const userRouter = router({
@@ -111,7 +111,7 @@ The `body` field has no string input constraint since request bodies are parsed 
 When using path parameters in the route key (e.g., `{id}`), TypeScript enforces that you must provide a `params` schema with matching keys:
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 export const userRouter = router({
@@ -152,7 +152,7 @@ The handler is only called if all inputs pass validation, ensuring type safety a
 You can combine params, query, and body validation:
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 export const userRouter = router({

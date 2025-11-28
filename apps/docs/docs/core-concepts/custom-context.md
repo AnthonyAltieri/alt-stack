@@ -7,7 +7,7 @@ Define custom context (similar to tRPC) to pass data like database connections o
 Create a context type and a function to create it:
 
 ```typescript
-import { init, createServer } from "@alt-stack/server";
+import { init, createServer } from "@alt-stack/server-hono";
 import type { Context } from "hono";
 import { z } from "zod";
 

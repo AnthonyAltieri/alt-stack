@@ -18,8 +18,8 @@ A comprehensive example demonstrating all features of Altstack with the tRPC-sty
 ## Complete Server Implementation
 
 ```typescript
-import { router, publicProcedure, init, createServer } from "@alt-stack/server";
-import type { BaseContext, Middleware } from "@alt-stack/server";
+import { router, publicProcedure, init, createServer } from "@alt-stack/server-hono";
+import type { HonoBaseContext, Middleware } from "@alt-stack/server-hono";
 import type { Context } from "hono";
 import { z } from "zod";
 
@@ -489,7 +489,7 @@ export const adminRouter = router<AppContext>({
 // ============================================================================
 
 // Logging middleware for all routes
-const loggingMiddleware: Middleware<BaseContext & AppContext> = async ({
+const loggingMiddleware: Middleware<HonoBaseContext & AppContext> = async ({
   ctx,
   next,
 }) => {

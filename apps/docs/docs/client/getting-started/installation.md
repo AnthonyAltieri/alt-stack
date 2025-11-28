@@ -18,7 +18,7 @@ The client requires:
 ## Requirements
 
 To use the client, you need:
-1. A server built with `@alt-stack/server` that exposes an OpenAPI spec
+1. A server built with `@alt-stack/server-hono` or `@alt-stack/server-express` that exposes an OpenAPI spec
 2. Generated `Request` and `Response` types from your server's OpenAPI spec
 3. The OpenAPI spec object from your server
 

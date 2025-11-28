@@ -1,5 +1,5 @@
-import type { BaseContext, Middleware } from "@alt-stack/server";
-import { createDocsRouter, createServer, init, router } from "@alt-stack/server";
+import type { HonoBaseContext, Middleware } from "@alt-stack/server-hono";
+import { createDocsRouter, createServer, init, router } from "@alt-stack/server-hono";
 import type { Context } from "hono";
 import { z } from "zod";
 
@@ -104,8 +104,8 @@ export const todoRouter = router<AppContext>({
       .input({
         query: z.object({
           completed: z.enum(["true", "false"]).optional(),
-          limit: z.number().int().positive().optional(),
-          offset: z.number().int().nonnegative().optional(),
+          limit: z.coerce.number().int().positive().optional(),
+          offset: z.coerce.number().int().nonnegative().optional(),
         }),
       })
       .output(z.array(TodoSchema))
@@ -202,7 +202,7 @@ export const todoRouter = router<AppContext>({
           id: z.string().uuid(),
         }),
         query: z.object({
-          notify: z.boolean().optional(),
+          notify: z.coerce.boolean().optional(),
         }),
         body: z.object({
           title: z.string().min(1).max(200).optional(),
@@ -471,7 +471,7 @@ export const adminRouter = router<AppContext>({
 // ============================================================================
 
 // Logging middleware for all routes
-const loggingMiddleware: Middleware<BaseContext & AppContext> = async ({ ctx, next }) => {
+const loggingMiddleware: Middleware<HonoBaseContext & AppContext> = async ({ ctx, next }) => {
   const start = Date.now();
   const result = await next();
   const duration = Date.now() - start;

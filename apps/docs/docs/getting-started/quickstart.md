@@ -5,7 +5,7 @@ Get started with a simple example that demonstrates the core concepts.
 ## Basic Example
 
 ```typescript
-import { init, createServer } from "@alt-stack/server";
+import { init, createServer } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 const factory = init();

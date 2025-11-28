@@ -1,7 +1,8 @@
 {
   "name": "@alt-stack/server",
   "version": "1.0.6",
-  "description": "Lightweight type-safe server framework built on Hono with Zod validation",
+  "deprecated": "This package has been deprecated. Please migrate to @alt-stack/server-hono or @alt-stack/server-express",
+  "description": "DEPRECATED: Use @alt-stack/server-hono instead. Lightweight type-safe server framework built on Hono with Zod validation",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",

@@ -5,7 +5,7 @@ Organize your API by combining multiple routers using the new tRPC-style `router
 ## Basic Router Combination
 
 ```typescript
-import { router, publicProcedure, createServer } from "@alt-stack/server";
+import { router, publicProcedure, createServer } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 // User routes
@@ -80,7 +80,7 @@ const app = createServer({
 Routers can be nested within other routers. Paths combine automatically:
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server";
+import { router, publicProcedure } from "@alt-stack/server-hono";
 
 const productRouter = router({
   "favorites/me": publicProcedure.get(() => {
@@ -110,7 +110,7 @@ const appRouter = router({
 You can pass arrays of routers for the same prefix in `createServer`:
 
 ```typescript
-import { router, publicProcedure, createServer } from "@alt-stack/server";
+import { router, publicProcedure, createServer } from "@alt-stack/server-hono";
 
 const v1Router = router({
   users: publicProcedure.get(() => []),
@@ -132,7 +132,7 @@ This is useful for versioning APIs or organizing routes by feature.
 To achieve nested routes like `/api/v1/*` and `/api/v2/*`, use compound prefixes in `createServer`:
 
 ```typescript
-import { router, publicProcedure, createServer } from "@alt-stack/server";
+import { router, publicProcedure, createServer } from "@alt-stack/server-hono";
 
 const v1Router = router({
   users: publicProcedure.get(() => []),
@@ -163,7 +163,7 @@ Results in routes like:
 You can apply middleware to entire routers:
 
 ```typescript
-import { router, publicProcedure, createMiddleware } from "@alt-stack/server";
+import { router, publicProcedure, createMiddleware } from "@alt-stack/server-hono";
 
 const authMiddleware = createMiddleware(async ({ ctx, next }) => {
   // Auth logic

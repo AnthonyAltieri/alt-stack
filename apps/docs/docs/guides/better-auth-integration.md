@@ -93,7 +93,7 @@ Mount Better Auth routes alongside your server framework routes. Better Auth han
 
 ```typescript
 import { Hono } from "hono";
-import { createServer } from "@alt-stack/server";
+import { createServer } from "@alt-stack/server-hono";
 import { auth } from "./auth.js";
 import { todosRouter } from "./routes/todos.js";
 
@@ -120,7 +120,7 @@ export default app;
 Add the authenticated user to your custom context so it's available in all handlers. Use Zod validation to ensure type safety:
 
 ```typescript
-import { createServer } from "@alt-stack/server";
+import { createServer } from "@alt-stack/server-hono";
 import { getAuthUser, type User } from "./auth.js";
 import type { Context } from "hono";
 import { z } from "zod";
