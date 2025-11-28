@@ -28,7 +28,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           registry-url: 'https://registry.npmjs.org/'
 
       - name: Install pnpm
@@ -68,6 +68,95 @@ jobs:
             echo "DRY_RUN=false" >> $GITHUB_ENV
             echo "dry_run=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: Check if SDK regeneration needed
+        id: sdk-check
+        shell: bash
+        run: |
+          KAFKA_PRODUCER_CHANGED=false
+          ALTSTACK_SERVER_CHANGED=false
+          
+          # Get changed files
+          CHANGED_FILES=$(git diff --name-only HEAD^1 HEAD 2>/dev/null || echo "")
+          
+          if echo "$CHANGED_FILES" | grep -q "^apps/example-kafka-producer/"; then
+            KAFKA_PRODUCER_CHANGED=true
+            echo "📦 Kafka producer app changed - will regenerate SDK"
+          fi
+          
+          if echo "$CHANGED_FILES" | grep -q "^apps/example-altstack-server/"; then
+            ALTSTACK_SERVER_CHANGED=true
+            echo "📦 Altstack server app changed - will regenerate SDK"
+          fi
+          
+          echo "kafka_producer_changed=$KAFKA_PRODUCER_CHANGED" >> $GITHUB_OUTPUT
+          echo "altstack_server_changed=$ALTSTACK_SERVER_CHANGED" >> $GITHUB_OUTPUT
+
+      - name: Build core packages for SDK generation
+        if: steps.sdk-check.outputs.kafka_producer_changed == 'true' || steps.sdk-check.outputs.altstack_server_changed == 'true'
+        run: |
+          pnpm --filter @alt-stack/zod-openapi build
+          pnpm --filter @alt-stack/zod-asyncapi build
+          pnpm --filter @alt-stack/kafka build
+          pnpm --filter @alt-stack/server build
+
+      - name: Regenerate Kafka Producer SDK
+        if: steps.sdk-check.outputs.kafka_producer_changed == 'true'
+        run: |
+          echo "🔄 Regenerating Kafka Producer SDK..."
+          
+          cd apps/example-kafka-producer
+          pnpm generate-spec
+          echo "✓ Generated AsyncAPI spec"
+          
+          cd ../..
+          pnpm --filter @alt-stack/zod-asyncapi exec tsx src/cli.ts \
+            ${{ github.workspace }}/apps/example-kafka-producer/asyncapi.json \
+            -o ${{ github.workspace }}/packages/example-kafka-producer-sdk/src/index.ts
+          
+          echo "✓ Regenerated example-kafka-producer-sdk"
+
+      - name: Regenerate Altstack Server SDK
+        if: steps.sdk-check.outputs.altstack_server_changed == 'true'
+        run: |
+          echo "🔄 Regenerating Altstack Server SDK..."
+          
+          # Start server
+          cd apps/example-altstack-server
+          pnpm dev > server.log 2>&1 &
+          SERVER_PID=$!
+          
+          # Wait for server to be ready
+          MAX_ATTEMPTS=30
+          ATTEMPT=0
+          
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            sleep 2
+            if curl -f -s http://localhost:3000/docs/openapi.json > /dev/null 2>&1; then
+              echo "✓ Server is ready"
+              break
+            fi
+            ATTEMPT=$((ATTEMPT + 1))
+            echo "Waiting for server... attempt $ATTEMPT/$MAX_ATTEMPTS"
+          done
+          
+          if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+            echo "✗ Server failed to start"
+            cat server.log || true
+            kill $SERVER_PID 2>/dev/null || true
+            exit 1
+          fi
+          
+          # Generate SDK
+          cd ../..
+          pnpm --filter @alt-stack/zod-openapi exec tsx src/cli.ts \
+            http://localhost:3000/docs/openapi.json \
+            -o ${{ github.workspace }}/packages/example-altstack-server-sdk/src/index.ts
+          
+          # Stop server
+          kill $SERVER_PID 2>/dev/null || true
+          
+          echo "✓ Regenerated example-altstack-server-sdk"
 
       - name: Detect changed packages
         id: changed-packages
@@ -145,6 +234,20 @@ jobs:
             }
           }
           
+          // If example apps changed, add their corresponding SDKs
+          const kafkaProducerChanged = changedFiles.some(f => f.startsWith('apps/example-kafka-producer/'));
+          const altStackServerChanged = changedFiles.some(f => f.startsWith('apps/example-altstack-server/'));
+          
+          if (kafkaProducerChanged) {
+            changedPackages.add('@alt-stack/example-kafka-producer-sdk');
+            console.log('Added @alt-stack/example-kafka-producer-sdk (source app changed)');
+          }
+          
+          if (altStackServerChanged) {
+            changedPackages.add('@alt-stack/example-altstack-server-sdk');
+            console.log('Added @alt-stack/example-altstack-server-sdk (source app changed)');
+          }
+          
           const result = Array.from(changedPackages);
           console.log('Changed packages:', JSON.stringify(result, null, 2));
           fs.writeFileSync('changed-packages.json', JSON.stringify(result, null, 2));
@@ -178,6 +281,12 @@ jobs:
           }
           
           const results = [];
+          
+          // SDK to source app mapping for commit analysis
+          const sdkToAppDir = {
+            '@alt-stack/example-kafka-producer-sdk': 'apps/example-kafka-producer',
+            '@alt-stack/example-altstack-server-sdk': 'apps/example-altstack-server'
+          };
           
           for (const pkgName of packages) {
             try {
@@ -240,17 +349,24 @@ jobs:
                 sinceRef = lastTag;
               }
               
-              // Get commits affecting this package
+              // For SDKs, also check commits in the source app directory
+              const commitDirs = [pkgDir];
+              if (sdkToAppDir[pkgName]) {
+                commitDirs.push(sdkToAppDir[pkgName]);
+              }
+              
+              // Get commits affecting this package (and source app if SDK)
               let commits = [];
-              try {
-                const commitOutput = execSync(
-                  `git log ${sinceRef}..HEAD --pretty=format:"%s" -- ${pkgDir}`,
-                  { encoding: 'utf-8', cwd: process.cwd(), stdio: ['pipe', 'pipe', 'ignore'] }
-                );
-                commits = commitOutput.trim().split('\n').filter(Boolean);
-              } catch (e) {
-                // No commits found or error
-                commits = [];
+              for (const dir of commitDirs) {
+                try {
+                  const commitOutput = execSync(
+                    `git log ${sinceRef}..HEAD --pretty=format:"%s" -- ${dir}`,
+                    { encoding: 'utf-8', cwd: process.cwd(), stdio: ['pipe', 'pipe', 'ignore'] }
+                  );
+                  commits.push(...commitOutput.trim().split('\n').filter(Boolean));
+                } catch (e) {
+                  // No commits found or error
+                }
               }
               
               // Analyze commits for version bump type
@@ -528,6 +644,11 @@ jobs:
             exit 0
           fi
           
+          # Add SDK source files if regenerated
+          git add packages/example-kafka-producer-sdk/src/index.ts 2>/dev/null || true
+          git add packages/example-altstack-server-sdk/src/index.ts 2>/dev/null || true
+          git add apps/example-kafka-producer/asyncapi.json 2>/dev/null || true
+          
           git add packages/*/package.json
           if git diff --staged --quiet; then
             echo "No version changes to commit"
@@ -563,4 +684,3 @@ jobs:
           
           echo ""
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
