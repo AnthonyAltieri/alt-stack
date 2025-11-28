@@ -1,34 +1,32 @@
 # Quickstart
 
-Get started with a simple example that demonstrates the core concepts.
-
-## Basic Example
+## Basic Consumer
 
 ```typescript
-import { createKafkaRouter, createConsumer } from "@alt-stack/kafka";
+import { init, kafkaRouter, createConsumer } from "@alt-stack/kafka";
 import { Kafka } from "kafkajs";
 import { z } from "zod";
 
-// Define message schema
 const UserEventSchema = z.object({
   userId: z.string(),
   eventType: z.enum(["created", "updated", "deleted"]),
   timestamp: z.number(),
 });
 
-// Create router
-const router = createKafkaRouter()
-  .topic("user-events", {
-    input: {
-      message: UserEventSchema,
-    },
-  })
-  .handler((ctx) => {
-    // ctx.input is typed based on UserEventSchema
-    console.log(`Processing ${ctx.input.eventType} for user ${ctx.input.userId}`);
-  });
+// Initialize procedure builder
+const { procedure } = init();
 
-// Create consumer (automatically starts consuming messages)
+// Define router with topics as keys
+const router = kafkaRouter({
+  "user-events": procedure
+    .input({ message: UserEventSchema })
+    .subscribe(({ input, ctx }) => {
+      // input is typed: { userId: string, eventType: ..., timestamp: number }
+      console.log(`Event: ${input.eventType} for user ${input.userId}`);
+    }),
+});
+
+// Create and start consumer
 const consumer = await createConsumer(router, {
   kafka: new Kafka({
     clientId: "my-app",
@@ -36,14 +34,41 @@ const consumer = await createConsumer(router, {
   }),
   groupId: "my-consumer-group",
 });
-
-// Consumer is now running and processing messages automatically
-// Messages are validated and routed to the appropriate handlers
 ```
 
-This example shows:
-- Type-safe topic definitions with Zod schemas
-- Automatic message validation
-- Type inference in handlers
-- Simple consumer setup
+## Basic Producer
 
+```typescript
+import { init, kafkaRouter, createProducer } from "@alt-stack/kafka";
+import { Kafka } from "kafkajs";
+import { z } from "zod";
+
+const UserEventSchema = z.object({
+  userId: z.string(),
+  eventType: z.enum(["created", "updated", "deleted"]),
+  timestamp: z.number(),
+});
+
+const { procedure } = init();
+
+// Define the same router for type-safe producing
+const router = kafkaRouter({
+  "user-events": procedure
+    .input({ message: UserEventSchema })
+    .subscribe(() => {}), // Handler not needed for producer
+});
+
+const producer = await createProducer(router, {
+  kafka: new Kafka({
+    clientId: "my-app",
+    brokers: ["localhost:9092"],
+  }),
+});
+
+// Type-safe: only valid topics and message shapes allowed
+await producer.send("user-events", {
+  userId: "user-123",
+  eventType: "created",
+  timestamp: Date.now(),
+});
+```
