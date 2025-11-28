@@ -1041,8 +1041,8 @@ export const userRouter = router({
         id: z.string(),
       }),
       query: z.object({
-        limit: z.number().optional(),
-        offset: z.number().optional(),
+        limit: z.coerce.number().optional(),
+        offset: z.coerce.number().optional(),
       }),
     })
     .output(
@@ -1051,14 +1051,78 @@ export const userRouter = router({
       })
     )
     .get((opts) => {
-      // opts.input.id (from params)
-      // opts.input.limit (from query)
-      // opts.input.offset (from query)
+      // opts.input.params.id (from params)
+      // opts.input.query.limit (from query)
+      // opts.input.query.offset (from query)
       const { input } = opts;
-      return { id: input.id };
+      return { id: input.params.id };
     }),
 });
 ```
+
+## String Input Constraints
+
+Since HTTP path parameters and query strings are always strings, `params` and `query` schemas are constrained at **compile-time** to only accept Zod types that can parse string input. This prevents runtime errors from invalid schema configurations.
+
+| Schema | Input Type | Allowed in params/query? |
+|--------|-----------|--------------------------|
+| `z.string()` | `string` | ✅ |
+| `z.enum(["a", "b"])` | `"a" \| "b"` | ✅ (string literals) |
+| `z.coerce.number()` | `unknown` | ✅ (coerces strings) |
+| `z.string().transform(...)` | `string` | ✅ (transform) |
+| `z.codec(z.string(), ...)` | `string` | ✅ (Zod 4 codec) |
+| `z.number()` | `number` | ❌ compile error |
+| `z.boolean()` | `boolean` | ❌ compile error |
+| `z.array(...)` | `T[]` | ❌ compile error |
+
+```typescript
+// ✅ Valid - all fields accept string input
+.input({
+  params: z.object({ id: z.string() }),
+  query: z.object({ page: z.coerce.number() }),
+})
+
+// ❌ Compile error - z.number() doesn't accept string input
+.input({
+  query: z.object({ page: z.number() }), // Error!
+})
+```
+
+:::tip Use z.coerce for numeric parameters
+Since query strings are always strings, use `z.coerce.number()` instead of `z.number()` to automatically convert string values like `"42"` to numbers.
+:::
+
+### Zod 4 Codecs
+
+[Zod 4 codecs](https://zod.dev/codecs) provide bidirectional transformation between input and output types. They work seamlessly with params/query since the input schema determines what the field accepts:
+
+```typescript
+// Define a codec that transforms ISO strings to Date objects
+const stringToDate = z.codec(
+  z.iso.datetime(),  // input schema: ISO date string
+  z.date(),          // output schema: Date object
+  {
+    decode: (isoString) => new Date(isoString),
+    encode: (date) => date.toISOString(),
+  }
+);
+
+// ✅ Valid - input type is string (from z.iso.datetime())
+.input({
+  query: z.object({
+    since: stringToDate, // Accepts: "2024-01-15T10:30:00.000Z"
+  }),
+})
+.get(({ input }) => {
+  // input.query.since is typed as Date (the output type)
+  const date: Date = input.query.since;
+  return { events: getEventsSince(date) };
+})
+```
+
+:::note Body has no string constraint
+The `body` field has no string input constraint since request bodies are parsed as JSON and can contain any JSON-serializable types.
+:::
 
 ## Path Parameter Validation
 
@@ -1077,7 +1141,7 @@ export const userRouter = router({
       }),
     })
     .get((opts) => {
-      return { id: opts.input.id };
+      return { id: opts.input.params.id };
     }),
 
   // ❌ TypeScript error - missing params.id for {id} path
@@ -1126,10 +1190,10 @@ export const userRouter = router({
     .put((opts) => {
       const { input } = opts;
       // All inputs are validated and typed:
-      // input.id (from params)
-      // input.include (from query, optional)
-      // input.name, input.email (from body)
-      return { id: input.id };
+      // input.params.id (from params)
+      // input.query.include (from query, optional)
+      // input.body.name, input.body.email (from body)
+      return { id: input.params.id };
     }),
 });
 ```
@@ -2118,7 +2182,7 @@ export const todoRouter = router<AppContext>({
           id: z.string().uuid(),
         }),
         query: z.object({
-          notify: z.boolean().optional(),
+          notify: z.coerce.boolean().optional(),
         }),
         body: z.object({
           title: z.string().min(1).max(200).optional(),
@@ -2523,11 +2587,11 @@ Each route can define multiple error types with different status codes.
 ```typescript
 .input({
   params: z.object({ id: z.string().uuid() }),
-  query: z.object({ notify: z.boolean().optional() }),
+  query: z.object({ notify: z.coerce.boolean().optional() }),
   body: z.object({ title: z.string().optional() }),
 })
 ```
-Routes can use params, query, and body together.
+Routes can use params, query, and body together. Note that `params` and `query` must use schemas that accept string input (e.g., `z.string()`, `z.coerce.number()`, `z.coerce.boolean()`).
 
 ### 4. **Middleware Chaining**
 ```typescript
@@ -2667,18 +2731,22 @@ export const userRouter = router({
   list: publicProcedure
     .input({
       query: z.object({
-        limit: z.number().optional(),
-        offset: z.number().optional(),
+        limit: z.coerce.number().optional(),
+        offset: z.coerce.number().optional(),
         search: z.string().optional(),
       }),
     })
     .get((opts) => {
-      // opts.input.limit, opts.input.offset, opts.input.search are typed
+      // opts.input.query.limit, opts.input.query.offset, opts.input.query.search are typed
       const { input } = opts;
       return [];
     }),
 });
 ```
+
+:::tip Use z.coerce for numeric query parameters
+Query strings are always strings in HTTP. Use `z.coerce.number()` to automatically convert string values like `"10"` to numbers. See [Input Validation](/core-concepts/input-validation#string-input-constraints) for more details.
+:::
 
 ## Request Body
 
@@ -2722,7 +2790,7 @@ export const userRouter = router({
         id: z.string(),
       }),
       query: z.object({
-        notify: z.boolean().optional(),
+        notify: z.coerce.boolean().optional(),
       }),
       body: z.object({
         name: z.string(),
@@ -2732,10 +2800,10 @@ export const userRouter = router({
     .put((opts) => {
       // All inputs are available and typed
       const { input } = opts;
-      // input.id (from params)
-      // input.notify (from query)
-      // input.name, input.email (from body)
-      return { id: input.id };
+      // input.params.id (from params)
+      // input.query.notify (from query)
+      // input.body.name, input.body.email (from body)
+      return { id: input.params.id };
     }),
 });
 ```
@@ -3616,6 +3684,224 @@ The OpenAPI generation uses Zod 4's native `toJSONSchema()` function with the `o
 - Validation constraints are included in the schema
 
 The generated OpenAPI spec is fully compliant with OpenAPI 3.0 specification and can be used with any OpenAPI-compatible tools.
+
+---
+
+// File: guides/openapi-to-typescript
+
+# OpenAPI to TypeScript
+
+Generate TypeScript types and Zod schemas from OpenAPI specifications using the `zod-openapi` CLI.
+
+## Installation
+
+```bash
+pnpm add @alt-stack/zod-openapi
+# or
+npm install @alt-stack/zod-openapi
+```
+
+## CLI Usage
+
+```bash
+npx zod-openapi <input> [options]
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `-o, --output <file>` | Output file path (default: `generated-types.ts`) |
+| `-r, --registry <file>` | Registry file that registers custom schemas |
+| `-i, --include <file>` | TypeScript file to include at top of generated output |
+| `-h, --help` | Show help message |
+
+### Basic Examples
+
+```bash
+# Generate from local file
+npx zod-openapi openapi.json
+
+# Generate from URL (e.g., from your running server)
+npx zod-openapi http://localhost:3000/docs/openapi.json
+
+# Specify output file
+npx zod-openapi openapi.json -o src/api-types.ts
+```
+
+## Generated Output
+
+Given an OpenAPI spec, the CLI generates:
+
+- **Zod schemas** for all component schemas
+- **TypeScript types** inferred from the Zod schemas
+- **Request schemas** for params, query, headers, and body
+- **Response schemas** for all status codes
+- **Lookup objects** (`Request` and `Response`) for easy access
+
+### Example
+
+For an OpenAPI spec with a `User` schema and `/users/{id}` endpoint:
+
+```typescript
+/**
+ * This file was automatically generated from OpenAPI schema
+ * Do not manually edit this file
+ */
+
+import { z } from 'zod';
+
+export const UserSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  email: z.string().email(),
+});
+export type User = z.infer<typeof UserSchema>;
+
+export const GetUsersIdParams = z.object({ id: z.string() });
+export const GetUsersId200Response = UserSchema;
+
+export const Request = {
+  '/users/{id}': {
+    GET: {
+      params: GetUsersIdParams,
+    },
+  },
+} as const;
+
+export const Response = {
+  '/users/{id}': {
+    GET: {
+      '200': GetUsersId200Response,
+    },
+  },
+} as const;
+```
+
+## Custom String Formats
+
+For custom type mappings (e.g., using Luxon `DateTime` for `iso-date` format), use the `--registry` and `--include` flags.
+
+### Step 1: Create a Registry File
+
+The registry file registers format-to-schema mappings that the CLI uses during code generation:
+
+```typescript title="registry.ts"
+import { z } from "zod";
+import { registerZodSchemaToOpenApiSchema } from "@alt-stack/zod-openapi";
+
+// Register DateTimeSchema for iso-date and iso-date-time formats
+const dateTimeSchema = z.string();
+registerZodSchemaToOpenApiSchema(dateTimeSchema, {
+  schemaExportedVariableName: "DateTimeSchema",
+  type: "string",
+  formats: ["iso-date", "iso-date-time"],
+});
+```
+
+### Step 2: Create an Include File
+
+The include file contains imports and schema definitions that will be injected at the top of the generated output:
+
+```typescript title="custom-schemas.ts"
+import { DateTime } from "luxon";
+
+export const DateTimeSchema = z
+  .string()
+  .transform((v) => DateTime.fromISO(v));
+```
+
+### Step 3: Run the CLI
+
+```bash
+npx zod-openapi openapi.json \
+  -r ./registry.ts \
+  -i ./custom-schemas.ts \
+  -o src/api-types.ts
+```
+
+The generated output will:
+1. Include the contents of `custom-schemas.ts` at the top
+2. Use `DateTimeSchema` for any fields with `format: "iso-date"` or `format: "iso-date-time"`
+
+### Supported String Formats
+
+The following string formats can be registered:
+
+- `color-hex`
+- `date`
+- `date-time`
+- `email`
+- `iso-date`
+- `iso-date-time`
+- `objectid`
+- `uri`
+- `url`
+- `uuid`
+
+## Integration with @alt-stack/server
+
+A typical workflow with `@alt-stack/server`:
+
+1. **Define your API** with Zod schemas on the server
+2. **Generate OpenAPI spec** using `createDocsRouter`
+3. **Generate client types** using the `zod-openapi` CLI
+
+```bash
+# Fetch OpenAPI from your running server and generate types
+npx zod-openapi http://localhost:3000/docs/openapi.json -o src/api-types.ts
+```
+
+This gives you fully typed request/response schemas that match your server's API exactly.
+
+## Programmatic Usage
+
+You can also use the library programmatically:
+
+```typescript
+import { openApiToZodTsCode } from "@alt-stack/zod-openapi";
+
+const openApiSpec = {
+  components: {
+    schemas: {
+      User: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          name: { type: "string" },
+        },
+        required: ["id", "name"],
+      },
+    },
+  },
+  paths: {
+    "/users/{id}": {
+      get: {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+        ],
+        responses: {
+          "200": {
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/User" },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+};
+
+const generatedCode = openApiToZodTsCode(
+  openApiSpec,
+  ['import { DateTime } from "luxon";'], // custom imports
+  { includeRoutes: true }
+);
+
+console.log(generatedCode);
+```
 
 ---
 
