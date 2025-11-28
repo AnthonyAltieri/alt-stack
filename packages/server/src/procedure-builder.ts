@@ -7,31 +7,31 @@ import type {
   Procedure,
   ReadyProcedure,
   PendingProcedure,
+  StringInputObjectSchema,
 } from "./types/index.js";
-import type {
-  MiddlewareFunction,
-  MiddlewareBuilder,
-  Overwrite,
-} from "./middleware.js";
+import type { MiddlewareFunction, MiddlewareBuilder, Overwrite } from "./middleware.js";
+
+/**
+ * Validates that params/query schemas in InputConfig accept string input.
+ * Returns TInput if valid, otherwise makes params/query `never` to cause compile error.
+ */
+type ValidateStringInput<TInput extends InputConfig> = (TInput["params"] extends z.ZodTypeAny
+  ? { params: StringInputObjectSchema<TInput["params"]> }
+  : {}) &
+  (TInput["query"] extends z.ZodTypeAny
+    ? { query: StringInputObjectSchema<TInput["query"]> }
+    : {}) &
+  (TInput["body"] extends z.ZodTypeAny ? { body: TInput["body"] } : {});
 
 function convertPathToHono(path: string): string {
   return path.replace(/\{([^}]+)\}/g, ":$1");
 }
 
 // Helper type to merge InputConfigs
-type MergeInputConfig<
-  TBase extends InputConfig,
-  TOverride extends InputConfig,
-> = {
-  params: TOverride["params"] extends z.ZodTypeAny
-    ? TOverride["params"]
-    : TBase["params"];
-  query: TOverride["query"] extends z.ZodTypeAny
-    ? TOverride["query"]
-    : TBase["query"];
-  body: TOverride["body"] extends z.ZodTypeAny
-    ? TOverride["body"]
-    : TBase["body"];
+type MergeInputConfig<TBase extends InputConfig, TOverride extends InputConfig> = {
+  params: TOverride["params"] extends z.ZodTypeAny ? TOverride["params"] : TBase["params"];
+  query: TOverride["query"] extends z.ZodTypeAny ? TOverride["query"] : TBase["query"];
+  body: TOverride["body"] extends z.ZodTypeAny ? TOverride["body"] : TBase["body"];
 };
 
 // Helper type to merge error configs - unions schemas when status codes overlap
@@ -42,9 +42,7 @@ type MergeErrors<
   TRouteErrors extends Record<number, z.ZodTypeAny>
     ? TBaseErrors extends Record<number, z.ZodTypeAny>
       ? {
-          [K in
-            | keyof TBaseErrors
-            | keyof TRouteErrors]: K extends keyof TBaseErrors
+          [K in keyof TBaseErrors | keyof TRouteErrors]: K extends keyof TBaseErrors
             ? K extends keyof TRouteErrors
               ? TBaseErrors[K] | TRouteErrors[K]
               : TBaseErrors[K]
@@ -81,11 +79,7 @@ export class BaseProcedureBuilder<
   // Middleware stored with type erasure for runtime, but builder generic tracks narrowed context
   private _middleware: Array<
     (opts: {
-      ctx: TypedContext<
-        InputConfig,
-        Record<number, z.ZodTypeAny> | undefined,
-        any
-      >;
+      ctx: TypedContext<InputConfig, Record<number, z.ZodTypeAny> | undefined, any>;
       next: (opts?: { ctx?: any }) => Promise<any>;
     }) => Promise<any>
   > = [];
@@ -139,20 +133,12 @@ export class BaseProcedureBuilder<
   use<$ContextOverridesOut>(
     middlewareOrBuilder:
       | MiddlewareFunction<
-          TypedContext<
-            InputConfig,
-            MergeErrors<TDefaultErrors, TBaseErrors>,
-            TCustomContext
-          >,
+          TypedContext<InputConfig, MergeErrors<TDefaultErrors, TBaseErrors>, TCustomContext>,
           object,
           $ContextOverridesOut
         >
       | MiddlewareBuilder<
-          TypedContext<
-            InputConfig,
-            MergeErrors<TDefaultErrors, TBaseErrors>,
-            TCustomContext
-          >,
+          TypedContext<InputConfig, MergeErrors<TDefaultErrors, TBaseErrors>, TCustomContext>,
           $ContextOverridesOut
         >,
   ): BaseProcedureBuilder<
@@ -176,15 +162,11 @@ export class BaseProcedureBuilder<
       Overwrite<TCustomContext, $ContextOverridesOut>,
       TRouter,
       TDefaultErrors
-    >(
-      this._baseConfig,
-      [...this._middleware, ...newMiddleware] as any,
-      this.router,
-    );
+    >(this._baseConfig, [...this._middleware, ...newMiddleware] as any, this.router);
   }
 
   input<TInput extends InputConfig>(
-    input: TInput,
+    input: TInput & ValidateStringInput<TInput>,
   ): BaseProcedureBuilder<
     MergeInputConfig<TBaseInput, TInput>,
     TBaseOutput,
@@ -202,10 +184,7 @@ export class BaseProcedureBuilder<
       TDefaultErrors
     >(
       {
-        input: { ...this._baseConfig.input, ...input } as MergeInputConfig<
-          TBaseInput,
-          TInput
-        >,
+        input: { ...this._baseConfig.input, ...input } as MergeInputConfig<TBaseInput, TInput>,
         output: this._baseConfig.output,
         errors: this._baseConfig.errors,
       },
@@ -312,7 +291,12 @@ export class BaseProcedureBuilder<
       | Promise<InferOutput<NonNullable<TBaseOutput>> | Response>
       | InferOutput<NonNullable<TBaseOutput>>
       | Response,
-  ): ReadyProcedure<TBaseInput, TBaseOutput, MergeErrors<TDefaultErrors, TBaseErrors>, TCustomContext> {
+  ): ReadyProcedure<
+    TBaseInput,
+    TBaseOutput,
+    MergeErrors<TDefaultErrors, TBaseErrors>,
+    TCustomContext
+  > {
     return {
       method: "GET",
       config: this._baseConfig as any,
@@ -329,7 +313,12 @@ export class BaseProcedureBuilder<
       | Promise<InferOutput<NonNullable<TBaseOutput>> | Response>
       | InferOutput<NonNullable<TBaseOutput>>
       | Response,
-  ): ReadyProcedure<TBaseInput, TBaseOutput, MergeErrors<TDefaultErrors, TBaseErrors>, TCustomContext> {
+  ): ReadyProcedure<
+    TBaseInput,
+    TBaseOutput,
+    MergeErrors<TDefaultErrors, TBaseErrors>,
+    TCustomContext
+  > {
     return {
       method: "POST",
       config: this._baseConfig as any,
@@ -346,7 +335,12 @@ export class BaseProcedureBuilder<
       | Promise<InferOutput<NonNullable<TBaseOutput>> | Response>
       | InferOutput<NonNullable<TBaseOutput>>
       | Response,
-  ): ReadyProcedure<TBaseInput, TBaseOutput, MergeErrors<TDefaultErrors, TBaseErrors>, TCustomContext> {
+  ): ReadyProcedure<
+    TBaseInput,
+    TBaseOutput,
+    MergeErrors<TDefaultErrors, TBaseErrors>,
+    TCustomContext
+  > {
     return {
       method: "PUT",
       config: this._baseConfig as any,
@@ -363,7 +357,12 @@ export class BaseProcedureBuilder<
       | Promise<InferOutput<NonNullable<TBaseOutput>> | Response>
       | InferOutput<NonNullable<TBaseOutput>>
       | Response,
-  ): ReadyProcedure<TBaseInput, TBaseOutput, MergeErrors<TDefaultErrors, TBaseErrors>, TCustomContext> {
+  ): ReadyProcedure<
+    TBaseInput,
+    TBaseOutput,
+    MergeErrors<TDefaultErrors, TBaseErrors>,
+    TCustomContext
+  > {
     return {
       method: "PATCH",
       config: this._baseConfig as any,
@@ -380,7 +379,12 @@ export class BaseProcedureBuilder<
       | Promise<InferOutput<NonNullable<TBaseOutput>> | Response>
       | InferOutput<NonNullable<TBaseOutput>>
       | Response,
-  ): ReadyProcedure<TBaseInput, TBaseOutput, MergeErrors<TDefaultErrors, TBaseErrors>, TCustomContext> {
+  ): ReadyProcedure<
+    TBaseInput,
+    TBaseOutput,
+    MergeErrors<TDefaultErrors, TBaseErrors>,
+    TCustomContext
+  > {
     return {
       method: "DELETE",
       config: this._baseConfig as any,
@@ -400,7 +404,12 @@ export class BaseProcedureBuilder<
       | Promise<InferOutput<NonNullable<TBaseOutput>> | Response>
       | InferOutput<NonNullable<TBaseOutput>>
       | Response,
-  ): PendingProcedure<TBaseInput, TBaseOutput, MergeErrors<TDefaultErrors, TBaseErrors>, TCustomContext> {
+  ): PendingProcedure<
+    TBaseInput,
+    TBaseOutput,
+    MergeErrors<TDefaultErrors, TBaseErrors>,
+    TCustomContext
+  > {
     return {
       config: this._baseConfig as any,
       handler: handlerFn,

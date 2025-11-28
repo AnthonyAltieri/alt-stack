@@ -15,9 +15,7 @@ import type { createRouter } from "./router.js";
 
 // Type testing utilities
 type Equal<X, Y> =
-  (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2
-    ? true
-    : false;
+  (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2 ? true : false;
 
 type Expect<T extends true> = T;
 
@@ -210,6 +208,119 @@ const testInputInference = <T extends typeof createRouter>(router: T) => {
     });
 };
 
+// Test that params with transform works (codec pattern: string -> other type)
+const testParamsWithTransform = <T extends typeof createRouter>(router: T) => {
+  router()
+    .get("/users/{id}" as const, {
+      input: {
+        params: z.object({
+          id: z.string().transform((s) => parseInt(s, 10)), // ✅ Valid - input is string
+        }),
+      },
+      output: z.object({ id: z.number() }),
+    })
+    .handler((ctx) => {
+      // After transform, id is number
+      const id: number = ctx.input.params.id;
+      return { id };
+    });
+};
+
+// Test that query with transform works
+const testQueryWithTransform = <T extends typeof createRouter>(router: T) => {
+  router()
+    .get("/users" as const, {
+      input: {
+        query: z.object({
+          page: z.string().transform((s) => parseInt(s, 10)), // ✅ Valid - input is string
+        }),
+      },
+      output: z.object({ page: z.number() }),
+    })
+    .handler((ctx) => {
+      const page: number = ctx.input.query.page;
+      return { page };
+    });
+};
+
+// Test that params with enum works
+const testParamsWithEnum = <T extends typeof createRouter>(router: T) => {
+  router()
+    .get("/users/{status}" as const, {
+      input: {
+        params: z.object({
+          status: z.enum(["active", "inactive"]), // ✅ Valid - accepts string literals
+        }),
+      },
+      output: z.object({ status: z.string() }),
+    })
+    .handler((ctx) => {
+      const status: "active" | "inactive" = ctx.input.params.status;
+      return { status };
+    });
+};
+
+// Test that query with enum works
+const testQueryWithEnum = <T extends typeof createRouter>(router: T) => {
+  router()
+    .get("/users" as const, {
+      input: {
+        query: z.object({
+          sort: z.enum(["asc", "desc"]), // ✅ Valid - accepts string literals
+        }),
+      },
+      output: z.object({ sort: z.string() }),
+    })
+    .handler((ctx) => {
+      const sort: "asc" | "desc" = ctx.input.query.sort;
+      return { sort };
+    });
+};
+
+// Test that optional params work
+const testOptionalParams = <T extends typeof createRouter>(router: T) => {
+  router()
+    .get("/users" as const, {
+      input: {
+        query: z.object({
+          limit: z.string().optional(), // ✅ Valid - optional string
+          offset: z.coerce.number().optional(), // ✅ Valid - optional coerced number
+        }),
+      },
+      output: z.object({ count: z.number() }),
+    })
+    .handler((ctx) => {
+      const _limit: string | undefined = ctx.input.query.limit;
+      const _offset: number | undefined = ctx.input.query.offset;
+      return { count: 0 };
+    });
+};
+
+// Test that Zod 4 codecs work (bidirectional transformation)
+// See: https://zod.dev/codecs
+const testQueryWithCodec = <T extends typeof createRouter>(router: T) => {
+  // z.codec() defines bidirectional transformation between input and output schemas
+  const stringToDate = z.codec(z.iso.datetime(), z.date(), {
+    decode: (isoString) => new Date(isoString), // ISO string → Date
+    encode: (date) => date.toISOString(), // Date → ISO string
+  });
+
+  router()
+    .get("/events" as const, {
+      input: {
+        query: z.object({
+          since: stringToDate, // ✅ Valid - input is string, output is Date
+        }),
+      },
+      output: z.object({ count: z.number() }),
+    })
+    .handler((ctx) => {
+      // After decoding, since is a Date object
+      const since: Date = ctx.input.query.since;
+      return { count: since.getTime() };
+    });
+};
+
 // Export to ensure types are evaluated
 export type RouterTypeTests = [TestValidRouterConfig];
 
@@ -223,4 +334,10 @@ export const routerTypeTests = {
   testBodyWithNumber,
   testErrorThrowing,
   testInputInference,
+  testParamsWithTransform,
+  testQueryWithTransform,
+  testParamsWithEnum,
+  testQueryWithEnum,
+  testOptionalParams,
+  testQueryWithCodec,
 };

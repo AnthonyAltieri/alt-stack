@@ -220,7 +220,7 @@ export const todoRouter = router<AppContext>({
           id: z.string().uuid(),
         }),
         query: z.object({
-          notify: z.boolean().optional(),
+          notify: z.coerce.boolean().optional(),
         }),
         body: z.object({
           title: z.string().min(1).max(200).optional(),
@@ -625,11 +625,11 @@ Each route can define multiple error types with different status codes.
 ```typescript
 .input({
   params: z.object({ id: z.string().uuid() }),
-  query: z.object({ notify: z.boolean().optional() }),
+  query: z.object({ notify: z.coerce.boolean().optional() }),
   body: z.object({ title: z.string().optional() }),
 })
 ```
-Routes can use params, query, and body together.
+Routes can use params, query, and body together. Note that `params` and `query` must use schemas that accept string input (e.g., `z.string()`, `z.coerce.number()`, `z.coerce.boolean()`).
 
 ### 4. **Middleware Chaining**
 ```typescript

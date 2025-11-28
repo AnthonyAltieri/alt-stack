@@ -7,11 +7,11 @@ export type {
   InferInput,
   BaseContext,
   TypedContext,
+  StringInputObjectSchema,
 } from "./context.js";
 
 // Re-export all types from procedure.ts
 export type {
-  AcceptsStringInput,
   ExtractPathParams,
   RequireParamsForPath,
   ProcedureConfig,

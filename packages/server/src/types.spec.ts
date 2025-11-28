@@ -8,9 +8,9 @@
  *    - Extracts single and multiple parameters from paths
  *    - Handles nested paths correctly
  *
- * 2. String input constraints (`AcceptsStringInput`)
+ * 2. String input constraints (`StringInputObjectSchema`)
  *    - Ensures params and query schemas accept string input
- *    - Validates z.string(), z.coerce.number(), etc. work
+ *    - Validates z.string(), z.string().transform(), etc. work
  *    - Ensures z.number() fails (doesn't accept string)
  *
  * 3. Input type inference (`InferInput`)
@@ -29,16 +29,14 @@
 import type { z } from "zod";
 import type {
   ExtractPathParams,
-  AcceptsStringInput,
+  StringInputObjectSchema,
   InferInput,
   ErrorUnion,
 } from "./types/index.js";
 
 // Type testing utilities
 type Equal<X, Y> =
-  (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2
-    ? true
-    : false;
+  (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2 ? true : false;
 
 type Expect<T extends true> = T;
 
@@ -48,9 +46,7 @@ type NotEqual<X, Y> = Equal<X, Y> extends true ? false : true;
 type IsAssignable<T, U> = T extends U ? true : false;
 
 // Test ExtractPathParams
-type TestExtractSingleParam = Expect<
-  Equal<ExtractPathParams<"/users/{id}">, "id">
->;
+type TestExtractSingleParam = Expect<Equal<ExtractPathParams<"/users/{id}">, "id">>;
 type TestExtractMultipleParams = Expect<
   Equal<ExtractPathParams<"/users/{id}/posts/{postId}">, "id" | "postId">
 >;
@@ -62,8 +58,7 @@ type TestExtractNestedParams = Expect<
   >
 >;
 
-// Note: AcceptsStringInput constraint testing is difficult at the type level
-// because z.input may not work correctly with type constructors.
+// Note: StringInputObjectSchema constraint testing is demonstrated below.
 // The actual enforcement happens at compile time when using the router API.
 // See router-types.spec.ts for integration tests that verify the constraints work.
 
@@ -165,20 +160,15 @@ type ValidParamsSchema = z.ZodObject<{
 type RequiredParamsKeys = ExtractPathParams<"/users/{id}">;
 
 type TestPathParamsRequired = Expect<
-  Equal<
-    RequiredParamsKeys extends keyof z.infer<ValidParamsSchema> ? true : false,
-    true
-  >
+  Equal<RequiredParamsKeys extends keyof z.infer<ValidParamsSchema> ? true : false, true>
 >;
 // Test that missing path param is detected
 // Note: The constraint is enforced at compile time via ProcedureConfig
 // This verifies the type structure exists (the actual check happens in router usage)
-type TestMissingPathParam = Expect<
-  Equal<"id" extends "name" ? true : false, false>
->;
+type TestMissingPathParam = Expect<Equal<"id" extends "name" ? true : false, false>>;
 
 // Test that params must accept string input (valid case)
-// Check that AcceptsStringInput returns the schema (not never) for valid schemas
+// Check that StringInputObjectSchema returns the schema (not never) for valid schemas
 type ValidParamsSchema2 = z.ZodObject<{
   id: z.ZodString;
 }>;
@@ -189,28 +179,28 @@ type ValidBodySchema = z.ZodObject<{
   age: z.ZodNumber;
 }>;
 
+// Valid: all fields accept string input
 type TestParamsMustAcceptString = Expect<
-  NotEqual<AcceptsStringInput<ValidParamsSchema2>, never>
+  NotEqual<StringInputObjectSchema<ValidParamsSchema2>, never>
 >;
-type TestQueryMustAcceptString = Expect<
-  NotEqual<AcceptsStringInput<ValidQuerySchema>, never>
->;
+type TestQueryMustAcceptString = Expect<NotEqual<StringInputObjectSchema<ValidQuerySchema>, never>>;
+// Body has no string constraint - it can contain any types
 type TestBodyNoStringConstraint = Expect<
   Equal<ValidBodySchema extends z.ZodTypeAny ? true : false, true>
 >;
+
 // Test that params with number schema fails string constraint
-// Note: AcceptsStringInput constraint is enforced at compile time via ProcedureConfig
-// Testing z.input with type constructors is difficult due to TypeScript limitations
-// The actual constraint works correctly when using the router API
-// This test is skipped - see router-types.spec.ts for integration tests
-// type TestParamsNumberFails = Expect<
-//   NotEqual<
-//     InvalidParamsSchema2 extends AcceptsStringInput<z.ZodTypeAny>
-//       ? true
-//       : false,
-//     true
-//   >
-// >;
+type InvalidParamsSchema = z.ZodObject<{
+  id: z.ZodString;
+  age: z.ZodNumber; // This fails - z.number() doesn't accept string input
+}>;
+type TestParamsNumberFails = Expect<Equal<StringInputObjectSchema<InvalidParamsSchema>, never>>;
+
+// Test that literal string schemas work (they accept string literals)
+type LiteralParamsSchema = z.ZodObject<{
+  status: z.ZodLiteral<"active">;
+}>;
+type TestLiteralParamsWork = Expect<NotEqual<StringInputObjectSchema<LiteralParamsSchema>, never>>;
 
 // Export to ensure types are evaluated
 export type TypeTests = [
@@ -229,5 +219,6 @@ export type TypeTests = [
   TestParamsMustAcceptString,
   TestQueryMustAcceptString,
   TestBodyNoStringConstraint,
-  // TestParamsNumberFails, // Skipped - see router-types.spec.ts for integration tests
+  TestParamsNumberFails,
+  TestLiteralParamsWork,
 ];

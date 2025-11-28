@@ -84,18 +84,22 @@ export const userRouter = router({
   list: publicProcedure
     .input({
       query: z.object({
-        limit: z.number().optional(),
-        offset: z.number().optional(),
+        limit: z.coerce.number().optional(),
+        offset: z.coerce.number().optional(),
         search: z.string().optional(),
       }),
     })
     .get((opts) => {
-      // opts.input.limit, opts.input.offset, opts.input.search are typed
+      // opts.input.query.limit, opts.input.query.offset, opts.input.query.search are typed
       const { input } = opts;
       return [];
     }),
 });
 ```
+
+:::tip Use z.coerce for numeric query parameters
+Query strings are always strings in HTTP. Use `z.coerce.number()` to automatically convert string values like `"10"` to numbers. See [Input Validation](/core-concepts/input-validation#string-input-constraints) for more details.
+:::
 
 ## Request Body
 
@@ -139,7 +143,7 @@ export const userRouter = router({
         id: z.string(),
       }),
       query: z.object({
-        notify: z.boolean().optional(),
+        notify: z.coerce.boolean().optional(),
       }),
       body: z.object({
         name: z.string(),
@@ -149,10 +153,10 @@ export const userRouter = router({
     .put((opts) => {
       // All inputs are available and typed
       const { input } = opts;
-      // input.id (from params)
-      // input.notify (from query)
-      // input.name, input.email (from body)
-      return { id: input.id };
+      // input.params.id (from params)
+      // input.query.notify (from query)
+      // input.body.name, input.body.email (from body)
+      return { id: input.params.id };
     }),
 });
 ```
