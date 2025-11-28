@@ -44,14 +44,11 @@ const result = await client.post("/users", {
 });
 ```
 
-### Other Methods
+### Supported Methods
 
-The client supports all standard HTTP methods:
+The client currently supports:
 - `get()` - GET requests
 - `post()` - POST requests
-- `put()` - PUT requests
-- `patch()` - PATCH requests
-- `delete()` - DELETE requests
 
 ## Handling Responses
 
@@ -63,16 +60,17 @@ const result = await client.get("/users/{id}", {
 });
 
 if (result.success) {
-  // Type-safe access to response data
-  console.log(result.data);
+  // Type-safe access to response body
+  console.log(result.body);
+  console.log(result.code); // Status code string, e.g., "200"
 } else {
-  // Handle error
-  if (result.error.type === "error") {
-    // Server returned an error response
-    console.error(result.error.code, result.error.message);
+  // Handle error - check if it's a defined error or unexpected
+  if (typeof result.code === "string") {
+    // Server returned a defined error response
+    console.error(result.code, result.error);
   } else {
     // Unexpected error (network, validation, etc.)
-    console.error(result.error.message);
+    console.error(result.error);
   }
 }
 ```
