@@ -21,7 +21,77 @@ npm install zod-openapi
 yarn add zod-openapi
 ```
 
-## Usage
+## CLI Usage
+
+Generate TypeScript types directly from the command line:
+
+```bash
+npx zod-openapi <input> [options]
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `-o, --output <file>` | Output file path (default: `generated-types.ts`) |
+| `-r, --registry <file>` | Registry file that registers custom schemas |
+| `-i, --include <file>` | TypeScript file to include at top of generated output |
+| `-h, --help` | Show help message |
+
+### Basic CLI Example
+
+```bash
+# Generate from local file
+npx zod-openapi openapi.json
+
+# Generate from URL
+npx zod-openapi http://localhost:3000/docs/openapi.json
+
+# Specify output file
+npx zod-openapi openapi.json -o src/api-types.ts
+```
+
+### Custom Schemas with CLI
+
+For custom type mappings (e.g., using Luxon DateTime for `iso-date` format), create a registry file and an include file:
+
+**registry.ts** - Registers format-to-schema mappings:
+
+```typescript
+import { z } from "zod";
+import { registerZodSchemaToOpenApiSchema } from "zod-openapi";
+
+// Register DateTime schema for iso-date and iso-date-time formats
+const dateTimeSchema = z.string();
+registerZodSchemaToOpenApiSchema(dateTimeSchema, {
+  schemaExportedVariableName: "DateTimeSchema",
+  type: "string",
+  formats: ["iso-date", "iso-date-time"],
+});
+```
+
+**custom-schemas.ts** - Included in generated output:
+
+```typescript
+import { DateTime } from "luxon";
+
+export const DateTimeSchema = z
+  .string()
+  .transform((v) => DateTime.fromISO(v));
+```
+
+**Run the CLI:**
+
+```bash
+npx zod-openapi openapi.json \
+  -r ./registry.ts \
+  -i ./custom-schemas.ts \
+  -o src/api-types.ts
+```
+
+The generated output will include your custom schemas and use `DateTimeSchema` for any fields with `format: "iso-date"` or `format: "iso-date-time"`.
+
+## Programmatic Usage
 
 ### Basic Example
 

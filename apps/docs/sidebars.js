@@ -55,6 +55,7 @@ module.exports = {
             'guides/cors-configuration',
             'guides/client-side-usage',
             'guides/openapi-documentation',
+            'guides/openapi-to-typescript',
           ],
         },
       ],
