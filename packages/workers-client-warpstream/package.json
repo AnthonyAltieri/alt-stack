@@ -1,0 +1,44 @@
+{
+  "name": "@alt-stack/workers-client-warpstream",
+  "version": "0.1.0",
+  "description": "WarpStream binding for type-safe worker client with optimized defaults",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "check-types": "tsc --noEmit"
+  },
+  "keywords": [
+    "workers",
+    "warpstream",
+    "kafka",
+    "client",
+    "typescript",
+    "zod"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@alt-stack/workers-client-core": "workspace:*"
+  },
+  "peerDependencies": {
+    "kafkajs": "^2.0.0",
+    "zod": "^3.25.0 || ^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "kafkajs": "^2.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.9.2",
+    "zod": "^4.0.0"
+  }
+}
+

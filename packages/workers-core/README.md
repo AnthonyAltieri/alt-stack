@@ -70,11 +70,51 @@ const loggingMiddleware = middleware(async ({ ctx, next }) => {
 const protectedProcedure = procedure.use(loggingMiddleware);
 ```
 
+## AsyncAPI Spec Generation
+
+Generate an AsyncAPI specification from your router for SDK generation:
+
+```typescript
+import { generateAsyncAPISpec } from "@alt-stack/workers-core";
+import { writeFileSync } from "node:fs";
+
+const spec = generateAsyncAPISpec(emailRouter, {
+  title: "Workers API",
+  version: "1.0.0",
+});
+
+writeFileSync("asyncapi.json", JSON.stringify(spec, null, 2));
+```
+
+Then generate a TypeScript SDK:
+
+```bash
+npx asyncapi-to-zod asyncapi.json -o ./sdk/index.ts
+```
+
+Use the generated SDK with worker clients:
+
+```typescript
+import { Topics } from "./sdk";
+import { createTriggerClient } from "@alt-stack/workers-client-trigger";
+
+const client = createTriggerClient({ jobs: Topics });
+await client.trigger("send-welcome-email", { userId: "123", email: "user@example.com" });
+```
+
 ## Provider Bindings
 
 This is the core package. To actually run workers, you need a provider binding:
 
 - `@alt-stack/workers-trigger` - Trigger.dev integration
+- `@alt-stack/workers-warpstream` - WarpStream/Kafka integration
+
+## Client Packages
+
+To trigger workers from generated SDKs (without importing router definitions):
+
+- `@alt-stack/workers-client-trigger` - Trigger.dev client
+- `@alt-stack/workers-client-warpstream` - WarpStream/Kafka client
 
 ## API Reference
 

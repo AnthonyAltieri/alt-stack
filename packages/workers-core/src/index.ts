@@ -33,3 +33,15 @@ export type * from "./types/index.js";
 // Validation exports
 export { validateInput, parseSchema } from "./validation.js";
 export type { ParseResult } from "./validation.js";
+
+// AsyncAPI exports
+export { generateAsyncAPISpec } from "./asyncapi.js";
+export type {
+  AsyncAPISpec,
+  AsyncAPIChannel,
+  AsyncAPIOperation,
+  AsyncAPIMessage,
+  GenerateAsyncAPISpecOptions,
+  ExtractJobNames,
+  ExtractPayloadType,
+} from "./asyncapi.js";

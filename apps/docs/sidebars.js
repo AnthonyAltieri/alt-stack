@@ -141,6 +141,13 @@ module.exports = {
             'workers-warpstream/core-concepts/error-handling',
           ],
         },
+        {
+          type: 'category',
+          label: 'Guides',
+          items: [
+            'workers-warpstream/guides/sdk-generation',
+          ],
+        },
       ],
     },
   ],

@@ -13,7 +13,6 @@
   "dependencies": {
     "@hono/node-server": "^1.0.0",
     "@alt-stack/server-hono": "workspace:*",
-    "@alt-stack/client": "workspace:*",
     "@t3-oss/env-core": "^0.9.0",
     "hono": "^4.0.0",
     "zod": "^4.0.0"
