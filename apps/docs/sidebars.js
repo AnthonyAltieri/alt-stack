@@ -57,6 +57,7 @@ module.exports = {
             'guides/openapi-documentation',
             'guides/openapi-to-typescript',
             'guides/asyncapi-to-typescript',
+            'guides/ci-cd-sdk-generation',
           ],
         },
       ],

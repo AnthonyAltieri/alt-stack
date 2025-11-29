@@ -1,21 +1,20 @@
-name: Publish OpenAPI Schema
+name: Publish AsyncAPI Schema
 
 on:
   push:
     branches:
       - main
       - master
+    paths:
+      - 'src/**'
+      - 'asyncapi.json'
+      - 'package.json'
   workflow_dispatch:
     inputs:
-      openapi_endpoint:
-        description: 'Path to OpenAPI JSON endpoint'
+      asyncapi_file:
+        description: 'Path to AsyncAPI JSON file'
         required: false
-        default: '/docs/openapi.json'
-        type: string
-      server_start_command:
-        description: 'Command to start server'
-        required: false
-        default: 'pnpm start'
+        default: 'asyncapi.json'
         type: string
       npm_package_name:
         description: 'NPM package name (defaults to package.json name + -sdk suffix)'
@@ -23,8 +22,7 @@ on:
         type: string
 
 env:
-  OPENAPI_ENDPOINT: ${{ github.event.inputs.openapi_endpoint || '/docs/openapi.json' }}
-  SERVER_START_CMD: ${{ github.event.inputs.server_start_command || 'pnpm start' }}
+  ASYNCAPI_FILE: ${{ github.event.inputs.asyncapi_file || 'asyncapi.json' }}
   NPM_PACKAGE_NAME: ${{ github.event.inputs.npm_package_name || '' }}
 
 jobs:
@@ -79,52 +77,29 @@ jobs:
             echo "name=$SDK_NAME" >> $GITHUB_OUTPUT
           fi
 
-      - name: Install zod-openapi CLI
-        run: pnpm add -D @alt-stack/zod-openapi
+      - name: Install zod-asyncapi CLI
+        run: pnpm add -D @alt-stack/zod-asyncapi
 
-      - name: Start server
-        id: server
+      - name: Generate AsyncAPI spec (if generate-spec script exists)
         run: |
-          SERVER_START_CMD="${{ env.SERVER_START_CMD }}"
-          OPENAPI_ENDPOINT="${{ env.OPENAPI_ENDPOINT }}"
-          
-          echo "Starting server with: $SERVER_START_CMD"
-          $SERVER_START_CMD > server.log 2>&1 &
-          SERVER_PID=$!
-          echo "pid=$SERVER_PID" >> $GITHUB_OUTPUT
-          
-          # Wait for server to be ready
-          MAX_ATTEMPTS=30
-          ATTEMPT=0
-          
-          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
-            sleep 2
-            # Try multiple ports
-            for port in 3000 8000 8080 5000; do
-              if curl -f -s http://localhost:$port$OPENAPI_ENDPOINT > /dev/null 2>&1; then
-                echo "port=$port" >> $GITHUB_OUTPUT
-                echo "Server is ready on port $port"
-                exit 0
-              fi
-            done
-            ATTEMPT=$((ATTEMPT + 1))
-            echo "Waiting for server... attempt $ATTEMPT/$MAX_ATTEMPTS"
-          done
-          
-          echo "Server failed to start or OpenAPI endpoint not available"
-          echo "Server logs:"
-          cat server.log || true
-          kill $SERVER_PID 2>/dev/null || true
-          exit 1
+          if npm run generate-spec --if-present 2>/dev/null; then
+            echo "Generated AsyncAPI spec"
+          else
+            echo "No generate-spec script found, using existing ${{ env.ASYNCAPI_FILE }}"
+          fi
+
+      - name: Verify AsyncAPI file exists
+        run: |
+          if [ ! -f "${{ env.ASYNCAPI_FILE }}" ]; then
+            echo "Error: AsyncAPI file not found at ${{ env.ASYNCAPI_FILE }}"
+            exit 1
+          fi
+          echo "Found AsyncAPI spec at ${{ env.ASYNCAPI_FILE }}"
 
       - name: Generate SDK
         run: |
-          OPENAPI_ENDPOINT="${{ env.OPENAPI_ENDPOINT }}"
-          SERVER_PORT="${{ steps.server.outputs.port || '3000' }}"
-          
-          echo "Generating SDK from http://localhost:$SERVER_PORT$OPENAPI_ENDPOINT"
-          
-          npx zod-openapi "http://localhost:$SERVER_PORT$OPENAPI_ENDPOINT" -o src/index.ts
+          echo "Generating SDK from ${{ env.ASYNCAPI_FILE }}"
+          npx zod-asyncapi "${{ env.ASYNCAPI_FILE }}" -o src/index.ts
 
       - name: Create package directory
         run: |
@@ -137,7 +112,7 @@ jobs:
           {
             "name": "${{ steps.npm_package.outputs.name }}",
             "version": "${{ steps.package.outputs.version }}",
-            "description": "Auto-generated TypeScript SDK from OpenAPI schema",
+            "description": "Auto-generated TypeScript SDK from AsyncAPI schema",
             "type": "module",
             "main": "./dist/index.js",
             "module": "./dist/index.mjs",
@@ -158,7 +133,8 @@ jobs:
             },
             "keywords": [
               "sdk",
-              "openapi",
+              "asyncapi",
+              "kafka",
               "typescript",
               "zod"
             ],
@@ -200,7 +176,7 @@ jobs:
           cat > sdk-package/README.md << EOF
           # ${{ steps.npm_package.outputs.name }}
 
-          Auto-generated TypeScript SDK from OpenAPI schema.
+          Auto-generated TypeScript SDK from AsyncAPI schema for Kafka message types.
 
           ## Installation
 
@@ -213,19 +189,18 @@ jobs:
           ## Usage
 
           \`\`\`typescript
-          import { schemas, Request, Response } from '${{ steps.npm_package.outputs.name }}';
+          import { schemas, topics } from '${{ steps.npm_package.outputs.name }}';
 
-          // Use Zod schemas for validation
-          const validated = schemas.MySchema.parse(data);
+          // Use Zod schemas for message validation
+          const validated = schemas.UserCreatedPayload.parse(message);
 
-          // Use Request/Response types for type-safe API calls
-          type MyEndpointRequest = Request<'POST /api/endpoint'>;
-          type MyEndpointResponse = Response<'POST /api/endpoint'>;
+          // Access topic metadata
+          console.log(topics);
           \`\`\`
 
           ## Generation
 
-          This package is automatically generated from the server's OpenAPI specification.
+          This package is automatically generated from the AsyncAPI specification.
           Do not manually edit the contents of this package.
 
           Generated from commit: \`${{ github.sha }}\`
@@ -251,13 +226,5 @@ jobs:
 
       - name: Cleanup
         if: always()
-        run: |
-          SERVER_PID=${{ steps.server.outputs.pid }}
-          if [ -n "$SERVER_PID" ]; then
-            echo "Stopping server (PID: $SERVER_PID)"
-            kill $SERVER_PID 2>/dev/null || true
-            sleep 2
-            kill -9 $SERVER_PID 2>/dev/null || true
-          fi
-          pkill -f "${{ env.SERVER_START_CMD }}" || true
-          rm -rf sdk-package src/index.ts server.log .npmrc || true
+        run: rm -rf sdk-package src/index.ts .npmrc || true
+

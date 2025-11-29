@@ -97,8 +97,9 @@ jobs:
         run: |
           pnpm --filter @alt-stack/zod-openapi build
           pnpm --filter @alt-stack/zod-asyncapi build
-          pnpm --filter @alt-stack/kafka build
-          pnpm --filter @alt-stack/server build
+          pnpm --filter @alt-stack/kafka-core build
+          pnpm --filter @alt-stack/server-core build
+          pnpm --filter @alt-stack/server-hono build
 
       - name: Regenerate Kafka Producer SDK
         if: steps.sdk-check.outputs.kafka_producer_changed == 'true'

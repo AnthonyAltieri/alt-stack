@@ -1,0 +1,119 @@
+name: Generate AsyncAPI SDK
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'src/**'
+      - 'asyncapi.json'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'asyncapi.json'
+  workflow_dispatch:
+    inputs:
+      asyncapi_file:
+        description: 'Path to AsyncAPI JSON file'
+        required: false
+        default: 'asyncapi.json'
+        type: string
+      output_path:
+        description: 'Output path for generated SDK'
+        required: false
+        default: 'generated-types.ts'
+        type: string
+
+env:
+  ASYNCAPI_FILE: ${{ github.event.inputs.asyncapi_file || 'asyncapi.json' }}
+  OUTPUT_PATH: ${{ github.event.inputs.output_path || 'generated-types.ts' }}
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+        continue-on-error: true
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install zod-asyncapi CLI
+        run: pnpm add -D @alt-stack/zod-asyncapi
+
+      - name: Generate AsyncAPI spec (if generate-spec script exists)
+        run: |
+          if npm run generate-spec --if-present 2>/dev/null; then
+            echo "Generated AsyncAPI spec"
+          else
+            echo "No generate-spec script found, using existing ${{ env.ASYNCAPI_FILE }}"
+          fi
+
+      - name: Verify AsyncAPI file exists
+        run: |
+          if [ ! -f "${{ env.ASYNCAPI_FILE }}" ]; then
+            echo "Error: AsyncAPI file not found at ${{ env.ASYNCAPI_FILE }}"
+            exit 1
+          fi
+          echo "Found AsyncAPI spec at ${{ env.ASYNCAPI_FILE }}"
+
+      - name: Generate SDK
+        run: |
+          echo "Generating SDK from ${{ env.ASYNCAPI_FILE }}"
+          npx zod-asyncapi "${{ env.ASYNCAPI_FILE }}" -o "${{ env.OUTPUT_PATH }}"
+          echo "Generated SDK at ${{ env.OUTPUT_PATH }}"
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet "${{ env.OUTPUT_PATH }}"; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "No changes to generated types"
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "Generated types have changed"
+          fi
+
+      - name: Commit changes
+        if: steps.changes.outputs.changed == 'true' && github.event_name == 'push'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "${{ env.OUTPUT_PATH }}"
+          git commit -m "chore: regenerate AsyncAPI types [skip ci]"
+          git push
+
+      - name: Fail PR if types are outdated
+        if: steps.changes.outputs.changed == 'true' && github.event_name == 'pull_request'
+        run: |
+          echo "::error::Generated types are outdated. Please regenerate them locally."
+          echo "Run: npx zod-asyncapi ${{ env.ASYNCAPI_FILE }} -o ${{ env.OUTPUT_PATH }}"
+          exit 1
+

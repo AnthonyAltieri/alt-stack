@@ -1,0 +1,154 @@
+name: Generate OpenAPI SDK
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'src/**'
+  pull_request:
+    paths:
+      - 'src/**'
+  workflow_dispatch:
+    inputs:
+      openapi_endpoint:
+        description: 'Path to OpenAPI JSON endpoint'
+        required: false
+        default: '/docs/openapi.json'
+        type: string
+      server_start_command:
+        description: 'Command to start server'
+        required: false
+        default: 'pnpm start'
+        type: string
+      output_path:
+        description: 'Output path for generated SDK'
+        required: false
+        default: 'generated-types.ts'
+        type: string
+
+env:
+  OPENAPI_ENDPOINT: ${{ github.event.inputs.openapi_endpoint || '/docs/openapi.json' }}
+  SERVER_START_CMD: ${{ github.event.inputs.server_start_command || 'pnpm start' }}
+  OUTPUT_PATH: ${{ github.event.inputs.output_path || 'generated-types.ts' }}
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+        continue-on-error: true
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install zod-openapi CLI
+        run: pnpm add -D @alt-stack/zod-openapi
+
+      - name: Start server
+        id: server
+        run: |
+          SERVER_START_CMD="${{ env.SERVER_START_CMD }}"
+          OPENAPI_ENDPOINT="${{ env.OPENAPI_ENDPOINT }}"
+          
+          echo "Starting server with: $SERVER_START_CMD"
+          $SERVER_START_CMD > server.log 2>&1 &
+          SERVER_PID=$!
+          echo "pid=$SERVER_PID" >> $GITHUB_OUTPUT
+          
+          # Wait for server to be ready
+          MAX_ATTEMPTS=30
+          ATTEMPT=0
+          
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            sleep 2
+            for port in 3000 8000 8080 5000; do
+              if curl -f -s http://localhost:$port$OPENAPI_ENDPOINT > /dev/null 2>&1; then
+                echo "port=$port" >> $GITHUB_OUTPUT
+                echo "Server is ready on port $port"
+                exit 0
+              fi
+            done
+            ATTEMPT=$((ATTEMPT + 1))
+            echo "Waiting for server... attempt $ATTEMPT/$MAX_ATTEMPTS"
+          done
+          
+          echo "Server failed to start"
+          cat server.log || true
+          kill $SERVER_PID 2>/dev/null || true
+          exit 1
+
+      - name: Generate SDK
+        run: |
+          OPENAPI_ENDPOINT="${{ env.OPENAPI_ENDPOINT }}"
+          SERVER_PORT="${{ steps.server.outputs.port || '3000' }}"
+          OUTPUT_PATH="${{ env.OUTPUT_PATH }}"
+          
+          echo "Generating SDK from http://localhost:$SERVER_PORT$OPENAPI_ENDPOINT"
+          npx zod-openapi "http://localhost:$SERVER_PORT$OPENAPI_ENDPOINT" -o "$OUTPUT_PATH"
+          echo "Generated SDK at $OUTPUT_PATH"
+
+      - name: Stop server
+        if: always()
+        run: |
+          SERVER_PID=${{ steps.server.outputs.pid }}
+          if [ -n "$SERVER_PID" ]; then
+            kill $SERVER_PID 2>/dev/null || true
+            kill -9 $SERVER_PID 2>/dev/null || true
+          fi
+          pkill -f "${{ env.SERVER_START_CMD }}" || true
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet "${{ env.OUTPUT_PATH }}"; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "No changes to generated types"
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "Generated types have changed"
+          fi
+
+      - name: Commit changes
+        if: steps.changes.outputs.changed == 'true' && github.event_name == 'push'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "${{ env.OUTPUT_PATH }}"
+          git commit -m "chore: regenerate OpenAPI types [skip ci]"
+          git push
+
+      - name: Fail PR if types are outdated
+        if: steps.changes.outputs.changed == 'true' && github.event_name == 'pull_request'
+        run: |
+          echo "::error::Generated types are outdated. Please regenerate them locally."
+          echo "Run: npx zod-openapi <your-openapi-endpoint> -o ${{ env.OUTPUT_PATH }}"
+          exit 1
+
