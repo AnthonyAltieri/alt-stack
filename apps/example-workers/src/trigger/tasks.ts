@@ -1,6 +1,6 @@
 /**
  * Trigger.dev task definitions.
- * 
+ *
  * This file creates Trigger.dev tasks from our router and exports them
  * for Trigger.dev to discover.
  */
@@ -12,10 +12,10 @@ import { createAppContext } from "../context.js";
 export const { tasks } = createWorker(appRouter, {
   createContext: async (baseCtx) => {
     const appContext = createAppContext();
-    
+
     // You can also use baseCtx.trigger for Trigger.dev utilities
     // like logging: baseCtx.trigger.logger.info("Creating context");
-    
+
     return appContext;
   },
   onError: async (error, ctx) => {
@@ -35,3 +35,10 @@ export const processBulkEmail = tasks["process-bulk-email"];
 // User tasks
 export const syncUser = tasks["sync-user"];
 export const cleanupInactiveUsers = tasks["cleanup-inactive-users"];
+
+// Data pipeline tasks
+export const importCsvData = tasks["import-csv-data"];
+export const transformRecords = tasks["transform-records"];
+export const exportToWarehouse = tasks["export-to-warehouse"];
+export const runEtlPipeline = tasks["run-etl-pipeline"];
+export const cleanupPipelineData = tasks["cleanup-pipeline-data"];
