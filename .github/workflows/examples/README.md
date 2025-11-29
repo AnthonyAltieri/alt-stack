@@ -14,38 +14,45 @@ These workflows are **not executed** by GitHub Actions (workflows in subdirector
 
 ### SDK Generation (in-repo)
 
-These workflows generate TypeScript types and commit them to your repository. Useful when you want to keep generated types checked in.
+These workflows generate TypeScript types from a spec file and commit them to your repository. They use a `generate-spec` script to create the spec from your router definitions.
 
 #### `generate-openapi-sdk.yml`
 
-Generates TypeScript types from an OpenAPI schema served by your running application:
+Generates TypeScript types from an OpenAPI schema:
 
-- Starts your server
-- Fetches the OpenAPI schema from an endpoint
+- Runs your `generate-spec` script to create `openapi.json`
 - Generates TypeScript types using `@alt-stack/zod-openapi`
 - Commits changes on push, fails PR if types are outdated
 
 **Configuration:**
 ```yaml
 env:
-  OPENAPI_ENDPOINT: '/docs/openapi.json'  # Your OpenAPI endpoint
-  SERVER_START_CMD: 'pnpm start'           # Command to start server
-  OUTPUT_PATH: 'generated-types.ts'        # Where to write generated types
+  OPENAPI_FILE: 'openapi.json'       # Your OpenAPI spec file
+  OUTPUT_PATH: 'generated-types.ts'  # Where to write generated types
+```
+
+**Required script in package.json:**
+```json
+{
+  "scripts": {
+    "generate-spec": "tsx src/generate-spec.ts"
+  }
+}
 ```
 
 #### `generate-asyncapi-sdk.yml`
 
-Generates TypeScript types from an AsyncAPI schema file:
+Generates TypeScript types from an AsyncAPI schema:
 
-- Optionally runs a `generate-spec` script to create the AsyncAPI JSON
+- Runs your `generate-spec` script to create `asyncapi.json`
 - Generates TypeScript types using `@alt-stack/zod-asyncapi`
 - Commits changes on push, fails PR if types are outdated
 
 **Configuration:**
 ```yaml
 env:
-  ASYNCAPI_FILE: 'asyncapi.json'      # Your AsyncAPI spec file
-  OUTPUT_PATH: 'generated-types.ts'   # Where to write generated types
+  ASYNCAPI_FILE: 'asyncapi.json'     # Your AsyncAPI spec file
+  OUTPUT_PATH: 'generated-types.ts'  # Where to write generated types
 ```
 
 ---
@@ -58,16 +65,14 @@ These workflows generate TypeScript SDKs and publish them to npm. Useful when yo
 
 Publishes an SDK package from your OpenAPI schema:
 
-- Starts your server
-- Fetches the OpenAPI schema
+- Runs your `generate-spec` script (optional)
 - Generates a complete npm package with TypeScript types
 - Builds and publishes to npm
 
 **Configuration:**
 ```yaml
 env:
-  OPENAPI_ENDPOINT: '/docs/openapi.json'
-  SERVER_START_CMD: 'pnpm start'
+  OPENAPI_FILE: 'openapi.json'
   NPM_PACKAGE_NAME: '@your-org/your-api-sdk'  # Optional, defaults to {name}-sdk
 ```
 
@@ -78,7 +83,7 @@ env:
 
 Publishes an SDK package from your AsyncAPI schema:
 
-- Generates TypeScript types from AsyncAPI spec
+- Runs your `generate-spec` script (optional)
 - Creates a complete npm package
 - Builds and publishes to npm
 
@@ -98,26 +103,31 @@ env:
 
 ### For REST APIs (OpenAPI)
 
-1. Ensure your server exposes an OpenAPI JSON endpoint (e.g., `/docs/openapi.json`)
-2. Copy `generate-openapi-sdk.yml` or `publish-openapi-schema.yml` to `.github/workflows/`
-3. Update the environment variables to match your setup
+1. Create a router with `@alt-stack/server-hono`
+2. Add a `generate-spec` script that uses `generateOpenAPISpec()`
+3. Copy `generate-openapi-sdk.yml` or `publish-openapi-schema.yml` to `.github/workflows/`
 4. For publishing workflows, add `NPM_TOKEN` to your repository secrets
+
+**Example generate-spec.ts:**
+```typescript
+import { writeFileSync } from 'fs';
+import { generateOpenAPISpec } from '@alt-stack/server-hono';
+import { appRouter } from './router';
+
+const spec = generateOpenAPISpec(appRouter, {
+  title: 'My API',
+  version: '1.0.0',
+});
+
+writeFileSync('openapi.json', JSON.stringify(spec, null, 2));
+```
 
 ### For Kafka/Event-Driven APIs (AsyncAPI)
 
 1. Define your Kafka topics using `@alt-stack/kafka-core` with the `kafkaRouter`
-2. Add a script to generate `asyncapi.json` (see example below)
+2. Add a `generate-spec` script that uses `generateAsyncAPISpec()`
 3. Copy `generate-asyncapi-sdk.yml` or `publish-asyncapi-schema.yml` to `.github/workflows/`
 4. For publishing workflows, add `NPM_TOKEN` to your repository secrets
-
-**Example generate-spec script (package.json):**
-```json
-{
-  "scripts": {
-    "generate-spec": "tsx src/generate-spec.ts"
-  }
-}
-```
 
 **Example generate-spec.ts:**
 ```typescript
@@ -131,4 +141,31 @@ const spec = generateAsyncAPISpec(myKafkaRouter, {
 });
 
 writeFileSync('asyncapi.json', JSON.stringify(spec, null, 2));
+```
+
+---
+
+## Local Development
+
+Run the same commands locally to test before pushing:
+
+```bash
+# Generate spec
+npm run generate-spec
+
+# Generate types
+npx zod-openapi openapi.json -o generated-types.ts
+# or
+npx zod-asyncapi asyncapi.json -o generated-types.ts
+```
+
+Or combine them in a single script:
+
+```json
+{
+  "scripts": {
+    "generate-spec": "tsx src/generate-spec.ts",
+    "generate-types": "npm run generate-spec && npx zod-openapi openapi.json -o generated-types.ts"
+  }
+}
 ```

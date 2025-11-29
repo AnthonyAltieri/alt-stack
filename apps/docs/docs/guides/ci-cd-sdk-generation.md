@@ -18,8 +18,7 @@ Alt Stack provides example GitHub Action workflows for automating SDK generation
 ### Prerequisites
 
 Your project should have:
-- A `package.json` with a start script
-- An endpoint that serves your OpenAPI/AsyncAPI spec
+- A `package.json` with a `generate-spec` script
 - Node.js 20+ and pnpm (or npm/yarn)
 
 ### Project Structure
@@ -30,7 +29,10 @@ my-api/
 │   └── workflows/
 │       └── generate-sdk.yml    # Your workflow file
 ├── src/
-│   └── index.ts                # Your API server
+│   ├── index.ts                # Your API server
+│   ├── router.ts               # Your router definition
+│   └── generate-spec.ts        # Script to generate spec
+├── openapi.json                # Generated spec (committed)
 ├── generated-types.ts          # Generated SDK (auto-committed)
 ├── package.json
 └── tsconfig.json
@@ -50,13 +52,12 @@ name: Generate SDK
 on:
   push:
     branches: [main]
-    paths: ['src/**']
+    paths: ['src/**', 'openapi.json']
   pull_request:
-    paths: ['src/**']
+    paths: ['src/**', 'openapi.json']
 
 env:
-  OPENAPI_ENDPOINT: '/docs/openapi.json'
-  SERVER_START_CMD: 'pnpm start'
+  OPENAPI_FILE: 'openapi.json'
   OUTPUT_PATH: 'generated-types.ts'
 
 jobs:
@@ -77,31 +78,11 @@ jobs:
 
       - run: pnpm add -D @alt-stack/zod-openapi
 
-      - name: Start server
-        id: server
-        run: |
-          ${{ env.SERVER_START_CMD }} > server.log 2>&1 &
-          echo "pid=$!" >> $GITHUB_OUTPUT
-          
-          # Wait for server
-          for i in {1..30}; do
-            sleep 2
-            if curl -s http://localhost:3000${{ env.OPENAPI_ENDPOINT }} > /dev/null; then
-              echo "Server ready"
-              exit 0
-            fi
-          done
-          cat server.log
-          exit 1
+      - name: Generate spec
+        run: npm run generate-spec --if-present || true
 
       - name: Generate SDK
-        run: |
-          npx zod-openapi http://localhost:3000${{ env.OPENAPI_ENDPOINT }} \
-            -o ${{ env.OUTPUT_PATH }}
-
-      - name: Stop server
-        if: always()
-        run: kill ${{ steps.server.outputs.pid }} 2>/dev/null || true
+        run: npx zod-openapi ${{ env.OPENAPI_FILE }} -o ${{ env.OUTPUT_PATH }}
 
       - name: Check for changes
         id: changes
@@ -125,21 +106,19 @@ jobs:
         if: steps.changes.outputs.changed == 'true' && github.event_name == 'pull_request'
         run: |
           echo "::error::Generated types are outdated. Run locally:"
-          echo "npx zod-openapi http://localhost:3000${{ env.OPENAPI_ENDPOINT }} -o ${{ env.OUTPUT_PATH }}"
+          echo "npm run generate-spec && npx zod-openapi ${{ env.OPENAPI_FILE }} -o ${{ env.OUTPUT_PATH }}"
           exit 1
 ```
 
-### Step 2: Configure Your Server
+### Step 2: Define Your Router
 
-Ensure your server exposes an OpenAPI endpoint. With `@alt-stack/server-hono`:
-
-```typescript title="src/index.ts"
-import { init, createServer, createDocsRouter, router } from '@alt-stack/server-hono';
+```typescript title="src/router.ts"
+import { init, router } from '@alt-stack/server-hono';
 import { z } from 'zod';
 
 const { publicProcedure } = init();
 
-const appRouter = router({
+export const appRouter = router({
   getUser: publicProcedure
     .input({ params: z.object({ id: z.string() }) })
     .output(z.object({ id: z.string(), name: z.string() }))
@@ -147,24 +126,31 @@ const appRouter = router({
       return { id: input.params.id, name: 'John' };
     }),
 });
-
-const app = createServer(appRouter);
-
-// Add OpenAPI docs at /docs/openapi.json
-app.route('/docs', createDocsRouter(appRouter, {
-  title: 'My API',
-  version: '1.0.0',
-}));
-
-export default app;
 ```
 
-### Step 3: Add Start Script
+### Step 3: Create Generate Script
+
+```typescript title="src/generate-spec.ts"
+import { writeFileSync } from 'fs';
+import { generateOpenAPISpec } from '@alt-stack/server-hono';
+import { appRouter } from './router';
+
+const spec = generateOpenAPISpec(appRouter, {
+  title: 'My API',
+  version: '1.0.0',
+});
+
+writeFileSync('openapi.json', JSON.stringify(spec, null, 2));
+console.log('Generated openapi.json');
+```
+
+### Step 4: Add Scripts
 
 ```json title="package.json"
 {
   "scripts": {
-    "start": "tsx src/index.ts"
+    "generate-spec": "tsx src/generate-spec.ts",
+    "generate-types": "npm run generate-spec && npx zod-openapi openapi.json -o generated-types.ts"
   }
 }
 ```
@@ -207,7 +193,7 @@ jobs:
 
       - run: pnpm add -D @alt-stack/zod-asyncapi
 
-      - name: Generate spec (optional)
+      - name: Generate spec
         run: npm run generate-spec --if-present || true
 
       - name: Generate SDK
@@ -234,7 +220,8 @@ jobs:
       - name: Fail if outdated (PR)
         if: steps.changes.outputs.changed == 'true' && github.event_name == 'pull_request'
         run: |
-          echo "::error::Generated types are outdated."
+          echo "::error::Generated types are outdated. Run locally:"
+          echo "npm run generate-spec && npx zod-asyncapi ${{ env.ASYNCAPI_FILE }} -o ${{ env.OUTPUT_PATH }}"
           exit 1
 ```
 
@@ -279,7 +266,8 @@ console.log('Generated asyncapi.json');
 ```json title="package.json"
 {
   "scripts": {
-    "generate-spec": "tsx src/generate-spec.ts"
+    "generate-spec": "tsx src/generate-spec.ts",
+    "generate-types": "npm run generate-spec && npx zod-asyncapi asyncapi.json -o generated-types.ts"
   }
 }
 ```
@@ -299,8 +287,7 @@ on:
     paths: ['src/**']
 
 env:
-  OPENAPI_ENDPOINT: '/docs/openapi.json'
-  SERVER_START_CMD: 'pnpm start'
+  OPENAPI_FILE: 'openapi.json'
   NPM_PACKAGE_NAME: '@my-org/my-api-sdk'
 
 jobs:
@@ -320,18 +307,13 @@ jobs:
       
       - run: pnpm add -D @alt-stack/zod-openapi
 
-      - name: Start server
-        id: server
-        run: |
-          ${{ env.SERVER_START_CMD }} &
-          echo "pid=$!" >> $GITHUB_OUTPUT
-          sleep 10  # Wait for server
+      - name: Generate spec
+        run: npm run generate-spec
 
       - name: Generate SDK
         run: |
           mkdir -p sdk-package/src
-          npx zod-openapi http://localhost:3000${{ env.OPENAPI_ENDPOINT }} \
-            -o sdk-package/src/index.ts
+          npx zod-openapi ${{ env.OPENAPI_FILE }} -o sdk-package/src/index.ts
 
       - name: Create package.json
         run: |
@@ -370,10 +352,6 @@ jobs:
           pnpm install
           pnpm build
           npm publish --access public
-
-      - name: Cleanup
-        if: always()
-        run: kill ${{ steps.server.outputs.pid }} 2>/dev/null || true
 ```
 
 ### Required Secrets
@@ -413,7 +391,27 @@ import { schemas, Request, Response } from '@my-org/my-api-sdk';
 const user = schemas.User.parse(apiResponse);
 ```
 
+## Local Development
+
+Run the generation locally to test before pushing:
+
+```bash
+# Generate spec and types in one command
+npm run generate-types
+
+# Or step by step
+npm run generate-spec
+npx zod-openapi openapi.json -o generated-types.ts
+```
+
 ## Best Practices
+
+### Commit Both Spec and Types
+
+Commit both your spec file (`openapi.json`/`asyncapi.json`) and generated types. This provides:
+- Full history of API changes
+- Easy diffing in PRs
+- No runtime generation needed
 
 ### Version Synchronization
 
@@ -449,21 +447,20 @@ Fail PRs if generated types are outdated to catch schema changes:
 
 ## Troubleshooting
 
-### Server Not Starting
+### Spec Not Generating
 
-- Check your `SERVER_START_CMD` matches your package.json scripts
-- Increase the wait time if your server takes longer to boot
-- Check server logs in the workflow output
+- Check your `generate-spec` script is defined in package.json
+- Ensure the router is exported correctly
+- Verify all dependencies are installed
 
 ### Types Not Generating
 
-- Verify the OpenAPI/AsyncAPI endpoint is accessible
-- Check the spec is valid JSON
+- Check the spec file exists and is valid JSON
 - Ensure `@alt-stack/zod-openapi` or `@alt-stack/zod-asyncapi` is installed
+- Check for syntax errors in the spec
 
 ### npm Publish Failing
 
 - Verify `NPM_TOKEN` secret is set correctly
 - Check the package name is available on npm
 - Ensure version hasn't already been published
-
