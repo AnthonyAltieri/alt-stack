@@ -118,5 +118,30 @@ module.exports = {
         },
       ],
     },
+    {
+      type: 'category',
+      label: 'Workers (WarpStream)',
+      items: [
+        {
+          type: 'category',
+          label: 'Getting Started',
+          items: [
+            'workers-warpstream/getting-started/installation',
+            'workers-warpstream/getting-started/quickstart',
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Core Concepts',
+          items: [
+            'workers-warpstream/core-concepts/routing-strategies',
+            'workers-warpstream/core-concepts/job-client',
+            'workers-warpstream/core-concepts/custom-context',
+            'workers-warpstream/core-concepts/middleware',
+            'workers-warpstream/core-concepts/error-handling',
+          ],
+        },
+      ],
+    },
   ],
 };
