@@ -1978,666 +1978,6 @@ export const apiRouter = router({
 
 ---
 
-// File: example
-
-# Kitchen Sink Example
-
-A comprehensive example demonstrating all features of Altstack with the tRPC-style API. This example shows a complete Todo API server with authentication, error handling, middleware, and type safety.
-
-**Note**: In the tRPC-style API, the keys in the `router()` object become the endpoint paths. For example, `list: publicProcedure.get(...)` creates the route `/list`, and `"{id}": publicProcedure.get(...)` creates the route `/{id}`. When routers are nested, paths combine (e.g., `todos: todoRouter` with key `"{id}"` creates `/todos/{id}`).
-
-**Multiple HTTP Methods on Same Path**: To define multiple HTTP methods for the same path (e.g., GET, PUT, DELETE on `/todos/{id}`), use a nested methods object with `.handler()` instead of `.get()`, `.put()`, etc. The HTTP method is automatically inferred from the object key. For example:
-```typescript
-"{id}": {
-  get: publicProc.input(...).handler((opts) => { ... }),
-  put: protectedProcedure.input(...).handler((opts) => { ... }),
-  delete: protectedProcedure.input(...).handler((opts) => { ... }),
-}
-```
-
-**Default Error Schemas**: 400 (validation) and 500 (internal server) errors are automatically included for all procedures. When you provide a custom 400 or 500 error via `.errors()`, it will be unioned with the default, allowing your procedure to accept both the default error format and your custom format. You can override the default error handlers in `init()` options.
-
-## Complete Server Implementation
-
-```typescript
-import { router, publicProcedure, init, createServer } from "@alt-stack/server-hono";
-import type { HonoBaseContext } from "@alt-stack/server-hono";
-import type { Context } from "hono";
-import { z } from "zod";
-
-// ============================================================================
-// Type Definitions
-// ============================================================================
-
-const UserSchema = z.object({
-  id: z.string(),
-  email: z.string(),
-  role: z.literal("admin", "user"),
-});
-type User = z.infer<typeof UserSchema>;
-
-interface AppContext {
-  user: User | null;
-}
-
-const TodoSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  description: z.string().optional(),
-  completed: z.boolean(),
-  createdAt: z.string(),
-  userId: z.string(),
-});
-type Todo = z.infer<typeof TodoSchema>;
-
-// ============================================================================
-// Reusable Procedures
-// ============================================================================
-
-// Initialize factory with default error handlers
-// You can override default 400/500 error handlers here if needed:
-// const factory = init<AppContext>({
-//   default400Error: (errors, variant, value) => [customSchema, customInstance],
-//   default500Error: (error) => [customSchema, customInstance],
-// });
-const factory = init<AppContext>();
-
-// Public procedure (no auth required)
-const publicProc = publicProcedure;
-
-// Protected procedure with authentication middleware
-const protectedProcedure = factory.procedure
-  .errors({
-    401: z.object({
-      error: z.object({
-        code: z.literal("UNAUTHORIZED"),
-        message: z.string(),
-      }),
-    }),
-  })
-  .use(async (opts) => {
-    const { ctx, next } = opts;
-    if (!ctx.user) {
-      throw ctx.error({
-        error: {
-          code: "UNAUTHORIZED",
-          message: "Authentication required",
-        },
-      });
-    }
-    return next({ ctx: { user: ctx.user } });
-  });
-
-// Admin-only procedure
-const adminProcedure = protectedProcedure
-  .errors({
-    403: z.object({
-      error: z.object({
-        code: z.literal("FORBIDDEN"),
-        message: z.string(),
-      }),
-    }),
-  })
-  .use(async (opts) => {
-    const { ctx, next } = opts;
-    if (ctx.user.role !== "admin") {
-      throw ctx.error({
-        error: {
-          code: "FORBIDDEN",
-          message: "Admin access required",
-        },
-      });
-    }
-    return next();
-  });
-
-// ============================================================================
-// Routers
-// ============================================================================
-
-// Todo router with full CRUD operations
-export const todoRouter = router<AppContext>({
-  // GET /todos - List all todos with query filtering
-  // POST /todos - Create new todo (protected)
-  "/": {
-    get: publicProc
-      .input({
-        query: z.object({
-          completed: z.enum(["true", "false"]).optional(),
-          limit: z.number().int().positive().optional(),
-          offset: z.number().int().nonnegative().optional(),
-        }),
-      })
-      .output(z.array(TodoSchema))
-      .handler((opts) => {
-        const { input } = opts;
-        // ✅ input.completed is typed as "true" | "false" | undefined
-        // ✅ input.limit and input.offset are typed
-        let todos = getAllTodos();
-
-        if (input.completed === "true") {
-          todos = todos.filter((t) => t.completed);
-        } else if (input.completed === "false") {
-          todos = todos.filter((t) => !t.completed);
-        }
-
-        if (input.limit) {
-          todos = todos.slice(
-            input.offset ?? 0,
-            (input.offset ?? 0) + input.limit,
-          );
-        }
-
-        return todos; // ✅ Return type matches z.array(TodoSchema)
-      }),
-
-    post: protectedProcedure
-      .input({
-        body: z.object({
-          title: z.string().min(1).max(200),
-          description: z.string().max(1000).optional(),
-        }),
-      })
-      .output(TodoSchema)
-      // ✅ 400 validation error is automatically included - no need to declare it
-      // ✅ 500 internal server error is also automatically included
-      .handler((opts) => {
-        const { input, ctx } = opts;
-        // ✅ input.title is string (min 1, max 200)
-        // ✅ input.description is string | undefined (max 1000)
-        // ✅ ctx.user is guaranteed non-null (from middleware)
-
-        const todo = createTodo({
-          title: input.title,
-          description: input.description,
-          userId: ctx.user!.id,
-        });
-
-        return todo;
-      }),
-  },
-
-  // GET /todos/{id} - Get single todo with path parameter
-  // PUT /todos/{id} - Update todo
-  // DELETE /todos/{id} - Delete todo
-  // Using nested methods object to support multiple HTTP methods on the same path
-  "{id}": {
-    get: publicProc
-      .input({
-        params: z.object({
-          id: z.string().uuid(), // ✅ TypeScript enforces params.id matches {id}
-        }),
-      })
-      .output(TodoSchema)
-      .errors({
-        404: z.object({
-          error: z.object({
-            code: z.literal("NOT_FOUND"),
-            message: z.string(),
-          }),
-        }),
-      })
-      .handler((opts) => {
-        const { input, ctx } = opts;
-        // ✅ input.id is typed as string (from params)
-        const todo = getTodoById(input.id);
-
-        if (!todo) {
-          throw ctx.error({
-            // ✅ TypeScript ensures code is "NOT_FOUND"
-            // ✅ Status code (404) is automatically inferred!
-            error: {
-              code: "NOT_FOUND",
-              message: `Todo with id ${input.id} not found`,
-            },
-          });
-        }
-
-        return todo; // ✅ Return type matches TodoSchema
-      }),
-
-    put: protectedProcedure
-      .input({
-        params: z.object({
-          id: z.string().uuid(),
-        }),
-        query: z.object({
-          notify: z.coerce.boolean().optional(),
-        }),
-        body: z.object({
-          title: z.string().min(1).max(200).optional(),
-          description: z.string().max(1000).optional(),
-          completed: z.boolean().optional(),
-        }),
-      })
-      .output(TodoSchema)
-      .errors({
-        // ✅ 400 and 500 errors are automatically included (default validation and internal server errors)
-        // ✅ Custom 400 error will be unioned with the default validation error
-        // This means ctx.error() can accept either the default validation error OR this custom error
-        400: z.object({
-          error: z.object({
-            code: z.literal("CUSTOM_VALIDATION_ERROR"),
-            message: z.string(),
-            field: z.string(),
-          }),
-        }),
-        404: z.object({
-          error: z.object({
-            code: z.literal("NOT_FOUND"),
-            message: z.string(),
-          }),
-        }),
-        403: z.object({
-          error: z.object({
-            code: z.literal("FORBIDDEN"),
-            message: z.string(),
-          }),
-        }),
-      })
-      .handler((opts) => {
-        const { input, ctx } = opts;
-        // ✅ All inputs are available and typed:
-        // input.id (from params)
-        // input.notify (from query, optional)
-        // input.title, input.description, input.completed (from body, all optional)
-
-        const todo = getTodoById(input.id);
-        if (!todo) {
-          throw ctx.error({
-            error: {
-              code: "NOT_FOUND",
-              message: `Todo with id ${input.id} not found`,
-            },
-          });
-        }
-
-        // Check ownership
-        if (todo.userId !== ctx.user!.id && ctx.user!.role !== "admin") {
-          throw ctx.error({
-            error: {
-              code: "FORBIDDEN",
-              message: "You don't have permission to update this todo",
-            },
-          });
-        }
-
-        const updated = updateTodo(input.id, {
-          title: input.title,
-          description: input.description,
-          completed: input.completed,
-        });
-
-        if (input.notify) {
-          // Send notification
-        }
-
-        return updated;
-      }),
-
-    delete: protectedProcedure
-      .input({
-        params: z.object({
-          id: z.string().uuid(),
-        }),
-      })
-      .output(
-        z.object({
-          success: z.boolean(),
-        }),
-      )
-      .errors({
-        404: z.object({
-          error: z.object({
-            code: z.literal("NOT_FOUND"),
-            message: z.string(),
-          }),
-        }),
-      })
-      .handler((opts) => {
-        const { input, ctx } = opts;
-        const todo = getTodoById(input.id);
-        if (!todo) {
-          throw ctx.error({
-            error: {
-              code: "NOT_FOUND",
-              message: `Todo with id ${input.id} not found`,
-            },
-          });
-        }
-
-        deleteTodo(input.id);
-        return { success: true };
-      }),
-  },
-
-  // PATCH /todos/{id}/complete - Partial update with nested path
-  "{id}/complete": protectedProcedure
-    .input({
-      params: z.object({
-        id: z.string().uuid(),
-      }),
-      body: z.object({
-        completed: z.boolean(),
-      }),
-    })
-    .output(TodoSchema)
-    .errors({
-      404: z.object({
-        error: z.object({
-          code: z.literal("NOT_FOUND"),
-          message: z.string(),
-        }),
-      }),
-    })
-    .patch((opts) => {
-      const { input } = opts;
-      const todo = getTodoById(input.id);
-      if (!todo) {
-        throw opts.ctx.error({
-          error: {
-            code: "NOT_FOUND",
-            message: `Todo with id ${input.id} not found`,
-          },
-        });
-      }
-      return updateTodo(input.id, { completed: input.completed });
-    }),
-});
-
-// User router with profile management
-export const userRouter = router<AppContext>({
-  // GET /users/me - Get current user profile
-  me: protectedProcedure
-    .input({})
-    .output(
-      z.object({
-        id: z.string(),
-        email: z.string(),
-        role: z.enum(["admin", "user"]),
-      }),
-    )
-    .get((opts) => {
-      const { ctx } = opts;
-      // ✅ ctx.user is guaranteed non-null after middleware
-      return {
-        id: ctx.user!.id,
-        email: ctx.user!.email,
-        role: ctx.user!.role,
-      };
-    }),
-
-  // GET /users/{id} - Get user by ID
-  "{id}": publicProc
-    .input({
-      params: z.object({
-        id: z.string().uuid(),
-      }),
-    })
-    .output(
-      z.object({
-        id: z.string(),
-        email: z.string(),
-      }),
-    )
-    .errors({
-      404: z.object({
-        error: z.object({
-          code: z.literal("NOT_FOUND"),
-          message: z.string(),
-        }),
-      }),
-    })
-    .get((opts) => {
-      const { input, ctx } = opts;
-      const user = getUserById(input.id);
-      if (!user) {
-        throw ctx.error({
-          error: {
-            code: "NOT_FOUND",
-            message: `User with id ${input.id} not found`,
-          },
-        });
-      }
-      return { id: user.id, email: user.email };
-    }),
-});
-
-// Admin router (admin-only routes)
-export const adminRouter = router<AppContext>({
-  // GET /admin/users - List all users (admin only)
-  users: adminProcedure
-    .input({
-      query: z.object({
-        role: z.enum(["admin", "user"]).optional(),
-      }),
-    })
-    .output(
-      z.array(
-        z.object({
-          id: z.string(),
-          email: z.string(),
-          role: z.enum(["admin", "user"]),
-        }),
-      ),
-    )
-    .get((opts) => {
-      const { input } = opts;
-      let users = getAllUsers();
-      if (input.role) {
-        users = users.filter((u) => u.role === input.role);
-      }
-      return users;
-    }),
-
-  // DELETE /admin/users/{id} - Delete user (admin only)
-  "users/{id}": adminProcedure
-    .input({
-      params: z.object({
-        id: z.string().uuid(),
-      }),
-    })
-    .output(
-      z.object({
-        success: z.boolean(),
-      }),
-    )
-    .errors({
-      404: z.object({
-        error: z.object({
-          code: z.literal("NOT_FOUND"),
-          message: z.string(),
-        }),
-      }),
-    })
-    .delete((opts) => {
-      const { input, ctx } = opts;
-      const user = getUserById(input.id);
-      if (!user) {
-        throw ctx.error({
-          error: {
-            code: "NOT_FOUND",
-            message: `User with id ${input.id} not found`,
-          },
-        });
-      }
-      deleteUser(input.id);
-      return { success: true };
-    }),
-});
-
-// ============================================================================
-// Combine Routers
-// ============================================================================
-
-const appRouter = router<AppContext>({
-  todos: todoRouter, // /todos/*
-  users: userRouter, // /users/*
-  admin: adminRouter, // /admin/*
-});
-
-// ============================================================================
-// Helper Functions (implementation details)
-// ============================================================================
-
-function getAllTodos(): Todo[] {
-  // Implementation
-  return [];
-}
-
-function getTodoById(_id: string): Todo | null {
-  // Implementation
-  return null;
-}
-
-function createTodo(data: {
-  title: string;
-  description?: string;
-  userId: string;
-}): Todo {
-  // Implementation
-  return {
-    id: crypto.randomUUID(),
-    title: data.title,
-    description: data.description,
-    completed: false,
-    createdAt: new Date().toISOString(),
-    userId: data.userId,
-  };
-}
-
-function updateTodo(
-  _id: string,
-  _data: { title?: string; description?: string; completed?: boolean },
-) {
-  // Implementation
-  return getTodoById(_id)!;
-}
-
-function deleteTodo(_id: string): void {
-  // Implementation
-}
-
-function getAllUsers(): User[] {
-  // Implementation
-  return [];
-}
-
-function getUserById(_id: string): User | null {
-  // Implementation
-  return null;
-}
-
-function deleteUser(_id: string): void {
-  // Implementation
-}
-
-function getUserFromRequest(_request: Request): User {
-  // Extract user from request (e.g., from JWT token)
-  return null!;
-}
-
-// ============================================================================
-// Create Server
-// ============================================================================
-
-async function createContext(c: Context): Promise<AppContext> {
-  const user = await getUserFromRequest(c.req.raw);
-  return { user };
-}
-
-const app = createServer<AppContext>(
-  {
-    api: appRouter, // All routes prefixed with /api
-  },
-  {
-    createContext,
-    docs: {
-      path: "/docs",
-      openapiPath: "/docs/openapi.json",
-    },
-  },
-);
-
-export default app;
-```
-
-## Key Features Demonstrated
-
-### 1. **Type-Safe Path Parameters**
-```typescript
-"{id}": publicProc
-  .input({
-    params: z.object({
-      id: z.string().uuid(), // ✅ TypeScript enforces this matches {id}
-    }),
-  })
-```
-TypeScript will error if you use `{id}` without providing `params.id`.
-
-### 2. **Multiple Error Types**
-```typescript
-.errors({
-  404: z.object({ error: z.object({ code: z.literal("NOT_FOUND"), ... }) }),
-  403: z.object({ error: z.object({ code: z.literal("FORBIDDEN"), ... }) }),
-})
-```
-Each route can define multiple error types with different status codes.
-
-### 3. **Combining Input Sources**
-```typescript
-.input({
-  params: z.object({ id: z.string().uuid() }),
-  query: z.object({ notify: z.coerce.boolean().optional() }),
-  body: z.object({ title: z.string().optional() }),
-})
-```
-Routes can use params, query, and body together. Note that `params` and `query` must use schemas that accept string input (e.g., `z.string()`, `z.coerce.number()`, `z.coerce.boolean()`).
-
-### 4. **Middleware Chaining**
-```typescript
-const adminProcedure = protectedProcedure
-  .use(async (opts) => {
-    // Additional middleware
-  });
-```
-Middleware can be chained to build up context and permissions.
-
-### 5. **Nested Routers**
-```typescript
-const appRouter = router<AppContext>({
-  todos: todoRouterWithLogging, // /todos/*
-  users: userRouter,            // /users/*
-  admin: adminRouter,           // /admin/*
-});
-```
-Routers can be nested, and paths combine automatically.
-
-### 6. **Output Validation**
-```typescript
-.output(TodoSchema)
-```
-Return types are validated against Zod schemas.
-
-## Type Safety Highlights
-
-- ✅ **Path parameters**: TypeScript enforces `{id}` requires `params.id`
-- ✅ **Input types**: All inputs (`params`, `query`, `body`) are fully typed
-- ✅ **Output types**: Return values are validated and typed
-- ✅ **Error types**: `ctx.error()` only accepts defined error schemas
-- ✅ **Context narrowing**: Middleware can extend context with type safety
-- ✅ **Status codes**: Error status codes are inferred from error schemas
-
-## Try It Yourself
-
-The complete example server is available in the repository:
-- **Server**: `apps/example-altstack-server/`
-- Run it: `pnpm --filter example-altstack-server dev`
-
-See the [Installation Guide](/getting-started/installation) to get started building your own type-safe API!
-
----
-
 // File: getting-started/basic-routes
 
 # Basic Routes
@@ -3074,13 +2414,13 @@ export type MessageType<T extends TopicName> = z.infer<typeof Topics[T]>;
 
 ## Using Generated Types with Kafka Client
 
-The generated `Topics` object works directly with `@alt-stack/kafka-core-client-kafkajs` or `@alt-stack/kafka-core-client-warpstream`:
+The generated `Topics` object works directly with `@alt-stack/kafka-client-kafkajs` or `@alt-stack/kafka-client-warpstream`:
 
 ### KafkaJS Producer
 
 ```typescript
 import { Topics } from "./generated-types";
-import { createKafkaClient } from "@alt-stack/kafka-core-client-kafkajs";
+import { createKafkaClient } from "@alt-stack/kafka-client-kafkajs";
 
 const client = await createKafkaClient({
   kafka: { brokers: ["localhost:9092"], clientId: "my-producer" },
@@ -3101,7 +2441,7 @@ await client.disconnect();
 
 ```typescript
 import { Topics } from "./generated-types";
-import { createWarpStreamClient } from "@alt-stack/kafka-core-client-warpstream";
+import { createWarpStreamClient } from "@alt-stack/kafka-client-warpstream";
 
 const client = await createWarpStreamClient({
   bootstrapServer: "my-cluster.warpstream.com:9092",
@@ -3406,6 +2746,477 @@ const app = createServer({
   createContext,
 });
 ```
+
+---
+
+// File: guides/ci-cd-sdk-generation
+
+# CI/CD SDK Generation
+
+Automatically generate and publish TypeScript SDKs from your API schemas using GitHub Actions.
+
+## Overview
+
+Alt Stack provides example GitHub Action workflows for automating SDK generation:
+
+| Workflow | Use Case |
+|----------|----------|
+| `generate-openapi-sdk.yml` | Generate types from OpenAPI and commit to repo |
+| `generate-asyncapi-sdk.yml` | Generate types from AsyncAPI and commit to repo |
+| `publish-openapi-schema.yml` | Publish OpenAPI SDK as npm package |
+| `publish-asyncapi-schema.yml` | Publish AsyncAPI SDK as npm package |
+
+## Setup for a TypeScript Project
+
+### Prerequisites
+
+Your project should have:
+- A `package.json` with a `generate-spec` script
+- Node.js 20+ and pnpm (or npm/yarn)
+
+### Project Structure
+
+```
+my-api/
+├── .github/
+│   └── workflows/
+│       └── generate-sdk.yml    # Your workflow file
+├── src/
+│   ├── index.ts                # Your API server
+│   ├── router.ts               # Your router definition
+│   └── generate-spec.ts        # Script to generate spec
+├── openapi.json                # Generated spec (committed)
+├── generated-types.ts          # Generated SDK (auto-committed)
+├── package.json
+└── tsconfig.json
+```
+
+## Generate OpenAPI SDK (In-Repo)
+
+This workflow generates TypeScript types from your OpenAPI spec and commits them to your repository.
+
+### Step 1: Create the Workflow
+
+Create `.github/workflows/generate-sdk.yml`:
+
+```yaml
+name: Generate SDK
+
+on:
+  push:
+    branches: [main]
+    paths: ['src/**', 'openapi.json']
+  pull_request:
+    paths: ['src/**', 'openapi.json']
+
+env:
+  OPENAPI_FILE: 'openapi.json'
+  OUTPUT_PATH: 'generated-types.ts'
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: pnpm/action-setup@v4
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm add -D @alt-stack/zod-openapi
+
+      - name: Generate spec
+        run: npm run generate-spec --if-present || true
+
+      - name: Generate SDK
+        run: npx zod-openapi ${{ env.OPENAPI_FILE }} -o ${{ env.OUTPUT_PATH }}
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet ${{ env.OUTPUT_PATH }}; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit changes
+        if: steps.changes.outputs.changed == 'true' && github.event_name == 'push'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add ${{ env.OUTPUT_PATH }}
+          git commit -m "chore: regenerate types [skip ci]"
+          git push
+
+      - name: Fail if outdated (PR)
+        if: steps.changes.outputs.changed == 'true' && github.event_name == 'pull_request'
+        run: |
+          echo "::error::Generated types are outdated. Run locally:"
+          echo "npm run generate-spec && npx zod-openapi ${{ env.OPENAPI_FILE }} -o ${{ env.OUTPUT_PATH }}"
+          exit 1
+```
+
+### Step 2: Define Your Router
+
+```typescript title="src/router.ts"
+import { init, router } from '@alt-stack/server-hono';
+import { z } from 'zod';
+
+const { publicProcedure } = init();
+
+export const appRouter = router({
+  getUser: publicProcedure
+    .input({ params: z.object({ id: z.string() }) })
+    .output(z.object({ id: z.string(), name: z.string() }))
+    .get('/users/:id', async ({ input }) => {
+      return { id: input.params.id, name: 'John' };
+    }),
+});
+```
+
+### Step 3: Create Generate Script
+
+```typescript title="src/generate-spec.ts"
+import { writeFileSync } from 'fs';
+import { generateOpenAPISpec } from '@alt-stack/server-hono';
+import { appRouter } from './router';
+
+const spec = generateOpenAPISpec(appRouter, {
+  title: 'My API',
+  version: '1.0.0',
+});
+
+writeFileSync('openapi.json', JSON.stringify(spec, null, 2));
+console.log('Generated openapi.json');
+```
+
+### Step 4: Add Scripts
+
+```json title="package.json"
+{
+  "scripts": {
+    "generate-spec": "tsx src/generate-spec.ts",
+    "generate-types": "npm run generate-spec && npx zod-openapi openapi.json -o generated-types.ts"
+  }
+}
+```
+
+## Generate AsyncAPI SDK (In-Repo)
+
+For Kafka/event-driven APIs using AsyncAPI.
+
+### Step 1: Create the Workflow
+
+```yaml title=".github/workflows/generate-sdk.yml"
+name: Generate SDK
+
+on:
+  push:
+    branches: [main]
+    paths: ['src/**', 'asyncapi.json']
+  pull_request:
+    paths: ['src/**', 'asyncapi.json']
+
+env:
+  ASYNCAPI_FILE: 'asyncapi.json'
+  OUTPUT_PATH: 'generated-types.ts'
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: pnpm/action-setup@v4
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm add -D @alt-stack/zod-asyncapi
+
+      - name: Generate spec
+        run: npm run generate-spec --if-present || true
+
+      - name: Generate SDK
+        run: npx zod-asyncapi ${{ env.ASYNCAPI_FILE }} -o ${{ env.OUTPUT_PATH }}
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet ${{ env.OUTPUT_PATH }}; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit changes
+        if: steps.changes.outputs.changed == 'true' && github.event_name == 'push'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add ${{ env.OUTPUT_PATH }}
+          git commit -m "chore: regenerate types [skip ci]"
+          git push
+
+      - name: Fail if outdated (PR)
+        if: steps.changes.outputs.changed == 'true' && github.event_name == 'pull_request'
+        run: |
+          echo "::error::Generated types are outdated. Run locally:"
+          echo "npm run generate-spec && npx zod-asyncapi ${{ env.ASYNCAPI_FILE }} -o ${{ env.OUTPUT_PATH }}"
+          exit 1
+```
+
+### Step 2: Create Your Kafka Router
+
+```typescript title="src/router.ts"
+import { init, kafkaRouter } from '@alt-stack/kafka-core';
+import { z } from 'zod';
+
+const { procedure } = init();
+
+export const myRouter = kafkaRouter({
+  userCreated: procedure
+    .topic('user.created')
+    .payload(z.object({
+      userId: z.string(),
+      email: z.string().email(),
+      createdAt: z.string().datetime(),
+    }))
+    .handler(async ({ payload }) => {
+      console.log('User created:', payload.userId);
+    }),
+});
+```
+
+### Step 3: Add Generate Script
+
+```typescript title="src/generate-spec.ts"
+import { writeFileSync } from 'fs';
+import { generateAsyncAPISpec } from '@alt-stack/kafka-core';
+import { myRouter } from './router';
+
+const spec = generateAsyncAPISpec(myRouter, {
+  title: 'My Kafka API',
+  version: '1.0.0',
+});
+
+writeFileSync('asyncapi.json', JSON.stringify(spec, null, 2));
+console.log('Generated asyncapi.json');
+```
+
+```json title="package.json"
+{
+  "scripts": {
+    "generate-spec": "tsx src/generate-spec.ts",
+    "generate-types": "npm run generate-spec && npx zod-asyncapi asyncapi.json -o generated-types.ts"
+  }
+}
+```
+
+## Publish SDK to npm
+
+For publishing your SDK as a standalone npm package that consumers can install.
+
+### Publish OpenAPI SDK
+
+```yaml title=".github/workflows/publish-sdk.yml"
+name: Publish SDK
+
+on:
+  push:
+    branches: [main]
+    paths: ['src/**']
+
+env:
+  OPENAPI_FILE: 'openapi.json'
+  NPM_PACKAGE_NAME: '@my-org/my-api-sdk'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org/'
+
+      - uses: pnpm/action-setup@v4
+
+      - run: pnpm install --frozen-lockfile
+      
+      - run: pnpm add -D @alt-stack/zod-openapi
+
+      - name: Generate spec
+        run: npm run generate-spec
+
+      - name: Generate SDK
+        run: |
+          mkdir -p sdk-package/src
+          npx zod-openapi ${{ env.OPENAPI_FILE }} -o sdk-package/src/index.ts
+
+      - name: Create package.json
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          cat > sdk-package/package.json << EOF
+          {
+            "name": "${{ env.NPM_PACKAGE_NAME }}",
+            "version": "$VERSION",
+            "type": "module",
+            "main": "./dist/index.js",
+            "types": "./dist/index.d.ts",
+            "exports": {
+              ".": {
+                "types": "./dist/index.d.ts",
+                "import": "./dist/index.js"
+              }
+            },
+            "scripts": {
+              "build": "tsup src/index.ts --format esm --dts"
+            },
+            "peerDependencies": {
+              "zod": "^4.0.0"
+            },
+            "devDependencies": {
+              "tsup": "^8.0.0",
+              "typescript": "^5.0.0"
+            }
+          }
+          EOF
+
+      - name: Build and publish
+        working-directory: sdk-package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          pnpm install
+          pnpm build
+          npm publish --access public
+```
+
+### Required Secrets
+
+Add `NPM_TOKEN` to your repository secrets:
+
+1. Go to **Settings** → **Secrets and variables** → **Actions**
+2. Click **New repository secret**
+3. Name: `NPM_TOKEN`
+4. Value: Your npm access token (from npmjs.com → Access Tokens)
+
+## Using the Generated SDK
+
+### In-Repo Types
+
+```typescript
+import { schemas, Request, Response } from './generated-types';
+
+// Validate data
+const user = schemas.User.parse(data);
+
+// Type-safe request/response
+type GetUserRequest = Request['GET /users/:id'];
+type GetUserResponse = Response['GET /users/:id']['200'];
+```
+
+### Published SDK
+
+```bash
+pnpm add @my-org/my-api-sdk
+```
+
+```typescript
+import { schemas, Request, Response } from '@my-org/my-api-sdk';
+
+// Same usage as above
+const user = schemas.User.parse(apiResponse);
+```
+
+## Local Development
+
+Run the generation locally to test before pushing:
+
+```bash
+# Generate spec and types in one command
+npm run generate-types
+
+# Or step by step
+npm run generate-spec
+npx zod-openapi openapi.json -o generated-types.ts
+```
+
+## Best Practices
+
+### Commit Both Spec and Types
+
+Commit both your spec file (`openapi.json`/`asyncapi.json`) and generated types. This provides:
+- Full history of API changes
+- Easy diffing in PRs
+- No runtime generation needed
+
+### Version Synchronization
+
+Keep your SDK version in sync with your API:
+
+```yaml
+- name: Read version
+  id: version
+  run: echo "version=$(node -p \"require('./package.json').version\")" >> $GITHUB_OUTPUT
+```
+
+### Conditional Publishing
+
+Only publish when source files change:
+
+```yaml
+on:
+  push:
+    paths:
+      - 'src/**'
+      - '!src/**/*.test.ts'
+```
+
+### PR Validation
+
+Fail PRs if generated types are outdated to catch schema changes:
+
+```yaml
+- name: Fail if outdated
+  if: steps.changes.outputs.changed == 'true' && github.event_name == 'pull_request'
+  run: exit 1
+```
+
+## Troubleshooting
+
+### Spec Not Generating
+
+- Check your `generate-spec` script is defined in package.json
+- Ensure the router is exported correctly
+- Verify all dependencies are installed
+
+### Types Not Generating
+
+- Check the spec file exists and is valid JSON
+- Ensure `@alt-stack/zod-openapi` or `@alt-stack/zod-asyncapi` is installed
+- Check for syntax errors in the spec
+
+### npm Publish Failing
+
+- Verify `NPM_TOKEN` secret is set correctly
+- Check the package name is available on npm
+- Ensure version hasn't already been published
 
 ---
 
@@ -5006,10 +4817,10 @@ Create type-safe Kafka producers using AsyncAPI-generated types.
 
 ```bash
 # Core + KafkaJS binding
-pnpm add @alt-stack/kafka-core-client-core @alt-stack/kafka-core-client-kafkajs kafkajs zod
+pnpm add @alt-stack/kafka-client-core @alt-stack/kafka-client-kafkajs kafkajs zod
 
 # Or for WarpStream
-pnpm add @alt-stack/kafka-core-client-core @alt-stack/kafka-core-client-warpstream kafkajs zod
+pnpm add @alt-stack/kafka-client-core @alt-stack/kafka-client-warpstream kafkajs zod
 ```
 
 ## Basic Setup
@@ -5022,7 +4833,7 @@ Use types generated from your AsyncAPI spec with `zod-asyncapi`:
 
 // 2. Import generated types
 import { Topics } from "./generated-types";
-import { createKafkaClient } from "@alt-stack/kafka-core-client-kafkajs";
+import { createKafkaClient } from "@alt-stack/kafka-client-kafkajs";
 
 // 3. Create type-safe client
 const client = await createKafkaClient({
@@ -5042,7 +4853,7 @@ await client.send("user-events", {
 
 ```typescript
 import { Topics } from "./generated-types";
-import { createKafkaClient } from "@alt-stack/kafka-core-client-kafkajs";
+import { createKafkaClient } from "@alt-stack/kafka-client-kafkajs";
 
 const client = await createKafkaClient({
   kafka: {
@@ -5065,7 +4876,7 @@ Optimized for WarpStream with recommended defaults (LZ4 compression, extended ti
 
 ```typescript
 import { Topics } from "./generated-types";
-import { createWarpStreamClient } from "@alt-stack/kafka-core-client-warpstream";
+import { createWarpStreamClient } from "@alt-stack/kafka-client-warpstream";
 
 const client = await createWarpStreamClient({
   bootstrapServer: "my-cluster.warpstream.com:9092",
@@ -5142,7 +4953,7 @@ await rawProducer.send({
 ## Error Handling
 
 ```typescript
-import { ValidationError, SendError, ConnectionError } from "@alt-stack/kafka-core-client-kafkajs";
+import { ValidationError, SendError, ConnectionError } from "@alt-stack/kafka-client-kafkajs";
 
 try {
   await client.send("user-events", invalidData);
@@ -5323,7 +5134,7 @@ For producers, use the Kafka client packages with AsyncAPI-generated types:
 ```typescript
 // 1. Generate types: npx zod-asyncapi asyncapi.json -o ./generated-types.ts
 import { Topics } from "./generated-types";
-import { createKafkaClient } from "@alt-stack/kafka-core-client-kafkajs";
+import { createKafkaClient } from "@alt-stack/kafka-client-kafkajs";
 
 const client = await createKafkaClient({
   kafka: { brokers: ["localhost:9092"], clientId: "my-producer" },
@@ -5342,7 +5153,7 @@ Or with WarpStream:
 
 ```typescript
 import { Topics } from "./generated-types";
-import { createWarpStreamClient } from "@alt-stack/kafka-core-client-warpstream";
+import { createWarpStreamClient } from "@alt-stack/kafka-client-warpstream";
 
 const client = await createWarpStreamClient({
   bootstrapServer: "my-cluster.warpstream.com:9092",
@@ -5355,3 +5166,621 @@ await client.send("user-events", {
   timestamp: Date.now(),
 });
 ```
+
+---
+
+// File: workers-warpstream/core-concepts/custom-context
+
+# Custom Context
+
+Inject dependencies into job handlers.
+
+## Define Context Type
+
+```typescript
+import { init } from "@alt-stack/workers-warpstream";
+
+interface AppContext {
+  db: Database;
+  logger: Logger;
+}
+
+const { router, procedure } = init<AppContext>();
+
+const jobRouter = router({
+  "sync-user": procedure
+    .input({ payload: z.object({ userId: z.string() }) })
+    .task(async ({ input, ctx }) => {
+      // Access injected dependencies
+      ctx.logger.info(`Syncing user ${input.userId}`);
+      const user = await ctx.db.users.find(input.userId);
+      // ...
+    }),
+});
+```
+
+## Create Context
+
+```typescript
+import { createWorker } from "@alt-stack/workers-warpstream";
+
+const worker = await createWorker(jobRouter, {
+  kafka: { brokers: ["localhost:9092"] },
+  groupId: "workers",
+  createContext: async (baseCtx) => {
+    // baseCtx contains: jobId, jobName, attempt, topic, partition, offset, message
+    return {
+      db: getDatabase(),
+      logger: createLogger({ jobId: baseCtx.jobId }),
+    };
+  },
+});
+```
+
+## Base Context
+
+Every job handler receives these built-in fields:
+
+```typescript
+interface WarpStreamContext {
+  jobId: string;      // Unique execution ID
+  jobName: string;    // Name of the job
+  attempt: number;    // Retry attempt (starts at 1)
+  topic: string;      // Kafka topic
+  partition: number;  // Kafka partition
+  offset: string;     // Message offset
+  message: KafkaMessage;  // Raw Kafka message
+}
+```
+
+---
+
+// File: workers-warpstream/core-concepts/error-handling
+
+# Error Handling
+
+Handle job failures gracefully.
+
+## Error Callback
+
+```typescript
+const worker = await createWorker(router, {
+  kafka: { brokers: ["localhost:9092"] },
+  groupId: "workers",
+  onError: async (error, ctx) => {
+    console.error(`Job ${ctx.jobName} failed:`, error);
+    
+    // Send to error tracking
+    await sentry.captureException(error, {
+      extra: {
+        jobId: ctx.jobId,
+        jobName: ctx.jobName,
+        attempt: ctx.attempt,
+      },
+    });
+  },
+});
+```
+
+## Typed Errors
+
+Define expected error shapes:
+
+```typescript
+const jobRouter = router({
+  "process-payment": procedure
+    .input({ payload: z.object({ orderId: z.string() }) })
+    .errors({
+      INSUFFICIENT_FUNDS: z.object({
+        code: z.literal("INSUFFICIENT_FUNDS"),
+        balance: z.number(),
+      }),
+      CARD_DECLINED: z.object({
+        code: z.literal("CARD_DECLINED"),
+        reason: z.string(),
+      }),
+    })
+    .task(async ({ input, ctx }) => {
+      const balance = await getBalance();
+      if (balance < 0) {
+        throw ctx.error({
+          code: "INSUFFICIENT_FUNDS",
+          balance,
+        });
+      }
+    }),
+});
+```
+
+## Retries
+
+Kafka consumer retries are handled at the Kafka level. Configure dead letter queues in your Kafka setup for failed messages.
+
+---
+
+// File: workers-warpstream/core-concepts/job-client
+
+# Job Client
+
+Type-safe producer for enqueuing jobs.
+
+## Basic Usage
+
+```typescript
+import { createJobClient } from "@alt-stack/workers-warpstream";
+import { jobRouter } from "./jobs";
+
+const client = await createJobClient(jobRouter, {
+  kafka: { brokers: ["warpstream.example.com:9092"] },
+});
+
+// Fully typed - invalid job names or payloads are compile errors
+await client.enqueue("send-email", {
+  to: "user@example.com",
+  subject: "Hello",
+  body: "World",
+});
+
+await client.disconnect();
+```
+
+## Options
+
+```typescript
+const client = await createJobClient(router, {
+  // Kafka connection
+  kafka: { brokers: ["localhost:9092"] },
+  
+  // Or pass an existing Kafka instance
+  kafka: existingKafkaInstance,
+  
+  // Routing strategy (must match consumer)
+  routing: { type: "topic-per-job" },
+  
+  // Client ID
+  clientId: "my-producer",
+  
+  // Error callback
+  onError: (error) => console.error(error),
+});
+```
+
+## Partition Keys
+
+Route related jobs to the same partition:
+
+```typescript
+await client.enqueue(
+  "process-order",
+  { orderId: "123", items: [...] },
+  { key: "user-456" }  // All jobs for this user go to same partition
+);
+```
+
+## Custom Headers
+
+```typescript
+await client.enqueue(
+  "send-notification",
+  { userId: "123", message: "Hello" },
+  { headers: { "x-priority": "high", "x-source": "api" } }
+);
+```
+
+---
+
+// File: workers-warpstream/core-concepts/middleware
+
+# Middleware
+
+Add cross-cutting logic to job handlers.
+
+## Basic Middleware
+
+```typescript
+const { router, procedure } = init<AppContext>();
+
+const loggedProcedure = procedure.use(async ({ ctx, next }) => {
+  console.log(`Starting job: ${ctx.jobName}`);
+  const start = Date.now();
+  
+  const result = await next();
+  
+  console.log(`Completed in ${Date.now() - start}ms`);
+  return result;
+});
+
+const jobRouter = router({
+  "my-job": loggedProcedure
+    .input({ payload: z.object({ id: z.string() }) })
+    .task(async ({ input }) => {
+      // Logging happens automatically
+    }),
+});
+```
+
+## Extend Context
+
+```typescript
+const withMetrics = procedure.use(async ({ ctx, next }) => {
+  return next({
+    ctx: {
+      metrics: new MetricsClient(),
+    },
+  });
+});
+
+// Now ctx.metrics is available in handlers
+const jobRouter = router({
+  "tracked-job": withMetrics
+    .input({ payload: z.object({ id: z.string() }) })
+    .task(async ({ ctx }) => {
+      ctx.metrics.increment("jobs.processed");
+    }),
+});
+```
+
+## Chain Middleware
+
+```typescript
+const authedProcedure = procedure
+  .use(loggingMiddleware)
+  .use(metricsMiddleware)
+  .use(rateLimitMiddleware);
+```
+
+---
+
+// File: workers-warpstream/core-concepts/routing-strategies
+
+# Routing Strategies
+
+Two strategies for routing jobs through Kafka.
+
+## Topic-per-Job (Default)
+
+Each job name becomes a Kafka topic:
+
+```
+job "send-email"     → topic "send-email"
+job "process-image"  → topic "process-image"
+```
+
+```typescript
+const worker = await createWorker(router, {
+  kafka: { brokers: ["localhost:9092"] },
+  groupId: "workers",
+  routing: { type: "topic-per-job" },
+});
+```
+
+With a prefix:
+
+```typescript
+routing: { type: "topic-per-job", topicPrefix: "jobs." }
+// job "send-email" → topic "jobs.send-email"
+```
+
+## Single-Queue
+
+All jobs go to one topic with an envelope:
+
+```typescript
+const worker = await createWorker(router, {
+  kafka: { brokers: ["localhost:9092"] },
+  groupId: "workers",
+  routing: { type: "single-queue", topic: "job-queue" },
+});
+```
+
+Messages are wrapped:
+
+```json
+{ "jobName": "send-email", "payload": { "to": "user@example.com", ... } }
+```
+
+## Matching Producer and Consumer
+
+Use the same routing strategy for both:
+
+```typescript
+const routing = { type: "single-queue", topic: "jobs" } as const;
+
+// Consumer
+const worker = await createWorker(router, {
+  kafka: { brokers: ["localhost:9092"] },
+  groupId: "workers",
+  routing,
+});
+
+// Producer
+const client = await createJobClient(router, {
+  kafka: { brokers: ["localhost:9092"] },
+  routing,
+});
+```
+
+---
+
+// File: workers-warpstream/getting-started/installation
+
+# Installation
+
+```bash
+pnpm add @alt-stack/workers-warpstream kafkajs zod
+```
+
+## Peer Dependencies
+
+- **kafkajs**: `^2.0.0` - Kafka client
+- **zod**: `^3.25.0 || ^4.0.0` - Schema validation
+
+---
+
+// File: workers-warpstream/getting-started/quickstart
+
+# Quickstart
+
+Build async job queues using WarpStream/Kafka with type-safe producers and consumers.
+
+## Define Jobs
+
+```typescript
+import { init } from "@alt-stack/workers-warpstream";
+import { z } from "zod";
+
+const { router, procedure } = init();
+
+const jobRouter = router({
+  "send-email": procedure
+    .input({
+      payload: z.object({
+        to: z.string().email(),
+        subject: z.string(),
+        body: z.string(),
+      }),
+    })
+    .task(async ({ input, ctx }) => {
+      console.log(`Sending email to ${input.to}`);
+      // Send email logic here
+    }),
+
+  "process-image": procedure
+    .input({
+      payload: z.object({
+        imageUrl: z.string().url(),
+        operations: z.array(z.enum(["resize", "crop", "compress"])),
+      }),
+    })
+    .task(async ({ input }) => {
+      console.log(`Processing image: ${input.imageUrl}`);
+    }),
+});
+
+export { jobRouter };
+```
+
+## Start Worker
+
+```typescript
+import { createWorker } from "@alt-stack/workers-warpstream";
+import { jobRouter } from "./jobs";
+
+async function main() {
+  const worker = await createWorker(jobRouter, {
+    kafka: { brokers: ["warpstream.example.com:9092"] },
+    groupId: "job-workers",
+  });
+
+  console.log("Worker running, waiting for jobs...");
+
+  // Graceful shutdown
+  process.on("SIGINT", async () => {
+    await worker.disconnect();
+    process.exit(0);
+  });
+
+  // Block until shutdown
+  await new Promise(() => {});
+}
+
+main();
+```
+
+## Enqueue Jobs
+
+```typescript
+import { createJobClient } from "@alt-stack/workers-warpstream";
+import { jobRouter } from "./jobs";
+
+const client = await createJobClient(jobRouter, {
+  kafka: { brokers: ["warpstream.example.com:9092"] },
+});
+
+// Type-safe: only valid job names and payloads allowed
+await client.enqueue("send-email", {
+  to: "user@example.com",
+  subject: "Welcome!",
+  body: "Thanks for signing up.",
+});
+
+await client.enqueue("process-image", {
+  imageUrl: "https://example.com/image.jpg",
+  operations: ["resize", "compress"],
+});
+```
+
+---
+
+// File: workers-warpstream/guides/sdk-generation
+
+# SDK Generation
+
+Generate a type-safe SDK from your worker definitions to trigger jobs without importing router code.
+
+## Overview
+
+The SDK generation workflow:
+
+1. Define workers with `workerRouter`
+2. Generate AsyncAPI spec from the router
+3. Generate TypeScript SDK from the spec
+4. Use the SDK with worker clients
+
+This allows services to trigger workers without depending on the worker implementation code.
+
+## Generate AsyncAPI Spec
+
+```typescript
+// generate-spec.ts
+import { generateAsyncAPISpec } from "@alt-stack/workers-core";
+import { appRouter } from "./routers";
+import { writeFileSync } from "node:fs";
+
+const spec = generateAsyncAPISpec(appRouter, {
+  title: "Workers API",
+  version: "1.0.0",
+  description: "Background job definitions",
+});
+
+writeFileSync("asyncapi.json", JSON.stringify(spec, null, 2));
+console.log("Generated asyncapi.json");
+```
+
+Run it:
+
+```bash
+npx tsx generate-spec.ts
+```
+
+:::note
+Only `task` and `queue` procedures are included in the spec. Cron jobs are excluded since they don't accept external payloads.
+:::
+
+## Generate TypeScript SDK
+
+Use the `asyncapi-to-zod` CLI to generate Zod schemas:
+
+```bash
+npx asyncapi-to-zod asyncapi.json -o ./sdk/index.ts
+```
+
+This generates:
+
+```typescript
+// sdk/index.ts (auto-generated)
+import { z } from 'zod';
+
+export const SendWelcomeEmailPayloadSchema = z.object({
+  userId: z.string(),
+  email: z.string().email(),
+});
+export type SendWelcomeEmailPayload = z.infer<typeof SendWelcomeEmailPayloadSchema>;
+
+export const ProcessImagePayloadSchema = z.object({
+  imageUrl: z.string().url(),
+});
+export type ProcessImagePayload = z.infer<typeof ProcessImagePayloadSchema>;
+
+export const Topics = {
+  'send-welcome-email': SendWelcomeEmailPayloadSchema,
+  'process-image': ProcessImagePayloadSchema,
+} as const;
+
+export type TopicName = keyof typeof Topics;
+export type MessageType<T extends TopicName> = z.infer<typeof Topics[T]>;
+```
+
+## Use with Worker Clients
+
+### Trigger.dev Client
+
+```typescript
+import { Topics } from "@myorg/workers-sdk";
+import { createTriggerClient } from "@alt-stack/workers-client-trigger";
+
+const client = createTriggerClient({ jobs: Topics });
+
+// Type-safe: autocomplete for job names and payloads
+await client.trigger("send-welcome-email", {
+  userId: "user-123",
+  email: "user@example.com",
+});
+
+// With options
+await client.trigger("send-welcome-email", payload, {
+  idempotencyKey: "unique-123",
+  delay: "PT5M", // 5 minute delay
+});
+```
+
+### WarpStream Client
+
+```typescript
+import { Topics } from "@myorg/workers-sdk";
+import { createWarpStreamClient } from "@alt-stack/workers-client-warpstream";
+
+const client = await createWarpStreamClient({
+  bootstrapServer: "cluster.warpstream.com:9092",
+  jobs: Topics,
+});
+
+await client.trigger("send-welcome-email", {
+  userId: "user-123",
+  email: "user@example.com",
+});
+
+await client.disconnect();
+```
+
+## Batch Triggering
+
+Trigger multiple jobs efficiently:
+
+```typescript
+await client.triggerBatch("process-image", [
+  { imageUrl: "https://example.com/1.jpg" },
+  { imageUrl: "https://example.com/2.jpg" },
+  { imageUrl: "https://example.com/3.jpg" },
+]);
+```
+
+## Publishing the SDK
+
+Create a package for your SDK:
+
+```json
+{
+  "name": "@myorg/workers-sdk",
+  "version": "1.0.0",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "peerDependencies": {
+    "zod": "^3.25.0 || ^4.0.0"
+  }
+}
+```
+
+Add a build script:
+
+```json
+{
+  "scripts": {
+    "generate": "tsx generate-spec.ts && asyncapi-to-zod asyncapi.json -o src/index.ts",
+    "build": "tsup src/index.ts --format esm,cjs --dts"
+  }
+}
+```
+
+Other services can then install and use your SDK:
+
+```bash
+pnpm add @myorg/workers-sdk @alt-stack/workers-client-trigger
+```
+
+## Benefits
+
+- **Decoupled**: Services don't need to import worker router code
+- **Type-safe**: Full TypeScript support with autocomplete
+- **Validated**: Payloads are validated before sending
+- **Versioned**: SDK can be versioned independently
