@@ -7,7 +7,7 @@ Organize consumers by domain using nested routers.
 Use nested `kafkaRouter` for topic prefixing:
 
 ```typescript
-import { init, kafkaRouter } from "@alt-stack/kafka";
+import { init, kafkaRouter } from "@alt-stack/kafka-core";
 
 const { procedure } = init<AppContext>();
 
@@ -33,7 +33,7 @@ const mainRouter = kafkaRouter<AppContext>({
 Use `mergeKafkaRouters` to combine routers without prefixing:
 
 ```typescript
-import { mergeKafkaRouters } from "@alt-stack/kafka";
+import { mergeKafkaRouters } from "@alt-stack/kafka-core";
 
 const router1 = kafkaRouter({
   "user-events": procedure.input({ message: UserSchema }).subscribe(() => {}),

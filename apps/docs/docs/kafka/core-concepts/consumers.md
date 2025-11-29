@@ -5,7 +5,7 @@ Create Kafka consumers from routers.
 ## Basic Setup
 
 ```typescript
-import { createConsumer, kafkaRouter, init } from "@alt-stack/kafka";
+import { createConsumer, kafkaRouter, init } from "@alt-stack/kafka-core";
 import { Kafka } from "kafkajs";
 
 const { procedure } = init();

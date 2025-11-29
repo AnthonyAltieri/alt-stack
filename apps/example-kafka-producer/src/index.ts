@@ -1,4 +1,4 @@
-import { createProducer } from "@alt-stack/kafka";
+import { createProducer } from "@alt-stack/kafka-core";
 import { Kafka } from "kafkajs";
 import { env } from "./env.js";
 import { producerRouter } from "./router.js";

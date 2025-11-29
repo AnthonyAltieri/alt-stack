@@ -1,4 +1,4 @@
-import { init, kafkaRouter } from "@alt-stack/kafka";
+import { init, kafkaRouter } from "@alt-stack/kafka-core";
 import { z } from "zod";
 
 // ============================================================================

@@ -5,7 +5,7 @@ Define typed error schemas for structured error handling.
 ## Error Schemas
 
 ```typescript
-import { init, kafkaRouter } from "@alt-stack/kafka";
+import { init, kafkaRouter } from "@alt-stack/kafka-core";
 import { z } from "zod";
 
 const { procedure } = init();
@@ -66,7 +66,7 @@ const router = kafkaRouter({
 ## Consumer Error Handling
 
 ```typescript
-import { createConsumer, ProcessingError } from "@alt-stack/kafka";
+import { createConsumer, ProcessingError } from "@alt-stack/kafka-core";
 
 const consumer = await createConsumer(router, {
   kafka: new Kafka({ brokers: ["localhost:9092"] }),

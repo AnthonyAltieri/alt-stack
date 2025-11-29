@@ -11,7 +11,7 @@
     "generate-sdk": "zod-asyncapi asyncapi.json -o generated-types.ts"
   },
   "dependencies": {
-    "@alt-stack/kafka": "workspace:*",
+    "@alt-stack/kafka-core": "workspace:*",
     "@t3-oss/env-core": "^0.9.0",
     "kafkajs": "^2.2.4",
     "zod": "^4.0.0"

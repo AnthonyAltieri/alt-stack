@@ -1,5 +1,5 @@
 import { writeFileSync } from "node:fs";
-import { generateAsyncAPISpec } from "@alt-stack/kafka";
+import { generateAsyncAPISpec } from "@alt-stack/kafka-core";
 import { producerRouter } from "./router.js";
 
 // Generate AsyncAPI spec from the producer router

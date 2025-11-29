@@ -18,7 +18,7 @@ interface BaseKafkaContext {
 ## Defining Custom Context
 
 ```typescript
-import { init, kafkaRouter, createConsumer, type BaseKafkaContext } from "@alt-stack/kafka";
+import { init, kafkaRouter, createConsumer, type BaseKafkaContext } from "@alt-stack/kafka-core";
 
 interface AppContext {
   logger: Logger;

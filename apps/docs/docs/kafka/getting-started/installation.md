@@ -1,7 +1,7 @@
 # Installation
 
 ```bash
-pnpm add @alt-stack/kafka kafkajs zod
+pnpm add @alt-stack/kafka-core kafkajs zod
 ```
 
 ## Peer Dependencies

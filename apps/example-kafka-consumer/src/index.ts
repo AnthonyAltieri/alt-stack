@@ -1,4 +1,4 @@
-import { init, kafkaRouter, createConsumer, type BaseKafkaContext } from "@alt-stack/kafka";
+import { init, kafkaRouter, createConsumer, type BaseKafkaContext } from "@alt-stack/kafka-core";
 import { Kafka } from "kafkajs";
 import { z } from "zod";
 import { env } from "./env.js";

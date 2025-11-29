@@ -3,7 +3,7 @@
 ## Consumer
 
 ```typescript
-import { init, kafkaRouter, createConsumer } from "@alt-stack/kafka";
+import { init, kafkaRouter, createConsumer } from "@alt-stack/kafka-core";
 import { Kafka } from "kafkajs";
 import { z } from "zod";
 

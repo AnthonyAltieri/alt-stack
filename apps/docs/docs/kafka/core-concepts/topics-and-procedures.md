@@ -5,7 +5,7 @@ Define Kafka topics with type-safe message schemas using `kafkaRouter`.
 ## Basic Topic Definition
 
 ```typescript
-import { init, kafkaRouter } from "@alt-stack/kafka";
+import { init, kafkaRouter } from "@alt-stack/kafka-core";
 import { z } from "zod";
 
 const { procedure } = init();

@@ -188,7 +188,7 @@ The following string formats can be registered:
 
 A typical workflow:
 
-1. **Server defines Kafka topics** with Zod schemas using `@alt-stack/kafka`
+1. **Server defines Kafka topics** with Zod schemas using `@alt-stack/kafka-core`
 2. **Server exposes AsyncAPI spec** at an endpoint
 3. **Client generates types** using `zod-asyncapi`
 4. **Client uses Kafka client** with generated types

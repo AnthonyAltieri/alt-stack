@@ -46,14 +46,31 @@ const result = await client.post("/users", {
 });
 ```
 
-### Other Methods
+### PUT Requests
 
-The client supports all standard HTTP methods:
-- `get()` - GET requests
-- `post()` - POST requests
-- `put()` - PUT requests
-- `patch()` - PATCH requests
-- `delete()` - DELETE requests
+```typescript
+const result = await client.put("/users/{id}", {
+  params: { id: "123" },
+  body: { name: "Alice Updated", email: "alice@example.com" },
+});
+```
+
+### PATCH Requests
+
+```typescript
+const result = await client.patch("/users/{id}", {
+  params: { id: "123" },
+  body: { email: "newemail@example.com" },
+});
+```
+
+### DELETE Requests
+
+```typescript
+const result = await client.delete("/users/{id}", {
+  params: { id: "123" },
+});
+```
 
 ## Handling Responses
 
@@ -65,16 +82,17 @@ const result = await client.get("/users/{id}", {
 });
 
 if (result.success) {
-  // Type-safe access to response data
-  console.log(result.data);
+  // Type-safe access to response body
+  console.log(result.body);
+  console.log(result.code); // Status code string, e.g., "200"
 } else {
-  // Handle error
-  if (result.error.type === "error") {
-    // Server returned an error response
-    console.error(result.error.code, result.error.message);
+  // Handle error - check if it's a defined error or unexpected
+  if (typeof result.code === "string") {
+    // Server returned a defined error response
+    console.error(result.code, result.error);
   } else {
     // Unexpected error (network, validation, etc.)
-    console.error(result.error.message);
+    console.error(result.error);
   }
 }
 ```
@@ -99,7 +117,7 @@ const result = await client.get("/users/{id}", {
 |--------|------|-------------|
 | `params` | `object` | Path parameters to interpolate into the URL |
 | `query` | `object` | Query parameters to append to the URL |
-| `body` | `object` | Request body (for POST, PUT, PATCH) |
+| `body` | `object` | Request body (required for POST, PUT, PATCH) |
 | `headers` | `object` | Additional headers to include |
 | `timeout` | `number` | Request timeout in milliseconds |
 | `retries` | `number` | Number of retry attempts |
@@ -177,28 +195,35 @@ if (!result.success && typeof result.code === "number") {
 
 ## Error Classes
 
-The client also throws error classes for programmatic handling:
+The client exports error classes for programmatic handling:
+
+| Class | Description |
+|-------|-------------|
+| `ApiClientError` | Base class for all client errors |
+| `ValidationError` | Request/response validation failed |
+| `UnexpectedApiClientError` | Network error or unexpected response |
+| `TimeoutError` | Request exceeded timeout |
 
 ```typescript
 import {
   ValidationError,
   UnexpectedApiClientError,
+  TimeoutError,
   ApiClientError,
 } from "@alt-stack/client";
 
 try {
   await client.get("/users/{id}", {
-    params: { id: 123 }, // Invalid type
+    params: { id: 123 },
   });
 } catch (error) {
   if (error instanceof ValidationError) {
-    // Validation failed
-    console.error("Validation error:", error.details);
+    console.error("Validation error:", error.validationErrors);
+  } else if (error instanceof TimeoutError) {
+    console.error(`Request timed out after ${error.timeout}ms`);
   } else if (error instanceof UnexpectedApiClientError) {
-    // Network or unexpected error
-    console.error("Request failed:", error.message);
+    console.error("Request failed:", error.message, error.code);
   } else if (error instanceof ApiClientError) {
-    // Base class for all client errors
     console.error("Client error:", error.message);
   }
 }
@@ -294,7 +319,7 @@ const result = await client.get("/users/{id}", {
 });
 ```
 
-If the request takes longer than the timeout, it will throw an error.
+If the request exceeds the timeout, a `TimeoutError` is thrown with the `timeout` property indicating the configured timeout in milliseconds.
 
 ---
 
@@ -336,14 +361,14 @@ try {
 } catch (error) {
   if (error instanceof ValidationError) {
     console.error("Validation failed:", error.message);
-    console.error("Details:", error.details);
+    console.error("Validation errors:", error.validationErrors);
   }
 }
 ```
 
 The `ValidationError` includes:
 - `message`: Human-readable error message
-- `details`: Validation error details from Zod
+- `validationErrors`: Validation error details from Zod
 - `endpoint`: The endpoint that failed validation
 - `method`: The HTTP method that failed validation
 
@@ -373,8 +398,8 @@ const result = await client.get("/users/{id}", {
 });
 
 if (result.success) {
-  // result.data is validated and typed
-  console.log(result.data.name); // ✅ Type-safe
+  // result.body is validated and typed
+  console.log(result.body.name); // ✅ Type-safe
 }
 ```
 
@@ -386,27 +411,18 @@ If the response doesn't match the expected schema, an error is returned in the r
 
 # Installation
 
-Install the client package and its peer dependencies:
-
 ```bash
 pnpm add @alt-stack/client zod
-# or
-npm install @alt-stack/client zod
-# or
-yarn add @alt-stack/client zod
 ```
 
 ## Peer Dependencies
 
-The client requires:
-- **zod**: `^4.0.0` - For schema validation and type inference
+- **zod**: `^4.0.0`
 
 ## Requirements
 
-To use the client, you need:
-1. A server built with `@alt-stack/server-hono` or `@alt-stack/server-express` that exposes an OpenAPI spec
-2. Generated `Request` and `Response` types from your server's OpenAPI spec
-3. The OpenAPI spec object from your server
+1. A server built with `@alt-stack/server-hono` that exposes an OpenAPI spec
+2. Generated `Request` and `Response` types from the OpenAPI spec (see [Server Integration](../guides/server-integration))
 
 ---
 
@@ -474,9 +490,9 @@ const result = await client.get("/users/{id}", {
 });
 
 if (result.success) {
-  // TypeScript knows the shape of result.data
-  console.log(result.data.name); // ✅ Type-safe
-  console.log(result.data.email); // ✅ Type-safe
+  // TypeScript knows the shape of result.body
+  console.log(result.body.name); // ✅ Type-safe
+  console.log(result.body.email); // ✅ Type-safe
 } else {
   // Handle error
   console.error(result.error);
@@ -645,8 +661,8 @@ const result = await client.get("/users/{id}", {
 });
 
 if (result.success) {
-  // result.data is typed based on your output schema
-  console.log(result.data.name); // ✅ Type-safe
+  // result.body is typed based on your output schema
+  console.log(result.body.name); // ✅ Type-safe
 }
 ```
 
@@ -3056,6 +3072,49 @@ export type TopicName = keyof typeof Topics;
 export type MessageType<T extends TopicName> = z.infer<typeof Topics[T]>;
 ```
 
+## Using Generated Types with Kafka Client
+
+The generated `Topics` object works directly with `@alt-stack/kafka-core-client-kafkajs` or `@alt-stack/kafka-core-client-warpstream`:
+
+### KafkaJS Producer
+
+```typescript
+import { Topics } from "./generated-types";
+import { createKafkaClient } from "@alt-stack/kafka-core-client-kafkajs";
+
+const client = await createKafkaClient({
+  kafka: { brokers: ["localhost:9092"], clientId: "my-producer" },
+  topics: Topics,
+});
+
+// Type-safe sending - topic names and message shapes are validated
+await client.send("user-events", {
+  id: "123",
+  name: "John",
+  email: "john@example.com",
+});
+
+await client.disconnect();
+```
+
+### WarpStream Producer
+
+```typescript
+import { Topics } from "./generated-types";
+import { createWarpStreamClient } from "@alt-stack/kafka-core-client-warpstream";
+
+const client = await createWarpStreamClient({
+  bootstrapServer: "my-cluster.warpstream.com:9092",
+  topics: Topics,
+});
+
+await client.send("user-events", {
+  id: "123",
+  name: "John",
+  email: "john@example.com",
+});
+```
+
 ## Custom String Formats
 
 For custom type mappings (e.g., using Luxon `DateTime` for `iso-date` format), use the `--registry` and `--include` flags.
@@ -3117,38 +3176,18 @@ The following string formats can be registered:
 - `url`
 - `uuid`
 
-## Integration with @alt-stack/kafka
+## Workflow: Server to Client
 
-A typical workflow with `@alt-stack/kafka`:
+A typical workflow:
 
-1. **Define your Kafka topics** with Zod schemas on the producer
-2. **Generate AsyncAPI spec** using `createAsyncAPISpec`
-3. **Generate consumer types** using the `zod-asyncapi` CLI
+1. **Server defines Kafka topics** with Zod schemas using `@alt-stack/kafka-core`
+2. **Server exposes AsyncAPI spec** at an endpoint
+3. **Client generates types** using `zod-asyncapi`
+4. **Client uses Kafka client** with generated types
 
 ```bash
-# Fetch AsyncAPI from your running producer and generate types
+# Generate types from running server
 npx zod-asyncapi http://localhost:3000/asyncapi.json -o src/kafka-types.ts
-```
-
-This gives you fully typed message schemas that match your producer's API exactly.
-
-### Using Generated Types with Consumer
-
-```typescript
-import { Topics, TopicName, MessageType } from "./kafka-types";
-import { initKafka } from "@alt-stack/kafka";
-
-const kafka = initKafka({
-  brokers: ["localhost:9092"],
-  clientId: "my-consumer",
-});
-
-// Type-safe topic names
-const topicName: TopicName = "user-events";
-
-// Type-safe message validation
-const schema = Topics[topicName];
-const message: MessageType<"user-events"> = schema.parse(rawMessage);
 ```
 
 ## Programmatic Usage
@@ -4525,111 +4564,65 @@ export default app;
 
 # Combining Routers
 
-Combine multiple routers to organize your Kafka consumers by domain or feature.
+Organize consumers by domain using nested routers.
 
-## Basic Router Combination
+## Nested Routers
 
-Use `mergeKafkaRouters` to combine routers:
-
-```typescript
-import { createKafkaRouter, mergeKafkaRouters } from "@alt-stack/kafka";
-
-const userRouter = createKafkaRouter()
-  .topic("user-created", { /* ... */ })
-  .handler(handleUserCreated)
-  .topic("user-updated", { /* ... */ })
-  .handler(handleUserUpdated);
-
-const orderRouter = createKafkaRouter()
-  .topic("order-created", { /* ... */ })
-  .handler(handleOrderCreated)
-  .topic("order-cancelled", { /* ... */ })
-  .handler(handleOrderCancelled);
-
-// Combine routers
-const mainRouter = mergeKafkaRouters({
-  users: userRouter,
-  orders: orderRouter,
-});
-
-const consumer = await createConsumer(mainRouter, {
-  kafka: new Kafka({
-    brokers: ["localhost:9092"],
-  }),
-  groupId: "my-consumer-group",
-});
-```
-
-## Router Constructor
-
-You can also combine routers using the router constructor:
+Use nested `kafkaRouter` for topic prefixing:
 
 ```typescript
-const mainRouter = createKafkaRouter({
+import { init, kafkaRouter } from "@alt-stack/kafka-core";
+
+const { procedure } = init<AppContext>();
+
+const userRouter = kafkaRouter<AppContext>({
+  created: procedure.input({ message: UserCreatedSchema }).subscribe(handleUserCreated),
+  updated: procedure.input({ message: UserUpdatedSchema }).subscribe(handleUserUpdated),
+});
+
+const orderRouter = kafkaRouter<AppContext>({
+  created: procedure.input({ message: OrderCreatedSchema }).subscribe(handleOrderCreated),
+  cancelled: procedure.input({ message: OrderCancelledSchema }).subscribe(handleOrderCancelled),
+});
+
+// Topics become: users/created, users/updated, orders/created, orders/cancelled
+const mainRouter = kafkaRouter<AppContext>({
   users: userRouter,
   orders: orderRouter,
 });
 ```
 
-## Multiple Routers with Same Prefix
+## Merging Flat Routers
 
-Combine multiple routers under the same prefix:
+Use `mergeKafkaRouters` to combine routers without prefixing:
 
 ```typescript
-const v1Router = createKafkaRouter()
-  .topic("user-events-v1", { /* ... */ })
-  .handler(handleV1);
+import { mergeKafkaRouters } from "@alt-stack/kafka-core";
 
-const v2Router = createKafkaRouter()
-  .topic("user-events-v2", { /* ... */ })
-  .handler(handleV2);
-
-const mainRouter = createKafkaRouter({
-  users: [v1Router, v2Router],
+const router1 = kafkaRouter({
+  "user-events": procedure.input({ message: UserSchema }).subscribe(() => {}),
 });
+
+const router2 = kafkaRouter({
+  "order-events": procedure.input({ message: OrderSchema }).subscribe(() => {}),
+});
+
+// Topics remain: user-events, order-events (no prefix)
+const mainRouter = mergeKafkaRouters(router1, router2);
 ```
 
-## Shared Context
-
-All routers share the same context type:
+## Using init() Factory
 
 ```typescript
-interface AppContext {
-  logger: Logger;
-  db: Database;
-}
+const { router, mergeRouters, procedure } = init<AppContext>();
 
-const userRouter = createKafkaRouter<AppContext>()
-  .topic("user-events", { /* ... */ })
-  .handler((ctx) => {
-    ctx.logger.log("Processing user event");
-    // ctx.input is the parsed message
-    ctx.db.save(ctx.input);
-  });
+const r1 = router();
+r1.registerProcedure("events", procedure.input({ message: Schema }).subscribe(() => {}));
 
-const orderRouter = createKafkaRouter<AppContext>()
-  .topic("order-events", { /* ... */ })
-  .handler((ctx) => {
-    ctx.logger.log("Processing order event");
-    // ctx.input is the parsed message
-    ctx.db.save(ctx.input);
-  });
+const r2 = router();
+r2.registerProcedure("other", procedure.input({ message: Schema }).subscribe(() => {}));
 
-const mainRouter = mergeKafkaRouters({
-  users: userRouter,
-  orders: orderRouter,
-});
-
-const consumer = await createConsumer(mainRouter, {
-  kafka: new Kafka({
-    brokers: ["localhost:9092"],
-  }),
-  groupId: "my-consumer-group",
-  createContext: (baseCtx) => ({
-    logger: getLogger(),
-    db: getDatabase(),
-  }),
-});
+const merged = mergeRouters(r1, r2);
 ```
 
 ---
@@ -4638,28 +4631,23 @@ const consumer = await createConsumer(mainRouter, {
 
 # Consumers
 
-Create and configure Kafka consumers to process messages from your routers.
+Create Kafka consumers from routers.
 
-## Basic Consumer Setup
-
-Use `createConsumer` to create a Kafka consumer from a router:
+## Basic Setup
 
 ```typescript
-import { createConsumer, createKafkaRouter } from "@alt-stack/kafka";
+import { createConsumer, kafkaRouter, init } from "@alt-stack/kafka-core";
 import { Kafka } from "kafkajs";
-import { z } from "zod";
 
-const router = createKafkaRouter()
-  .topic("user-events", {
-    input: {
-      message: z.object({
-        userId: z.string(),
-      }),
-    },
-  })
-  .handler((ctx) => {
-    console.log(ctx.input.message.userId);
-  });
+const { procedure } = init();
+
+const router = kafkaRouter({
+  "user-events": procedure
+    .input({ message: z.object({ userId: z.string() }) })
+    .subscribe(({ input }) => {
+      console.log(input.userId);
+    }),
+});
 
 const consumer = await createConsumer(router, {
   kafka: new Kafka({
@@ -4669,13 +4657,12 @@ const consumer = await createConsumer(router, {
   groupId: "my-consumer-group",
 });
 
-// Consumer is automatically connected and started
-// Messages are automatically validated and routed to handlers
+// Consumer is connected and running
 ```
 
-## Kafka Configuration
+## Kafka Config Options
 
-Pass Kafka configuration directly:
+Pass config directly instead of a Kafka instance:
 
 ```typescript
 const consumer = await createConsumer(router, {
@@ -4693,50 +4680,32 @@ const consumer = await createConsumer(router, {
 });
 ```
 
-## Consumer Configuration
-
-Customize consumer behavior:
+## Consumer Options
 
 ```typescript
 const consumer = await createConsumer(router, {
-  kafka: new Kafka({
-    brokers: ["localhost:9092"],
-  }),
+  kafka: new Kafka({ brokers: ["localhost:9092"] }),
   groupId: "my-consumer-group",
   consumerConfig: {
     sessionTimeout: 30000,
     heartbeatInterval: 3000,
     maxBytesPerPartition: 1048576,
   },
+  createContext: (baseCtx) => ({ logger: getLogger() }),
+  onError: (error) => console.error("Consumer error:", error),
 });
 ```
 
-## Error Handling
-
-Handle errors during message processing:
+## Graceful Shutdown
 
 ```typescript
-import { ProcessingError } from "@alt-stack/kafka";
+const consumer = await createConsumer(router, options);
 
-const consumer = await createConsumer(router, {
-  kafka: new Kafka({
-    brokers: ["localhost:9092"],
-  }),
-  groupId: "my-consumer-group",
-  onError: (error) => {
-    if (error instanceof ProcessingError) {
-      // Handle processing errors
-      console.error("Processing error:", error.code, error.data);
-    } else {
-      // Handle other errors
-      console.error("Consumer error:", error);
-    }
-    // Implement retry logic or alerting
-  },
+process.on("SIGTERM", async () => {
+  await consumer.disconnect();
+  process.exit(0);
 });
 ```
-
-Note: The consumer automatically connects and starts consuming messages when created. No manual `connect()` or `run()` calls are needed.
 
 ---
 
@@ -4744,195 +4713,93 @@ Note: The consumer automatically connects and starts consuming messages when cre
 
 # Custom Context
 
-Extend the base Kafka context with custom properties for your application.
+Extend the base context with application-specific properties.
 
 ## Base Context
 
-Every handler receives a base context with Kafka-specific properties:
+Every handler receives:
 
 ```typescript
 interface BaseKafkaContext {
-  message: KafkaMessage; // Full Kafka message from kafkajs
+  message: KafkaMessage; // Full kafkajs message (value, key, headers, timestamp)
   topic: string;
   partition: number;
   offset: string;
 }
 ```
 
-The `message` property contains the full Kafka message object, which includes:
-- `value`: The message payload (Buffer)
-- `key`: Message key (`Buffer | null`)
-- `headers`: Message headers (`Record<string, Buffer | undefined>`)
-- `timestamp`: Message timestamp (string)
-
-## Custom Context Types
-
-Define your custom context type:
+## Defining Custom Context
 
 ```typescript
+import { init, kafkaRouter, createConsumer, type BaseKafkaContext } from "@alt-stack/kafka-core";
+
 interface AppContext {
-  logger: {
-    log: (message: string) => void;
-  };
+  logger: Logger;
   db: Database;
-  metrics: MetricsCollector;
 }
+
+// Initialize with context type
+const { procedure } = init<AppContext>();
+
+const router = kafkaRouter<AppContext>({
+  "user-events": procedure
+    .input({ message: UserEventSchema })
+    .subscribe(({ input, ctx }) => {
+      // ctx has logger, db, plus base context
+      ctx.logger.log(`Processing user ${input.userId}`);
+      ctx.db.save(input);
+    }),
+});
 ```
 
 ## Creating Context
 
-Provide a `createContext` function when creating the consumer:
+Provide `createContext` to the consumer:
 
 ```typescript
-import type { BaseKafkaContext } from "@alt-stack/kafka";
-
 function createContext(baseCtx: BaseKafkaContext): AppContext {
   return {
     logger: {
-      log: (message: string) => {
-        console.log(
-          `[${baseCtx.topic}:${baseCtx.partition}:${baseCtx.offset}] ${message}`,
-        );
-      },
+      log: (msg: string) =>
+        console.log(`[${baseCtx.topic}:${baseCtx.partition}] ${msg}`),
     },
     db: getDatabase(),
-    metrics: getMetricsCollector(),
   };
 }
 
-const router = createKafkaRouter<AppContext>()
-  .topic("user-events", {
-    input: {
-      message: UserEventSchema,
-    },
-  })
-  .handler((ctx) => {
-    // ctx.logger, ctx.db, ctx.metrics are typed
-    // ctx.input is the parsed message
-    ctx.logger.log("Processing event");
-    ctx.db.save(ctx.input);
-    ctx.metrics.increment("events.processed");
-  });
-
 const consumer = await createConsumer(router, {
-  kafka: new Kafka({
-    brokers: ["localhost:9092"],
-  }),
-  groupId: "my-consumer-group",
+  kafka: new Kafka({ brokers: ["localhost:9092"] }),
+  groupId: "my-group",
   createContext,
 });
 ```
 
-## Async Context Creation
-### Example: Creating Database Connections in Context
-
-For database connections, create them in `createContext` and reuse a connection pool:
+## Async Context
 
 ```typescript
-import { createKafkaRouter, createConsumer } from "@alt-stack/kafka";
-import { Kafka } from "kafkajs";
-import { z } from "zod";
-import { createPool, Pool } from "your-database-library";
-
-interface AppContext {
-  db: Pool;
-  logger: Logger;
+async function createContext(baseCtx: BaseKafkaContext): Promise<AppContext> {
+  const db = await getConnectionFromPool();
+  return { logger: getLogger(), db };
 }
-
-// Create connection pool that will be reused
-let dbPool: Pool | null = null;
-
-async function createContext(
-  baseCtx: BaseKafkaContext,
-): Promise<AppContext> {
-  // Create connection pool on first call, reuse afterwards
-  if (!dbPool) {
-    dbPool = createPool({
-      host: process.env.DB_HOST,
-      port: process.env.DB_PORT,
-      database: process.env.DB_NAME,
-      min: 2, // Minimum connections
-      max: 10, // Maximum connections
-    });
-
-    // Test the connection
-    await dbPool.query("SELECT 1");
-    console.log("Database connection pool established");
-  }
-
-  return {
-    db: dbPool, // Reuse the shared connection pool
-    logger: getLogger(),
-  };
-}
-
-const router = createKafkaRouter<AppContext>()
-  .topic("user-events", {
-    input: {
-      message: z.object({
-        userId: z.string(),
-        eventType: z.string(),
-      }),
-    },
-  })
-  .handler(async (ctx) => {
-    // Use the database connection pool
-    const user = await ctx.db.query("SELECT * FROM users WHERE id = ?", [
-      ctx.input.userId,
-    ]);
-    ctx.logger.log(`Processing ${ctx.input.eventType} for user ${user.name}`);
-  });
-
-// Main application setup
-async function main() {
-  const consumer = await createConsumer(router, {
-    kafka: new Kafka({
-      brokers: ["localhost:9092"],
-    }),
-    groupId: "my-consumer-group",
-    createContext,
-  });
-
-  console.log("Consumer started and listening for messages...");
-
-  // Handle graceful shutdown
-  const shutdown = async () => {
-    console.log("Shutting down...");
-    await consumer.disconnect();
-    if (dbPool) {
-      await dbPool.end(); // Close all connections in pool
-    }
-    process.exit(0);
-  };
-
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
-}
-
-main().catch((error) => {
-  console.error("Failed to start application:", error);
-  process.exit(1);
-});
 ```
-
-This pattern ensures:
-- Database connection pool is created in `createContext` when first needed
-- Connection pool is reused across all message processing
-- Proper cleanup on application shutdown
-- Better performance with connection pooling for concurrent messages
 
 ## Middleware Context Extension
 
-Middleware can also extend context:
+Middleware can add to context:
 
 ```typescript
-const userMiddleware = createMiddleware<AppContext>(
-  async ({ ctx, next }) => {
-    // ctx.input is the parsed message
-    const user = await getUserFromMessage(ctx.input);
-    return next({ ctx: { user } });
-  },
-);
+const authMiddleware = procedure.use(async ({ ctx, next }) => {
+  const user = await authenticate(ctx.message.headers);
+  return next({ ctx: { user } });
+});
+
+const router = kafkaRouter<AppContext>({
+  protected: authMiddleware
+    .input({ message: Schema })
+    .subscribe(({ ctx }) => {
+      // ctx.user is available
+    }),
+});
 ```
 
 ---
@@ -4941,25 +4808,25 @@ const userMiddleware = createMiddleware<AppContext>(
 
 # Error Handling
 
-Handle errors in Kafka message processing with typed error schemas.
+Define typed error schemas for structured error handling.
 
 ## Error Schemas
 
-Define error schemas for your procedures:
-
 ```typescript
-import { createKafkaRouter } from "@alt-stack/kafka";
+import { init, kafkaRouter } from "@alt-stack/kafka-core";
 import { z } from "zod";
 
-const router = createKafkaRouter()
-  .topic("process-order", {
-    input: {
+const { procedure } = init();
+
+const router = kafkaRouter({
+  "process-order": procedure
+    .input({
       message: z.object({
         orderId: z.string(),
         amount: z.number(),
       }),
-    },
-    errors: {
+    })
+    .errors({
       INVALID_ORDER: z.object({
         error: z.object({
           code: z.literal("INVALID_ORDER"),
@@ -4975,118 +4842,61 @@ const router = createKafkaRouter()
           available: z.number(),
         }),
       }),
-    },
-  })
-  .handler((ctx) => {
-    if (!isValidOrder(ctx.input.orderId)) {
-      throw ctx.error({
-        error: {
-          code: "INVALID_ORDER",
-          message: "Order not found",
-          orderId: ctx.input.orderId,
-        },
-      });
-    }
-    
-    if (ctx.input.amount > getAvailableFunds()) {
-      throw ctx.error({
-        error: {
-          code: "INSUFFICIENT_FUNDS",
-          message: "Insufficient funds",
-          required: ctx.input.amount,
-          available: getAvailableFunds(),
-        },
-      });
-    }
-    
-    processOrder(ctx.input);
-  });
-```
+    })
+    .subscribe(({ input, ctx }) => {
+      if (!isValidOrder(input.orderId)) {
+        throw ctx.error({
+          error: {
+            code: "INVALID_ORDER",
+            message: "Order not found",
+            orderId: input.orderId,
+          },
+        });
+      }
 
-## Error Types
+      const available = getAvailableFunds();
+      if (input.amount > available) {
+        throw ctx.error({
+          error: {
+            code: "INSUFFICIENT_FUNDS",
+            message: "Insufficient funds",
+            required: input.amount,
+            available,
+          },
+        });
+      }
 
-The `ctx.error()` method accepts a union of all error schemas:
-
-```typescript
-// TypeScript knows the available error schemas
-ctx.error({
-  error: {
-    code: "INVALID_ORDER",
-    message: "Order not found",
-    orderId: "123",
-  },
-});
-
-// TypeScript validates the error data matches one of the schemas
-ctx.error({
-  error: {
-    code: "INVALID_ORDER",
-    message: "Order not found",
-    orderId: "123",
-    // extra: "field", // Error: Type error
-  },
+      processOrder(input);
+    }),
 });
 ```
 
 ## Consumer Error Handling
 
-Handle errors at the consumer level:
-
 ```typescript
-import { ProcessingError } from "@alt-stack/kafka";
+import { createConsumer, ProcessingError } from "@alt-stack/kafka-core";
 
 const consumer = await createConsumer(router, {
-  kafka: new Kafka({
-    brokers: ["localhost:9092"],
-  }),
-  groupId: "my-consumer-group",
+  kafka: new Kafka({ brokers: ["localhost:9092"] }),
+  groupId: "my-group",
   onError: (error) => {
     if (error instanceof ProcessingError) {
-      // Handle processing errors
-      console.error("Processing error:", error.code, error.data);
+      console.error("Processing error:", error.code, error.details);
       sendToDeadLetterQueue(error);
     } else {
-      // Handle other errors
       console.error("Unexpected error:", error);
     }
   },
 });
 ```
 
-## Processing Errors
+## Error Types
 
-Errors thrown in handlers are automatically caught and passed to `onError`:
+The library exports:
 
-```typescript
-const router = createKafkaRouter()
-  .topic("user-events", {
-    input: {
-      message: z.object({
-        userId: z.string(),
-      }),
-    },
-    errors: {
-      USER_NOT_FOUND: z.object({
-        error: z.object({
-          code: z.literal("USER_NOT_FOUND"),
-          userId: z.string(),
-        }),
-      }),
-    },
-  })
-  .handler(async (ctx) => {
-    const user = await db.findUser(ctx.input.userId);
-    if (!user) {
-      throw ctx.error({
-        error: {
-          code: "USER_NOT_FOUND",
-          userId: ctx.input.userId,
-        },
-      });
-    }
-    // Process user...
-  });
-```
+- `KafkaError` - Base error class with `code`, `message`, and optional `details`
+- `ValidationError` - Schema validation failures
+- `ProcessingError` - Handler execution errors
 
 ---
 
@@ -5094,72 +4904,258 @@ const router = createKafkaRouter()
 
 # Middleware
 
-Apply middleware to procedures to add cross-cutting concerns like logging, metrics, or error handling.
+Add cross-cutting concerns like logging, metrics, or authentication.
 
-## Procedure-Level Middleware
-
-Apply middleware to specific topics:
+## Basic Middleware
 
 ```typescript
-const router = createKafkaRouter()
-  .topic("sensitive-events", {
-    input: {
-      message: z.object({
-        data: z.string(),
-      }),
-    },
-  })
-  .use(async ({ ctx, next }) => {
-    // Log before handler
-    console.log(`Processing sensitive event from partition ${ctx.partition}`);
-    return next();
-  })
-  .handler((ctx) => {
-    // ctx.input is the parsed message
-    processSensitiveData(ctx.input);
-  });
-```
+const { procedure } = init();
 
-## Context Extension
+const loggedProcedure = procedure.use(async ({ ctx, next }) => {
+  console.log(`Processing message from ${ctx.topic}`);
+  const result = await next();
+  console.log(`Completed processing`);
+  return result;
+});
 
-Middleware can extend the context by passing updated context to `next()`:
-
-```typescript
-const metricsMiddleware = createMiddleware<AppContext>(
-  async ({ ctx, next }) => {
-    const start = Date.now();
-    const result = await next();
-    const duration = Date.now() - start;
-    metrics.recordDuration(ctx.topic, duration);
-    return result;
-  },
-);
-
-const userMiddleware = createMiddleware<AppContext>(
-  async ({ ctx, next }) => {
-    const user = await getUserFromMessage(ctx.input.message);
-    return next({ ctx: { user } });
-  },
-);
-```
-
-## Multiple Middleware
-
-Chain multiple middleware on the same procedure:
-
-```typescript
 const router = kafkaRouter({
-  "user-events": procedure
-    .input({ message: UserEventSchema })
-    .use(loggingMiddleware)
-    .use(metricsMiddleware)
-    .subscribe(({ input, ctx }) => {
-      // handle message
+  events: loggedProcedure
+    .input({ message: EventSchema })
+    .subscribe(({ input }) => {
+      // Logging middleware runs before/after this
     }),
 });
 ```
 
-Middleware executes in the order they're defined.
+## Context Extension
+
+Middleware can add properties to context:
+
+```typescript
+const authMiddleware = procedure.use(async ({ ctx, next }) => {
+  const user = await getUserFromMessage(ctx.message);
+  return next({ ctx: { user } });
+});
+
+const router = kafkaRouter({
+  "protected-events": authMiddleware
+    .input({ message: EventSchema })
+    .subscribe(({ input, ctx }) => {
+      // ctx.user is available and typed
+      console.log(`User: ${ctx.user.name}`);
+    }),
+});
+```
+
+## Reusable Middleware with createMiddleware
+
+```typescript
+import { createMiddleware } from "@alt-stack/kafka-core";
+
+interface AppContext {
+  logger: Logger;
+}
+
+const metricsMiddleware = createMiddleware<AppContext>()(async ({ ctx, next }) => {
+  const start = Date.now();
+  const result = await next();
+  const duration = Date.now() - start;
+  metrics.recordDuration(ctx.topic, duration);
+  return result;
+});
+```
+
+## Chaining Middleware
+
+```typescript
+const { procedure } = init<AppContext>();
+
+const protectedProcedure = procedure
+  .use(loggingMiddleware)
+  .use(authMiddleware)
+  .use(metricsMiddleware);
+
+// All three middleware run in order
+const router = kafkaRouter({
+  events: protectedProcedure
+    .input({ message: EventSchema })
+    .subscribe(({ input, ctx }) => {}),
+});
+```
+
+## Piping Middleware Builders
+
+```typescript
+const authChain = createMiddleware<AppContext>()
+  .pipe(validateSession)
+  .pipe(loadUser);
+
+// Use the chain
+const protectedProcedure = procedure.use(authChain);
+```
+
+---
+
+// File: kafka/core-concepts/producers
+
+# Producers
+
+Create type-safe Kafka producers using AsyncAPI-generated types.
+
+## Installation
+
+```bash
+# Core + KafkaJS binding
+pnpm add @alt-stack/kafka-core-client-core @alt-stack/kafka-core-client-kafkajs kafkajs zod
+
+# Or for WarpStream
+pnpm add @alt-stack/kafka-core-client-core @alt-stack/kafka-core-client-warpstream kafkajs zod
+```
+
+## Basic Setup
+
+Use types generated from your AsyncAPI spec with `zod-asyncapi`:
+
+```typescript
+// 1. Generate types from AsyncAPI spec
+// npx zod-asyncapi asyncapi.json -o ./generated-types.ts
+
+// 2. Import generated types
+import { Topics } from "./generated-types";
+import { createKafkaClient } from "@alt-stack/kafka-core-client-kafkajs";
+
+// 3. Create type-safe client
+const client = await createKafkaClient({
+  kafka: { brokers: ["localhost:9092"], clientId: "my-producer" },
+  topics: Topics,
+});
+
+// 4. Send messages with full type safety
+await client.send("user-events", {
+  userId: "user-123",
+  eventType: "created",
+  timestamp: Date.now(),
+});
+```
+
+## KafkaJS Client
+
+```typescript
+import { Topics } from "./generated-types";
+import { createKafkaClient } from "@alt-stack/kafka-core-client-kafkajs";
+
+const client = await createKafkaClient({
+  kafka: {
+    brokers: ["localhost:9092"],
+    clientId: "my-app",
+    ssl: true,
+    sasl: { mechanism: "plain", username: "user", password: "pass" },
+  },
+  topics: Topics,
+  producerConfig: {
+    allowAutoTopicCreation: false,
+  },
+  onError: (error) => console.error("Producer error:", error),
+});
+```
+
+## WarpStream Client
+
+Optimized for WarpStream with recommended defaults (LZ4 compression, extended timeouts):
+
+```typescript
+import { Topics } from "./generated-types";
+import { createWarpStreamClient } from "@alt-stack/kafka-core-client-warpstream";
+
+const client = await createWarpStreamClient({
+  bootstrapServer: "my-cluster.warpstream.com:9092",
+  topics: Topics,
+  clientId: "my-producer",
+});
+```
+
+## Type-Safe Sending
+
+```typescript
+// TypeScript enforces valid topics and message shapes
+await client.send("user-events", {
+  userId: "user-123",
+  eventType: "created",
+  timestamp: Date.now(),
+});
+
+// Type error: "invalid-topic" doesn't exist
+await client.send("invalid-topic", { data: "test" });
+
+// Type error: missing required field
+await client.send("user-events", { userId: "123" });
+```
+
+## Batch Sending
+
+```typescript
+await client.sendBatch("user-events", [
+  { userId: "user-1", eventType: "created", timestamp: Date.now() },
+  { userId: "user-2", eventType: "created", timestamp: Date.now() },
+  { userId: "user-1", eventType: "updated", timestamp: Date.now() },
+]);
+```
+
+## Send Options
+
+```typescript
+await client.send(
+  "user-events",
+  { userId: "123", eventType: "created", timestamp: Date.now() },
+  {
+    key: "user-123",              // Message key for partitioning
+    partition: 0,                 // Explicit partition
+    headers: { source: "api" },   // Custom headers
+    timestamp: Date.now().toString(),
+  }
+);
+```
+
+## Disconnecting
+
+```typescript
+await client.disconnect();
+```
+
+## Accessing Raw Producer
+
+For advanced use cases (transactions, producer events, etc.), access the underlying KafkaJS producer:
+
+```typescript
+// Access the raw kafkajs Producer
+const rawProducer = client.producer;
+
+// Use kafkajs features directly
+await rawProducer.send({
+  topic: "my-topic",
+  messages: [{ value: "raw message" }],
+  acks: -1,
+  timeout: 30000,
+});
+```
+
+## Error Handling
+
+```typescript
+import { ValidationError, SendError, ConnectionError } from "@alt-stack/kafka-core-client-kafkajs";
+
+try {
+  await client.send("user-events", invalidData);
+} catch (error) {
+  if (error instanceof ValidationError) {
+    console.error("Invalid message:", error.topic, error.details);
+  } else if (error instanceof SendError) {
+    console.error("Failed to send:", error.topic, error.cause);
+  } else if (error instanceof ConnectionError) {
+    console.error("Connection failed:", error.cause);
+  }
+}
+```
 
 ---
 
@@ -5167,97 +5163,104 @@ Middleware executes in the order they're defined.
 
 # Topics and Procedures
 
-Define Kafka topics and their message handlers with type-safe procedures.
+Define Kafka topics with type-safe message schemas using `kafkaRouter`.
 
 ## Basic Topic Definition
 
-Use the `topic` method to define a Kafka topic and its message schema:
-
 ```typescript
-import { createKafkaRouter } from "@alt-stack/kafka";
+import { init, kafkaRouter } from "@alt-stack/kafka-core";
 import { z } from "zod";
 
-const router = createKafkaRouter()
-  .topic("user-events", {
-    input: {
+const { procedure } = init();
+
+const router = kafkaRouter({
+  "user-events": procedure
+    .input({
       message: z.object({
         userId: z.string(),
         eventType: z.string(),
       }),
-    },
-  })
-  .handler((ctx) => {
-    // ctx.input is typed based on the schema (not ctx.input.message)
-    console.log(ctx.input.userId);
-  });
+    })
+    .subscribe(({ input }) => {
+      // input is the validated message
+      console.log(input.userId);
+    }),
+});
 ```
 
 ## Message Validation
 
-Messages are automatically validated against the schema before the handler is called:
+Messages are validated before the handler runs:
 
 ```typescript
-const router = createKafkaRouter()
-  .topic("orders", {
-    input: {
+const router = kafkaRouter({
+  orders: procedure
+    .input({
       message: z.object({
         orderId: z.string().uuid(),
         amount: z.number().positive(),
         currency: z.string().length(3),
       }),
-    },
-  })
-  .handler((ctx) => {
-    // Only called if message matches schema
-    // ctx.input is the parsed message (not ctx.input.message)
-    processOrder(ctx.input);
-  });
+    })
+    .subscribe(({ input }) => {
+      // Only called if message passes validation
+      processOrder(input);
+    }),
+});
 ```
 
 ## Multiple Topics
 
-Define multiple topics in a single router:
-
 ```typescript
-const router = createKafkaRouter()
-  .topic("user-events", {
-    input: {
-      message: UserEventSchema,
-    },
-  })
-  .handler(handleUserEvent)
-  .topic("order-events", {
-    input: {
-      message: OrderEventSchema,
-    },
-  })
-  .handler(handleOrderEvent);
+const router = kafkaRouter({
+  "user-events": procedure
+    .input({ message: UserEventSchema })
+    .subscribe(({ input }) => handleUserEvent(input)),
+
+  "order-events": procedure
+    .input({ message: OrderEventSchema })
+    .subscribe(({ input }) => handleOrderEvent(input)),
+});
 ```
 
 ## Output Validation
 
-Optionally validate handler output:
+Optionally validate handler return values:
 
 ```typescript
-const router = createKafkaRouter()
-  .topic("process-data", {
-    input: {
-      message: z.object({
-        data: z.string(),
-      }),
-    },
-    output: z.object({
-      processed: z.boolean(),
-      result: z.string(),
-    }),
-  })
-  .handler((ctx) => {
-    // ctx.input is the parsed message
-    return {
+const router = kafkaRouter({
+  "process-data": procedure
+    .input({
+      message: z.object({ data: z.string() }),
+    })
+    .output(
+      z.object({
+        processed: z.boolean(),
+        result: z.string(),
+      })
+    )
+    .subscribe(({ input }) => ({
       processed: true,
-      result: ctx.input.data.toUpperCase(),
-    };
-  });
+      result: input.data.toUpperCase(),
+    })),
+});
+```
+
+## subscribe vs handler
+
+- `.subscribe()` - Use in `kafkaRouter({})` config (topic determined by key)
+- `.handler()` - Creates a pending procedure for manual registration
+
+```typescript
+// Using subscribe (recommended)
+const router = kafkaRouter({
+  "my-topic": procedure.input({ message: Schema }).subscribe(({ input }) => {}),
+});
+
+// Using handler for manual registration
+const pendingProc = procedure.input({ message: Schema }).handler(({ input }) => {});
+const router = createKafkaRouter();
+router.registerPendingProcedure("my-topic", pendingProc);
 ```
 
 ---
@@ -5266,21 +5269,14 @@ const router = createKafkaRouter()
 
 # Installation
 
-Install the Kafka consumer framework and its peer dependencies:
-
 ```bash
-pnpm add @alt-stack/kafka kafkajs zod
-# or
-npm install @alt-stack/kafka kafkajs zod
-# or
-yarn add @alt-stack/kafka kafkajs zod
+pnpm add @alt-stack/kafka-core kafkajs zod
 ```
 
 ## Peer Dependencies
 
-The framework requires:
-- **kafkajs**: `^2.0.0` - The underlying Kafka client library
-- **zod**: `^4.0.0` - For schema validation and type inference
+- **kafkajs**: `^2.0.0` - Kafka client
+- **zod**: `^3.25.0` - Schema validation
 
 ---
 
@@ -5288,49 +5284,74 @@ The framework requires:
 
 # Quickstart
 
-Get started with a simple example that demonstrates the core concepts.
-
-## Basic Example
+## Consumer
 
 ```typescript
-import { createKafkaRouter, createConsumer } from "@alt-stack/kafka";
+import { init, kafkaRouter, createConsumer } from "@alt-stack/kafka-core";
 import { Kafka } from "kafkajs";
 import { z } from "zod";
 
-// Define message schema
 const UserEventSchema = z.object({
   userId: z.string(),
   eventType: z.enum(["created", "updated", "deleted"]),
   timestamp: z.number(),
 });
 
-// Create router
-const router = createKafkaRouter()
-  .topic("user-events", {
-    input: {
-      message: UserEventSchema,
-    },
-  })
-  .handler((ctx) => {
-    // ctx.input is typed based on UserEventSchema
-    console.log(`Processing ${ctx.input.eventType} for user ${ctx.input.userId}`);
-  });
+const { procedure } = init();
 
-// Create consumer (automatically starts consuming messages)
+const router = kafkaRouter({
+  "user-events": procedure
+    .input({ message: UserEventSchema })
+    .subscribe(({ input, ctx }) => {
+      console.log(`Event: ${input.eventType} for user ${input.userId}`);
+    }),
+});
+
 const consumer = await createConsumer(router, {
   kafka: new Kafka({
-    clientId: "my-app",
+    clientId: "my-consumer",
     brokers: ["localhost:9092"],
   }),
   groupId: "my-consumer-group",
 });
-
-// Consumer is now running and processing messages automatically
-// Messages are validated and routed to the appropriate handlers
 ```
 
-This example shows:
-- Type-safe topic definitions with Zod schemas
-- Automatic message validation
-- Type inference in handlers
-- Simple consumer setup
+## Producer (using Kafka Client)
+
+For producers, use the Kafka client packages with AsyncAPI-generated types:
+
+```typescript
+// 1. Generate types: npx zod-asyncapi asyncapi.json -o ./generated-types.ts
+import { Topics } from "./generated-types";
+import { createKafkaClient } from "@alt-stack/kafka-core-client-kafkajs";
+
+const client = await createKafkaClient({
+  kafka: { brokers: ["localhost:9092"], clientId: "my-producer" },
+  topics: Topics,
+});
+
+// Type-safe sending
+await client.send("user-events", {
+  userId: "user-123",
+  eventType: "created",
+  timestamp: Date.now(),
+});
+```
+
+Or with WarpStream:
+
+```typescript
+import { Topics } from "./generated-types";
+import { createWarpStreamClient } from "@alt-stack/kafka-core-client-warpstream";
+
+const client = await createWarpStreamClient({
+  bootstrapServer: "my-cluster.warpstream.com:9092",
+  topics: Topics,
+});
+
+await client.send("user-events", {
+  userId: "user-123",
+  eventType: "created",
+  timestamp: Date.now(),
+});
+```

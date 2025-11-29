@@ -46,7 +46,7 @@ const router = kafkaRouter({
 ## Reusable Middleware with createMiddleware
 
 ```typescript
-import { createMiddleware } from "@alt-stack/kafka";
+import { createMiddleware } from "@alt-stack/kafka-core";
 
 interface AppContext {
   logger: Logger;
