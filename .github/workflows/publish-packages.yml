@@ -488,7 +488,8 @@ jobs:
               }
               
               console.log(`Building ${result.name}...`);
-              execSync('pnpm --filter "' + result.name + '" build', {
+              // Use turbo to build with dependencies (respects ^build in turbo.json)
+              execSync('pnpm turbo run build --filter="' + result.name + '"', {
                 stdio: 'inherit'
               });
               console.log(`✓ Successfully built ${result.name}`);
