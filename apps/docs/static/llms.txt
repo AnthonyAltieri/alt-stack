@@ -9,7 +9,7 @@ Learn how to use the API client for making type-safe requests.
 Use `createApiClient` to create a client instance:
 
 ```typescript
-import { createApiClient } from "@alt-stack/client";
+import { createApiClient } from "@alt-stack/http-client-fetch";
 import { Request, Response } from "./generated-types.js";
 
 const client = createApiClient({
@@ -85,6 +85,7 @@ if (result.success) {
   // Type-safe access to response body
   console.log(result.body);
   console.log(result.code); // Status code string, e.g., "200"
+  console.log(result.raw); // Raw Response object for advanced use
 } else {
   // Handle error - check if it's a defined error or unexpected
   if (typeof result.code === "string") {
@@ -210,7 +211,7 @@ import {
   UnexpectedApiClientError,
   TimeoutError,
   ApiClientError,
-} from "@alt-stack/client";
+} from "@alt-stack/http-client-fetch";
 
 try {
   await client.get("/users/{id}", {
@@ -352,7 +353,7 @@ const result = await client.post("/users", {
 If validation fails, the client throws a `ValidationError`:
 
 ```typescript
-import { ValidationError } from "@alt-stack/client";
+import { ValidationError } from "@alt-stack/http-client-fetch";
 
 try {
   await client.get("/users/{id}", {
@@ -411,8 +412,18 @@ If the response doesn't match the expected schema, an error is returned in the r
 
 # Installation
 
+Choose the HTTP client binding that fits your needs:
+
+## Using Native Fetch
+
 ```bash
-pnpm add @alt-stack/client zod
+pnpm add @alt-stack/http-client-fetch zod
+```
+
+## Using Ky
+
+```bash
+pnpm add @alt-stack/http-client-ky zod
 ```
 
 ## Peer Dependencies
@@ -423,6 +434,13 @@ pnpm add @alt-stack/client zod
 
 1. A server built with `@alt-stack/server-hono` that exposes an OpenAPI spec
 2. Generated `Request` and `Response` types from the OpenAPI spec (see [Server Integration](../guides/server-integration))
+
+## Package Comparison
+
+| Package | Description | Best For |
+|---------|-------------|----------|
+| `@alt-stack/http-client-fetch` | Native fetch API | Simple use cases, browser/Node.js |
+| `@alt-stack/http-client-ky` | Ky library | Advanced features like hooks, pre-configured instances |
 
 ---
 
@@ -475,7 +493,7 @@ Then generate Request and Response types from the OpenAPI spec (see [Server Inte
 
 ```typescript
 // client.ts
-import { createApiClient } from "@alt-stack/client";
+import { createApiClient } from "@alt-stack/http-client-fetch";
 import { Request, Response } from "./generated-types.js";
 
 const client = createApiClient({
@@ -493,6 +511,8 @@ if (result.success) {
   // TypeScript knows the shape of result.body
   console.log(result.body.name); // ✅ Type-safe
   console.log(result.body.email); // ✅ Type-safe
+  // Access raw Response if needed
+  console.log(result.raw.headers.get("x-request-id"));
 } else {
   // Handle error
   console.error(result.error);
@@ -506,6 +526,7 @@ if (result.success) {
 - **Error handling**: Typed error responses
 - **Retry logic**: Built-in exponential backoff for failed requests
 - **Path interpolation**: Automatic handling of path parameters
+- **Raw response access**: Access underlying Response/KyResponse for advanced use cases
 
 ---
 
@@ -636,7 +657,7 @@ Now create the client using the generated types:
 
 ```typescript
 // client.ts
-import { createApiClient } from "@alt-stack/client";
+import { createApiClient } from "@alt-stack/http-client-fetch";
 import { Request, Response } from "./generated-types.js";
 
 const client = createApiClient({
@@ -4318,9 +4339,10 @@ Altstack's server framework is split into a core package and framework-specific 
 
 - **`@alt-stack/server-express`**: [Express](https://expressjs.com/) adapter - creates an Express app with the same type-safe API.
 
-### Client Package
+### Client Packages
 
-- **`@alt-stack/client`**: A type-safe API client that works seamlessly with server-generated types
+- **`@alt-stack/http-client-fetch`**: Type-safe API client using native fetch
+- **`@alt-stack/http-client-ky`**: Type-safe API client using ky library
 
 ## Choosing an Adapter
 
@@ -5164,6 +5186,948 @@ await client.send("user-events", {
   userId: "user-123",
   eventType: "created",
   timestamp: Date.now(),
+});
+```
+
+---
+
+// File: real-life/auth-service
+
+# Auth Service
+
+The authentication service handles user registration, login, and session management.
+
+## Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/signup` | Register new user |
+| POST | `/api/login` | Authenticate user |
+| POST | `/api/logout` | Invalidate session |
+| GET | `/api/me` | Get current user |
+| GET | `/api/validate` | Validate token (internal) |
+
+## Implementation
+
+```typescript title="apps/backend-auth/src/index.ts"
+import { createDocsRouter, createServer, init, router } from "@alt-stack/server-hono";
+import { z } from "zod";
+
+const UserSchema = z.object({
+  id: z.string(),
+  email: z.string().email(),
+  name: z.string(),
+});
+
+const SessionSchema = z.object({
+  token: z.string(),
+  userId: z.string(),
+  expiresAt: z.string().datetime(),
+});
+
+const factory = init();
+const publicProc = factory.procedure;
+
+const authRouter = router({
+  "/signup": publicProc
+    .input({
+      body: z.object({
+        email: z.string().email(),
+        password: z.string().min(8),
+        name: z.string().min(1),
+      }),
+    })
+    .output(z.object({ user: UserSchema, session: SessionSchema }))
+    .errors({
+      409: z.object({ error: z.object({ code: z.literal("EMAIL_EXISTS"), message: z.string() }) }),
+    })
+    .post(({ input, ctx }) => {
+      // Check if email exists, create user, create session
+      // ...
+    }),
+
+  "/login": publicProc
+    .input({
+      body: z.object({
+        email: z.string().email(),
+        password: z.string(),
+      }),
+    })
+    .output(z.object({ user: UserSchema, session: SessionSchema }))
+    .errors({
+      401: z.object({ error: z.object({ code: z.literal("INVALID_CREDENTIALS"), message: z.string() }) }),
+    })
+    .post(({ input, ctx }) => {
+      // Verify credentials, create session
+      // ...
+    }),
+
+  // Internal endpoint for other services to validate tokens
+  "/validate": publicProc
+    .input({ headers: z.object({ authorization: z.string() }) })
+    .output(z.object({ valid: z.boolean(), userId: z.string().optional() }))
+    .get(({ input }) => {
+      const token = input.headers.authorization.replace("Bearer ", "");
+      const session = sessions.get(token);
+      if (!session || session.expiresAt < new Date()) {
+        return { valid: false };
+      }
+      return { valid: true, userId: session.userId };
+    }),
+});
+```
+
+## Token Validation Endpoint
+
+The `/validate` endpoint is designed for service-to-service communication. Other services can call it to verify tokens without implementing token parsing themselves.
+
+```typescript
+// In backend-logic
+async function validateToken(token: string): Promise<string | null> {
+  const res = await ky.get(`${AUTH_SERVICE_URL}/api/validate`, {
+    headers: { authorization: token },
+  }).json<{ valid: boolean; userId?: string }>();
+  
+  return res.valid ? (res.userId ?? null) : null;
+}
+```
+
+## Generating the OpenAPI Spec
+
+```typescript title="apps/backend-auth/src/generate-spec.ts"
+import { writeFileSync } from "fs";
+import { generateOpenAPISpec } from "@alt-stack/server-hono";
+import { authRouter } from "./index.js";
+
+const spec = generateOpenAPISpec({ api: authRouter }, {
+  title: "Auth API",
+  version: "1.0.0",
+});
+
+writeFileSync("openapi.json", JSON.stringify(spec, null, 2));
+```
+
+Run with:
+```bash
+pnpm --filter @real-life/backend-auth generate
+```
+
+---
+
+// File: real-life/frontend
+
+# Frontend
+
+NextJS app consuming both backend services via generated SDKs.
+
+## API Client
+
+The frontend uses `@alt-stack/http-client-ky` for type-safe HTTP requests with SDK schemas:
+
+```typescript title="apps/web/src/lib/api.ts"
+import { createApiClient } from "@alt-stack/http-client-ky";
+import {
+  Request as AuthRequest,
+  Response as AuthResponse,
+} from "@real-life/backend-auth-sdk";
+import {
+  Request as LogicRequest,
+  Response as LogicResponse,
+} from "@real-life/backend-logic-sdk";
+
+const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_URL || "http://localhost:3001";
+const LOGIC_URL = process.env.NEXT_PUBLIC_LOGIC_URL || "http://localhost:3002";
+
+// Create type-safe clients
+export function createAuthClient(token?: string) {
+  return createApiClient({
+    baseUrl: AUTH_URL,
+    Request: AuthRequest,
+    Response: AuthResponse,
+    headers: token ? { authorization: `Bearer ${token}` } : undefined,
+  });
+}
+
+export function createLogicClient(token?: string) {
+  return createApiClient({
+    baseUrl: LOGIC_URL,
+    Request: LogicRequest,
+    Response: LogicResponse,
+    headers: token ? { authorization: `Bearer ${token}` } : undefined,
+  });
+}
+
+// Auth API
+export const authApi = {
+  async login(data: { email: string; password: string }) {
+    const client = createAuthClient();
+    const result = await client.post("/api/login", { body: data });
+    if (!result.success) throw new Error("Login failed");
+    return result.body;
+  },
+
+  async me(token: string) {
+    const client = createAuthClient(token);
+    const result = await client.get("/api/me", {});
+    if (!result.success) throw new Error("Failed to get user");
+    return result.body;
+  },
+};
+
+// Logic API
+export const logicApi = {
+  async listTasks(token?: string) {
+    const client = createLogicClient(token);
+    const result = await client.get("/api/", {});
+    if (!result.success) throw new Error("Failed to list tasks");
+    return result.body;
+  },
+
+  async createTask(token: string, data: { title: string }) {
+    const client = createLogicClient(token);
+    const result = await client.post("/api/", { body: data });
+    if (!result.success) throw new Error("Failed to create task");
+    return result.body;
+  },
+};
+```
+
+## Type Safety
+
+The `http-client-ky` client provides full type inference from the SDK's `Request` and `Response` objects:
+
+```typescript
+const client = createLogicClient(token);
+
+// TypeScript knows:
+// - Valid endpoints: "/api/", "/api/{id}"
+// - Required params/body for each endpoint
+// - Response body type for each status code
+const result = await client.get("/api/", {});
+
+if (result.success) {
+  // result.body is typed as Task[]
+  result.body.forEach(task => {
+    console.log(task.title);  // ✅ TypeScript knows this exists
+    console.log(task.status); // ✅ "pending" | "in_progress" | "completed"
+  });
+} else {
+  // result.error is typed based on the error response schema
+  console.error(result.error);
+}
+```
+
+## React Component
+
+```typescript title="apps/web/src/app/page.tsx"
+"use client";
+
+import { useState, useEffect } from "react";
+import { authApi, logicApi } from "@/lib/api";
+import type { z } from "zod";
+import type { TaskSchema } from "@real-life/backend-logic-sdk";
+
+type Task = z.infer<typeof TaskSchema>;
+
+export default function Home() {
+  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<{ id: string; email: string; name: string } | null>(null);
+  const [tasks, setTasks] = useState<Task[]>([]);
+
+  // Load token from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem("auth_token");
+    if (saved) setToken(saved);
+  }, []);
+
+  // Fetch user and tasks when token changes
+  useEffect(() => {
+    if (!token) return;
+    authApi.me(token).then(setUser).catch(() => setToken(null));
+    logicApi.listTasks(token).then(setTasks);
+  }, [token]);
+
+  const handleLogin = async (email: string, password: string) => {
+    const result = await authApi.login({ email, password });
+    localStorage.setItem("auth_token", result.session.token);
+    setToken(result.session.token);
+  };
+
+  const handleCreateTask = async (title: string) => {
+    if (!token) return;
+    const task = await logicApi.createTask(token, { title });
+    setTasks([...tasks, task]);
+  };
+
+  // ... render UI
+}
+```
+
+## NextJS Configuration
+
+Configure transpilation for workspace packages:
+
+```javascript title="apps/web/next.config.js"
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  transpilePackages: [
+    "@real-life/backend-auth-sdk",
+    "@real-life/backend-logic-sdk",
+  ],
+};
+
+module.exports = nextConfig;
+```
+
+---
+
+// File: real-life/index
+
+# Real Life Example
+
+A complete example showing how to use all Alt-stack packages together in a production-like setup.
+
+## Overview
+
+This example demonstrates a task management system with:
+
+- **2 Backend Services** (Hono): Authentication and business logic
+- **Background Workers** (WarpStream): Notifications and report generation
+- **NextJS Frontend**: Consumes both services via generated SDKs
+- **Type-safe SDKs**: Generated from OpenAPI/AsyncAPI specs
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                          NextJS Web App                          │
+│              (uses http-client-ky + generated SDKs)              │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+                    ┌───────────┴───────────┐
+                    │                       │
+                    ▼                       ▼
+        ┌───────────────────┐   ┌───────────────────┐
+        │   backend-auth    │   │   backend-logic   │
+        │   (Hono server)   │   │   (Hono server)   │
+        │                   │   │                   │
+        │ - POST /signup    │◄──│ validates tokens  │
+        │ - POST /login     │   │                   │
+        │ - POST /logout    │   │ - GET/POST /tasks │
+        │ - GET /me         │   │ - PUT/DELETE /{id}│
+        │ - GET /validate   │   │                   │
+        └───────────────────┘   └─────────┬─────────┘
+                                          │
+                                          │ triggers jobs
+                                          ▼
+                                ┌───────────────────┐
+                                │     WarpStream    │
+                                │     Workers       │
+                                │                   │
+                                │ - send-notification│
+                                │ - generate-report │
+                                └───────────────────┘
+```
+
+## What You'll Learn
+
+| Topic | Description |
+|-------|-------------|
+| [Project Structure](./project-structure) | Monorepo layout and package organization |
+| [Auth Service](./auth-service) | Building the authentication service |
+| [Logic Service](./logic-service) | Business logic with auth integration |
+| [Workers](./workers) | Background job processing with WarpStream |
+| [Frontend](./frontend) | NextJS app with SDK consumption |
+| [SDK Generation](./sdk-generation) | Generating and using type-safe SDKs |
+
+## Quick Start
+
+```bash
+# Clone and navigate to example
+cd examples/real-life
+
+# Install dependencies
+pnpm install
+
+# Generate SDKs
+pnpm generate:all
+
+# Start all services (in separate terminals)
+pnpm --filter @real-life/backend-auth dev   # Port 3001
+pnpm --filter @real-life/backend-logic dev  # Port 3002
+pnpm --filter @real-life/workers dev
+pnpm --filter @real-life/web dev            # Port 3000
+```
+
+## Technologies Used
+
+| Package | Technology | Purpose |
+|---------|------------|---------|
+| `@alt-stack/server-hono` | Hono | Type-safe HTTP servers |
+| `@alt-stack/workers-warpstream` | WarpStream/Kafka | Background job processing |
+| `@alt-stack/workers-client-warpstream` | WarpStream/Kafka | Job triggering |
+| `@alt-stack/zod-openapi` | OpenAPI | REST API SDK generation |
+| `@alt-stack/zod-asyncapi` | AsyncAPI | Worker SDK generation |
+| `@alt-stack/http-client-ky` | ky | Type-safe HTTP client with SDK integration |
+| `Next.js` | React | Frontend framework |
+
+---
+
+// File: real-life/logic-service
+
+# Logic Service
+
+The business logic service handles task management and triggers background workers.
+
+## Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/` | List all tasks |
+| POST | `/api/` | Create task (auth required) |
+| GET | `/api/{id}` | Get task by ID |
+| PUT | `/api/{id}` | Update task (auth required) |
+| DELETE | `/api/{id}` | Delete task (auth required) |
+
+## Auth Integration
+
+The service validates tokens by calling the auth service:
+
+```typescript
+const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL || "http://localhost:3001";
+
+async function validateToken(token: string): Promise<string | null> {
+  try {
+    const res = await ky.get(`${AUTH_SERVICE_URL}/api/validate`, {
+      headers: { authorization: token },
+    }).json<{ valid: boolean; userId?: string }>();
+    return res.valid ? (res.userId ?? null) : null;
+  } catch {
+    return null;
+  }
+}
+
+// Context creation
+async function createContext(c: Context): Promise<AppContext> {
+  const auth = c.req.header("Authorization");
+  const userId = auth ? await validateToken(auth) : null;
+  return { userId };
+}
+```
+
+## Protected Procedures
+
+```typescript
+interface AppContext {
+  userId: string | null;
+}
+
+const factory = init<AppContext>();
+
+const protectedProc = factory.procedure
+  .errors({
+    401: z.object({ error: z.object({ code: z.literal("UNAUTHORIZED"), message: z.string() }) }),
+  })
+  .use(async ({ ctx, next }) => {
+    if (!ctx.userId) {
+      throw ctx.error({ error: { code: "UNAUTHORIZED", message: "Authentication required" } });
+    }
+    return next({ ctx: { userId: ctx.userId } });
+  });
+```
+
+## Worker Triggers
+
+When tasks are created or completed, the service triggers background workers:
+
+```typescript
+import { createWarpStreamClient } from "@alt-stack/workers-client-warpstream";
+import { Topics } from "@real-life/workers-sdk";
+
+const workerClient = await createWarpStreamClient({
+  bootstrapServer: WARPSTREAM_URL,
+  jobs: Topics,
+});
+
+// In create task handler
+await workerClient.trigger("send-notification", {
+  type: "task_created",
+  userId: ctx.userId,
+  taskId: id,
+  taskTitle: input.body.title,
+});
+
+// In update task handler (when completed)
+if (!wasCompleted && nowCompleted) {
+  await workerClient.trigger("generate-report", {
+    taskId: task.id,
+    userId: ctx.userId,
+    completedAt: task.updatedAt.toISOString(),
+  });
+}
+```
+
+## Full Router
+
+```typescript
+const taskRouter = router<AppContext>({
+  "/": {
+    get: factory.procedure
+      .output(z.array(TaskSchema))
+      .handler(() => Array.from(tasks.values())),
+
+    post: protectedProc
+      .input({
+        body: z.object({
+          title: z.string().min(1).max(200),
+          description: z.string().max(1000).optional(),
+        }),
+      })
+      .output(TaskSchema)
+      .handler(async ({ input, ctx }) => {
+        const task = createTask(input.body, ctx.userId);
+        await workerClient.trigger("send-notification", { ... });
+        return task;
+      }),
+  },
+
+  "{id}": {
+    get: factory.procedure
+      .input({ params: z.object({ id: z.string().uuid() }) })
+      .output(TaskSchema)
+      .errors({ 404: NotFoundError })
+      .handler(({ input, ctx }) => {
+        const task = tasks.get(input.params.id);
+        if (!task) throw ctx.error({ error: { code: "NOT_FOUND", message: "Task not found" } });
+        return task;
+      }),
+
+    put: protectedProc
+      .input({
+        params: z.object({ id: z.string().uuid() }),
+        body: z.object({
+          title: z.string().optional(),
+          status: z.enum(["pending", "in_progress", "completed"]).optional(),
+        }),
+      })
+      .output(TaskSchema)
+      .errors({ 404: NotFoundError, 403: ForbiddenError })
+      .handler(async ({ input, ctx }) => {
+        // Update task, trigger report if completed
+        // ...
+      }),
+
+    delete: protectedProc
+      .input({ params: z.object({ id: z.string().uuid() }) })
+      .output(z.object({ success: z.boolean() }))
+      .errors({ 404: NotFoundError, 403: ForbiddenError })
+      .handler(({ input, ctx }) => {
+        // Delete task
+        // ...
+      }),
+  },
+});
+```
+
+---
+
+// File: real-life/project-structure
+
+# Project Structure
+
+The real-life example is organized as a pnpm monorepo with apps and packages.
+
+## Directory Layout
+
+```
+examples/real-life/
+├── package.json           # Workspace root
+├── pnpm-workspace.yaml    # Workspace config
+├── apps/
+│   ├── backend-auth/      # Auth service (Hono)
+│   │   ├── src/
+│   │   │   ├── index.ts          # Server entry
+│   │   │   └── generate-spec.ts  # OpenAPI generator
+│   │   ├── openapi.json          # Generated spec
+│   │   └── package.json
+│   │
+│   ├── backend-logic/     # Business logic service (Hono)
+│   │   ├── src/
+│   │   │   ├── index.ts
+│   │   │   └── generate-spec.ts
+│   │   ├── openapi.json
+│   │   └── package.json
+│   │
+│   ├── workers/           # Background workers (WarpStream)
+│   │   ├── src/
+│   │   │   ├── index.ts
+│   │   │   └── generate-spec.ts
+│   │   ├── asyncapi.json
+│   │   └── package.json
+│   │
+│   └── web/               # NextJS frontend
+│       ├── src/
+│       │   ├── app/
+│       │   └── lib/api.ts
+│       └── package.json
+│
+└── packages/
+    ├── backend-auth-sdk/  # Generated OpenAPI SDK
+    ├── backend-logic-sdk/ # Generated OpenAPI SDK
+    └── workers-sdk/       # Generated AsyncAPI SDK
+```
+
+## Package Dependencies
+
+```
+@real-life/web
+├── @real-life/backend-auth-sdk
+├── @real-life/backend-logic-sdk
+└── ky
+
+@real-life/backend-logic
+├── @alt-stack/server-hono
+├── @alt-stack/workers-client-warpstream
+├── @real-life/workers-sdk
+└── ky (for calling backend-auth)
+
+@real-life/backend-auth
+└── @alt-stack/server-hono
+
+@real-life/workers
+└── @alt-stack/workers-warpstream
+```
+
+## Workspace Configuration
+
+```yaml title="pnpm-workspace.yaml"
+packages:
+  - "apps/*"
+  - "packages/*"
+```
+
+## Scripts
+
+```json title="package.json"
+{
+  "scripts": {
+    "dev": "pnpm -r run dev",
+    "build": "pnpm -r run build",
+    "generate:all": "pnpm -r run generate"
+  }
+}
+```
+
+Each app has a `generate` script that:
+1. Runs `generate-spec.ts` to create the JSON spec
+2. Runs the corresponding SDK package's `generate` script
+
+```json title="apps/backend-auth/package.json"
+{
+  "scripts": {
+    "generate": "tsx src/generate-spec.ts && pnpm --filter @real-life/backend-auth-sdk generate"
+  }
+}
+```
+
+---
+
+// File: real-life/sdk-generation
+
+# SDK Generation
+
+Type-safe SDKs are generated from OpenAPI and AsyncAPI specs.
+
+## Generation Flow
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│ 1. Define routes with Zod schemas                                │
+│    └── router({ "/users": procedure.output(UserSchema).get(...) })│
+└───────────────────────────────┬──────────────────────────────────┘
+                                │
+                                ▼
+┌──────────────────────────────────────────────────────────────────┐
+│ 2. Generate spec file                                            │
+│    └── generateOpenAPISpec({ api: router }) → openapi.json       │
+└───────────────────────────────┬──────────────────────────────────┘
+                                │
+                                ▼
+┌──────────────────────────────────────────────────────────────────┐
+│ 3. Generate SDK from spec                                        │
+│    └── zod-openapi openapi.json -o src/index.ts                  │
+└───────────────────────────────┬──────────────────────────────────┘
+                                │
+                                ▼
+┌──────────────────────────────────────────────────────────────────┐
+│ 4. SDK exports Zod schemas + Request/Response types              │
+│    └── import { UserSchema, Request, Response } from "sdk"       │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+## OpenAPI SDK (REST APIs)
+
+### Generate Spec Script
+
+```typescript title="apps/backend-auth/src/generate-spec.ts"
+import { writeFileSync } from "fs";
+import { generateOpenAPISpec } from "@alt-stack/server-hono";
+import { authRouter } from "./index.js";
+
+const spec = generateOpenAPISpec({ api: authRouter }, {
+  title: "Auth API",
+  version: "1.0.0",
+});
+
+writeFileSync("openapi.json", JSON.stringify(spec, null, 2));
+```
+
+### SDK Package
+
+```json title="packages/backend-auth-sdk/package.json"
+{
+  "name": "@real-life/backend-auth-sdk",
+  "scripts": {
+    "generate": "zod-openapi ../../apps/backend-auth/openapi.json -o src/index.ts"
+  },
+  "devDependencies": {
+    "@alt-stack/zod-openapi": "workspace:*"
+  }
+}
+```
+
+### Generated Output
+
+```typescript title="packages/backend-auth-sdk/src/index.ts (generated)"
+import { z } from "zod";
+
+export const UserSchema = z.object({
+  id: z.string(),
+  email: z.string().email(),
+  name: z.string(),
+});
+export type User = z.infer<typeof UserSchema>;
+
+export const Request = {
+  "/api/signup": {
+    POST: {
+      body: z.object({
+        email: z.string().email(),
+        password: z.string().min(8),
+        name: z.string().min(1),
+      }),
+    },
+  },
+  // ...
+} as const;
+
+export const Response = {
+  "/api/signup": {
+    POST: {
+      "200": z.object({ user: UserSchema, session: SessionSchema }),
+      "409": z.object({ error: z.object({ code: z.literal("EMAIL_EXISTS"), message: z.string() }) }),
+    },
+  },
+  // ...
+} as const;
+```
+
+## AsyncAPI SDK (Workers)
+
+### Generate Spec Script
+
+```typescript title="apps/workers/src/generate-spec.ts"
+import { writeFileSync } from "fs";
+import { generateAsyncAPISpec } from "@alt-stack/workers-warpstream";
+import { jobRouter } from "./index.js";
+
+const spec = generateAsyncAPISpec(jobRouter, {
+  title: "Real Life Workers",
+  version: "1.0.0",
+});
+
+writeFileSync("asyncapi.json", JSON.stringify(spec, null, 2));
+```
+
+### SDK Package
+
+```json title="packages/workers-sdk/package.json"
+{
+  "name": "@real-life/workers-sdk",
+  "scripts": {
+    "generate": "zod-asyncapi ../../apps/workers/asyncapi.json -o src/index.ts"
+  },
+  "devDependencies": {
+    "@alt-stack/zod-asyncapi": "workspace:*"
+  }
+}
+```
+
+### Generated Output
+
+```typescript title="packages/workers-sdk/src/index.ts (generated)"
+import { z } from "zod";
+
+export const SendNotificationPayloadSchema = z.object({
+  type: z.enum(["task_created", "task_completed", "task_assigned"]),
+  userId: z.string(),
+  taskId: z.string(),
+  taskTitle: z.string(),
+});
+
+export const Topics = {
+  "send-notification": SendNotificationPayloadSchema,
+  "generate-report": GenerateReportPayloadSchema,
+} as const;
+
+export type TopicName = keyof typeof Topics;
+export type MessageType<T extends TopicName> = z.infer<typeof Topics[T]>;
+```
+
+## Running Generation
+
+```bash
+# Generate all specs and SDKs
+pnpm generate:all
+
+# Or individually
+pnpm --filter @real-life/backend-auth generate
+pnpm --filter @real-life/backend-logic generate
+pnpm --filter @real-life/workers generate
+```
+
+## CI/CD Integration
+
+See [CI/CD SDK Generation](/guides/ci-cd-sdk-generation) for automating SDK generation in GitHub Actions.
+
+---
+
+// File: real-life/workers
+
+# Workers
+
+Background job processing using WarpStream (Kafka-compatible).
+
+## Job Definitions
+
+```typescript title="apps/workers/src/index.ts"
+import { createWorker, init, router } from "@alt-stack/workers-warpstream";
+import { z } from "zod";
+
+const { procedure } = init();
+
+export const jobRouter = router({
+  "send-notification": procedure
+    .input({
+      payload: z.object({
+        type: z.enum(["task_created", "task_completed", "task_assigned"]),
+        userId: z.string(),
+        taskId: z.string(),
+        taskTitle: z.string(),
+      }),
+    })
+    .task(async ({ input }) => {
+      console.log(`[Notification] ${input.type} for user ${input.userId}`);
+      // Send email, push notification, etc.
+    }),
+
+  "generate-report": procedure
+    .input({
+      payload: z.object({
+        taskId: z.string(),
+        userId: z.string(),
+        completedAt: z.string().datetime(),
+      }),
+    })
+    .task(async ({ input }) => {
+      console.log(`[Report] Generating report for task ${input.taskId}`);
+      // Generate PDF, store in S3, etc.
+    }),
+});
+```
+
+## Starting the Worker
+
+```typescript
+const worker = await createWorker(jobRouter, {
+  kafka: { brokers: [WARPSTREAM_URL] },
+  groupId: GROUP_ID,
+});
+
+console.log("Workers running, waiting for jobs...");
+
+// Graceful shutdown
+process.on("SIGINT", async () => {
+  await worker.disconnect();
+  process.exit(0);
+});
+
+await new Promise(() => {});
+```
+
+## Generating the AsyncAPI Spec
+
+```typescript title="apps/workers/src/generate-spec.ts"
+import { writeFileSync } from "fs";
+import { generateAsyncAPISpec } from "@alt-stack/workers-warpstream";
+import { jobRouter } from "./index.js";
+
+const spec = generateAsyncAPISpec(jobRouter, {
+  title: "Real Life Workers",
+  version: "1.0.0",
+});
+
+writeFileSync("asyncapi.json", JSON.stringify(spec, null, 2));
+```
+
+## SDK Generation
+
+The generated SDK exports a `Topics` object for type-safe job triggering:
+
+```typescript title="packages/workers-sdk/src/index.ts (generated)"
+import { z } from "zod";
+
+export const SendNotificationPayloadSchema = z.object({
+  type: z.enum(["task_created", "task_completed", "task_assigned"]),
+  userId: z.string(),
+  taskId: z.string(),
+  taskTitle: z.string(),
+});
+
+export const GenerateReportPayloadSchema = z.object({
+  taskId: z.string(),
+  userId: z.string(),
+  completedAt: z.string(),
+});
+
+export const Topics = {
+  "send-notification": SendNotificationPayloadSchema,
+  "generate-report": GenerateReportPayloadSchema,
+} as const;
+```
+
+## Consuming the SDK
+
+```typescript
+import { createWarpStreamClient } from "@alt-stack/workers-client-warpstream";
+import { Topics } from "@real-life/workers-sdk";
+
+const client = await createWarpStreamClient({
+  bootstrapServer: "warpstream.example.com:9092",
+  jobs: Topics,
+});
+
+// Type-safe: TypeScript knows the payload shape
+await client.trigger("send-notification", {
+  type: "task_created",  // ✅ Must be valid enum value
+  userId: "user-123",
+  taskId: "task-456",
+  taskTitle: "My Task",
+});
+
+// ❌ TypeScript error: invalid payload
+await client.trigger("send-notification", {
+  invalid: "field",
 });
 ```
 

@@ -117,3 +117,4 @@ jobs:
           echo "Run: npx zod-asyncapi ${{ env.ASYNCAPI_FILE }} -o ${{ env.OUTPUT_PATH }}"
           exit 1
 
+

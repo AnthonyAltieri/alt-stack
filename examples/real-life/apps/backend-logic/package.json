@@ -1,0 +1,25 @@
+{
+  "name": "@real-life/backend-logic",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "generate": "tsx src/generate-spec.ts && pnpm --filter @real-life/backend-logic-sdk generate"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.0.0",
+    "@alt-stack/server-hono": "^0.0.1",
+    "@alt-stack/workers-client-warpstream": "^0.1.0",
+    "@real-life/workers-sdk": "workspace:*",
+    "hono": "^4.0.0",
+    "ky": "^1.0.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.9.2"
+  }
+}

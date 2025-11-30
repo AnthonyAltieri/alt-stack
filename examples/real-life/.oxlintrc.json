@@ -1,0 +1,13 @@
+{
+  "ignore": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/.next/**",
+    "**/.turbo/**"
+  ],
+  "rules": {
+    "@typescript-eslint/triple-slash-reference": "off"
+  }
+}
+

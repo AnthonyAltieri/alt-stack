@@ -17,6 +17,19 @@ module.exports = {
     },
     {
       type: 'category',
+      label: 'Real Life Example',
+      items: [
+        'real-life/index',
+        'real-life/project-structure',
+        'real-life/auth-service',
+        'real-life/logic-service',
+        'real-life/workers',
+        'real-life/frontend',
+        'real-life/sdk-generation',
+      ],
+    },
+    {
+      type: 'category',
       label: 'Server',
       items: [
         {

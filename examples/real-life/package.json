@@ -1,0 +1,19 @@
+{
+  "name": "real-life-example",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm -r run dev",
+    "build": "pnpm -r run build",
+    "generate:all": "pnpm -r run generate",
+    "lint": "oxlint .",
+    "lint:fix": "oxlint . --fix",
+    "format": "oxlint . --fix",
+    "format:check": "oxlint ."
+  },
+  "devDependencies": {
+    "oxlint": "^1.24.0",
+    "typescript": "^5.9.2"
+  },
+  "packageManager": "pnpm@9.0.0"
+}
+
