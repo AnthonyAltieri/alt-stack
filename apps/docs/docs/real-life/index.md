@@ -44,6 +44,87 @@ This example demonstrates a task management system with:
                                 └───────────────────┘
 ```
 
+## Key Takeaways
+
+### 1. End-to-End Type Safety
+
+Types flow from Zod schemas through OpenAPI/AsyncAPI specs to generated SDKs:
+
+```typescript
+// Define once in backend-logic
+const TaskSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  status: z.enum(["pending", "in_progress", "completed"]),
+});
+
+// Automatically available in frontend via SDK
+import type { TaskSchema } from "@real-life/backend-logic-sdk";
+type Task = z.infer<typeof TaskSchema>;
+```
+
+### 2. Service-to-Service Auth
+
+The logic service validates tokens by calling the auth service's internal endpoint:
+
+```typescript
+// backend-logic calls backend-auth
+async function validateToken(token: string): Promise<string | null> {
+  const res = await ky.get(`${AUTH_SERVICE_URL}/api/validate`, {
+    headers: { authorization: token },
+  }).json<{ valid: boolean; userId?: string }>();
+  return res.valid ? res.userId ?? null : null;
+}
+```
+
+### 3. Protected Procedures with Middleware
+
+Create reusable authenticated procedures:
+
+```typescript
+const protectedProc = factory.procedure
+  .errors({ 401: z.object({ error: z.object({ code: z.literal("UNAUTHORIZED") }) }) })
+  .use(async ({ ctx, next }) => {
+    if (!ctx.userId) throw ctx.error({ error: { code: "UNAUTHORIZED", ... } });
+    return next({ ctx: { userId: ctx.userId } }); // narrow type
+  });
+```
+
+### 4. Type-Safe Background Jobs
+
+Trigger workers with full type inference from the SDK:
+
+```typescript
+import { Topics } from "@real-life/workers-sdk";
+
+const client = await createWarpStreamClient({ jobs: Topics, ... });
+
+// TypeScript knows the exact payload shape
+await client.trigger("send-notification", {
+  type: "task_created",  // must be valid enum
+  userId: ctx.userId,
+  taskId: id,
+  taskTitle: input.body.title,
+});
+```
+
+### 5. SDK-First Frontend
+
+The frontend uses generated SDKs with `http-client-ky` for fully typed API calls:
+
+```typescript
+import { createApiClient } from "@alt-stack/http-client-ky";
+import { Request, Response } from "@real-life/backend-logic-sdk";
+
+const client = createApiClient({ baseUrl, Request, Response });
+
+// Full autocomplete for paths, params, body, and response
+const result = await client.get("/api/{id}", { params: { id: "..." } });
+if (result.success) {
+  console.log(result.body.title); // TypeScript knows this exists
+}
+```
+
 ## What You'll Learn
 
 | Topic | Description |
@@ -85,4 +166,3 @@ pnpm --filter @real-life/web dev            # Port 3000
 | `@alt-stack/zod-asyncapi` | AsyncAPI | Worker SDK generation |
 | `@alt-stack/http-client-ky` | ky | Type-safe HTTP client with SDK integration |
 | `Next.js` | React | Frontend framework |
-
