@@ -119,7 +119,10 @@ import { Request, Response } from "@real-life/backend-logic-sdk";
 const client = createApiClient({ baseUrl, Request, Response });
 
 // Full autocomplete for paths, params, body, and response
-const result = await client.get("/api/{id}", { params: { id: "..." } });
+const result = await client.get("/api/{id}", {
+  params: { id: "..." },
+  headers: { authorization: `Bearer ${token}` },
+});
 if (result.success) {
   console.log(result.body.title); // TypeScript knows this exists
 }

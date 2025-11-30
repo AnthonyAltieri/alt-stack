@@ -8,49 +8,37 @@ The frontend uses `@alt-stack/http-client-ky` for type-safe HTTP requests with S
 
 ```typescript title="apps/web/src/lib/api.ts"
 import { createApiClient } from "@alt-stack/http-client-ky";
-import {
-  Request as AuthRequest,
-  Response as AuthResponse,
-} from "@real-life/backend-auth-sdk";
-import {
-  Request as LogicRequest,
-  Response as LogicResponse,
-} from "@real-life/backend-logic-sdk";
+import { Request as AuthRequest, Response as AuthResponse } from "@real-life/backend-auth-sdk";
+import { Request as LogicRequest, Response as LogicResponse } from "@real-life/backend-logic-sdk";
 
 const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_URL || "http://localhost:3001";
 const LOGIC_URL = process.env.NEXT_PUBLIC_LOGIC_URL || "http://localhost:3002";
 
 // Create type-safe clients
-export function createAuthClient(token?: string) {
-  return createApiClient({
-    baseUrl: AUTH_URL,
-    Request: AuthRequest,
-    Response: AuthResponse,
-    headers: token ? { authorization: `Bearer ${token}` } : undefined,
-  });
-}
+const authClient = createApiClient({
+  baseUrl: AUTH_URL,
+  Request: AuthRequest,
+  Response: AuthResponse,
+});
 
-export function createLogicClient(token?: string) {
-  return createApiClient({
-    baseUrl: LOGIC_URL,
-    Request: LogicRequest,
-    Response: LogicResponse,
-    headers: token ? { authorization: `Bearer ${token}` } : undefined,
-  });
-}
+const logicClient = createApiClient({
+  baseUrl: LOGIC_URL,
+  Request: LogicRequest,
+  Response: LogicResponse,
+});
 
 // Auth API
 export const authApi = {
   async login(data: { email: string; password: string }) {
-    const client = createAuthClient();
-    const result = await client.post("/api/login", { body: data });
+    const result = await authClient.post("/api/login", { body: data });
     if (!result.success) throw new Error("Login failed");
     return result.body;
   },
 
   async me(token: string) {
-    const client = createAuthClient(token);
-    const result = await client.get("/api/me", {});
+    const result = await authClient.get("/api/me", {
+      headers: { authorization: `Bearer ${token}` },
+    });
     if (!result.success) throw new Error("Failed to get user");
     return result.body;
   },
@@ -59,15 +47,18 @@ export const authApi = {
 // Logic API
 export const logicApi = {
   async listTasks(token?: string) {
-    const client = createLogicClient(token);
-    const result = await client.get("/api/", {});
+    const result = await logicClient.get("/api/", {
+      headers: token ? { authorization: `Bearer ${token}` } : undefined,
+    });
     if (!result.success) throw new Error("Failed to list tasks");
     return result.body;
   },
 
-  async createTask(token: string, data: { title: string }) {
-    const client = createLogicClient(token);
-    const result = await client.post("/api/", { body: data });
+  async createTask(token: string, data: { title: string; description?: string }) {
+    const result = await logicClient.post("/api/", {
+      body: data,
+      headers: { authorization: `Bearer ${token}` },
+    });
     if (!result.success) throw new Error("Failed to create task");
     return result.body;
   },
@@ -79,13 +70,13 @@ export const logicApi = {
 The `http-client-ky` client provides full type inference from the SDK's `Request` and `Response` objects:
 
 ```typescript
-const client = createLogicClient(token);
-
 // TypeScript knows:
 // - Valid endpoints: "/api/", "/api/{id}"
 // - Required params/body for each endpoint
 // - Response body type for each status code
-const result = await client.get("/api/", {});
+const result = await logicClient.get("/api/", {
+  headers: token ? { authorization: `Bearer ${token}` } : undefined,
+});
 
 if (result.success) {
   // result.body is typed as Task[]

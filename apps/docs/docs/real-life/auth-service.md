@@ -15,7 +15,7 @@ The authentication service handles user registration, login, and session managem
 ## Implementation
 
 ```typescript title="apps/backend-auth/src/index.ts"
-import { createDocsRouter, createServer, init, router } from "@alt-stack/server-hono";
+import { createDocsRouter, createServer, init, router, type HonoBaseContext } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 const UserSchema = z.object({
@@ -30,10 +30,10 @@ const SessionSchema = z.object({
   expiresAt: z.string().datetime(),
 });
 
-const factory = init();
+const factory = init<HonoBaseContext>();
 const publicProc = factory.procedure;
 
-const authRouter = router({
+const authRouter = router<HonoBaseContext>({
   "/signup": publicProc
     .input({
       body: z.object({
@@ -69,10 +69,10 @@ const authRouter = router({
 
   // Internal endpoint for other services to validate tokens
   "/validate": publicProc
-    .input({ headers: z.object({ authorization: z.string() }) })
     .output(z.object({ valid: z.boolean(), userId: z.string().optional() }))
-    .get(({ input }) => {
-      const token = input.headers.authorization.replace("Bearer ", "");
+    .get(({ ctx }) => {
+      const auth = ctx.hono.req.header("Authorization") ?? "";
+      const token = auth.replace("Bearer ", "");
       const session = sessions.get(token);
       if (!session || session.expiresAt < new Date()) {
         return { valid: false };
@@ -110,6 +110,7 @@ const spec = generateOpenAPISpec({ api: authRouter }, {
 });
 
 writeFileSync("openapi.json", JSON.stringify(spec, null, 2));
+console.log("Generated openapi.json");
 ```
 
 Run with:

@@ -44,6 +44,7 @@ const spec = generateOpenAPISpec({ api: authRouter }, {
 });
 
 writeFileSync("openapi.json", JSON.stringify(spec, null, 2));
+console.log("Generated openapi.json");
 ```
 
 ### SDK Package
@@ -111,6 +112,7 @@ const spec = generateAsyncAPISpec(jobRouter, {
 });
 
 writeFileSync("asyncapi.json", JSON.stringify(spec, null, 2));
+console.log("Generated asyncapi.json");
 ```
 
 ### SDK Package

@@ -129,7 +129,8 @@ const taskRouter = router<AppContext>({
       .input({
         params: z.object({ id: z.string().uuid() }),
         body: z.object({
-          title: z.string().optional(),
+          title: z.string().min(1).max(200).optional(),
+          description: z.string().max(1000).optional(),
           status: z.enum(["pending", "in_progress", "completed"]).optional(),
         }),
       })

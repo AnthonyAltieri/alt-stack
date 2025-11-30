@@ -5,12 +5,12 @@ Background job processing using WarpStream (Kafka-compatible).
 ## Job Definitions
 
 ```typescript title="apps/workers/src/index.ts"
-import { createWorker, init, router } from "@alt-stack/workers-warpstream";
+import { createWorker, init, workerRouter } from "@alt-stack/workers-warpstream";
 import { z } from "zod";
 
 const { procedure } = init();
 
-export const jobRouter = router({
+export const jobRouter = workerRouter({
   "send-notification": procedure
     .input({
       payload: z.object({
@@ -72,6 +72,7 @@ const spec = generateAsyncAPISpec(jobRouter, {
 });
 
 writeFileSync("asyncapi.json", JSON.stringify(spec, null, 2));
+console.log("Generated asyncapi.json");
 ```
 
 ## SDK Generation
