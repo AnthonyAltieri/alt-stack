@@ -45,7 +45,7 @@ Then generate Request and Response types from the OpenAPI spec (see [Server Inte
 
 ```typescript
 // client.ts
-import { createApiClient } from "@alt-stack/client";
+import { createApiClient } from "@alt-stack/http-client-fetch";
 import { Request, Response } from "./generated-types.js";
 
 const client = createApiClient({
@@ -63,6 +63,8 @@ if (result.success) {
   // TypeScript knows the shape of result.body
   console.log(result.body.name); // ✅ Type-safe
   console.log(result.body.email); // ✅ Type-safe
+  // Access raw Response if needed
+  console.log(result.raw.headers.get("x-request-id"));
 } else {
   // Handle error
   console.error(result.error);
@@ -76,4 +78,4 @@ if (result.success) {
 - **Error handling**: Typed error responses
 - **Retry logic**: Built-in exponential backoff for failed requests
 - **Path interpolation**: Automatic handling of path parameters
-
+- **Raw response access**: Access underlying Response/KyResponse for advanced use cases

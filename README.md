@@ -18,9 +18,13 @@ The server framework is split into a core package and framework-specific adapter
 
 - **`@alt-stack/server`** *(deprecated)*: Original package, now deprecated. Please migrate to `@alt-stack/server-hono` or `@alt-stack/server-express`.
 
-### Other Packages
+### Client Packages
 
-- **`@alt-stack/client`**: A type-safe API client that integrates with zod-openapi generated Request/Response objects. Provides full type inference, request/response validation, retry logic, and error handling.
+- **`@alt-stack/http-client-fetch`**: Type-safe API client using native fetch. Provides full type inference, request/response validation, retry logic, and error handling.
+
+- **`@alt-stack/http-client-ky`**: Type-safe API client using ky library. Same features as fetch client plus ky-specific options like hooks.
+
+### Other Packages
 
 - **`zod-openapi`**: Convert OpenAPI schemas to Zod schemas with TypeScript code generation. Supports complex types, custom formats, and generates request/response lookup objects.
 

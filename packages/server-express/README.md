@@ -167,6 +167,8 @@ Since HTTP path parameters and query strings are always strings, `input.params` 
 
 - [`@alt-stack/server-core`](../server-core/README.md) - Core types and utilities
 - [`@alt-stack/server-hono`](../server-hono/README.md) - Hono adapter
+- [`@alt-stack/http-client-fetch`](../http-client-fetch/README.md) - Type-safe API client (fetch)
+- [`@alt-stack/http-client-ky`](../http-client-ky/README.md) - Type-safe API client (ky)
 
 ## License
 
