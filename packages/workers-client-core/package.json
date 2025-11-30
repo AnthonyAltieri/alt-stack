@@ -1,6 +1,6 @@
 {
   "name": "@alt-stack/workers-client-core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Core types and interfaces for type-safe worker clients",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -38,4 +38,3 @@
     "zod": "^4.0.0"
   }
 }
-
