@@ -7,7 +7,7 @@ Learn how to use the API client for making type-safe requests.
 Use `createApiClient` to create a client instance:
 
 ```typescript
-import { createApiClient } from "@alt-stack/client";
+import { createApiClient } from "@alt-stack/http-client-fetch";
 import { Request, Response } from "./generated-types.js";
 
 const client = createApiClient({
@@ -83,6 +83,7 @@ if (result.success) {
   // Type-safe access to response body
   console.log(result.body);
   console.log(result.code); // Status code string, e.g., "200"
+  console.log(result.raw); // Raw Response object for advanced use
 } else {
   // Handle error - check if it's a defined error or unexpected
   if (typeof result.code === "string") {

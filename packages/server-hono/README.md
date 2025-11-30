@@ -165,6 +165,8 @@ Handler code remains the same - `ctx.hono` is still available.
 
 - [`@alt-stack/server-core`](../server-core/README.md) - Core types and utilities
 - [`@alt-stack/server-express`](../server-express/README.md) - Express adapter
+- [`@alt-stack/http-client-fetch`](../http-client-fetch/README.md) - Type-safe API client (fetch)
+- [`@alt-stack/http-client-ky`](../http-client-ky/README.md) - Type-safe API client (ky)
 
 ## License
 

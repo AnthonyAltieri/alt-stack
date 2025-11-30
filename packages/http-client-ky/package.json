@@ -1,0 +1,38 @@
+{
+  "name": "@alt-stack/http-client-ky",
+  "version": "0.0.1",
+  "description": "Type-safe HTTP client using ky library",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest",
+    "check-types": "tsc --noEmit"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@alt-stack/http-client-core": "workspace:*",
+    "ky": "^1.8.1"
+  },
+  "peerDependencies": {
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "oxlint": "^1.24.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.9.2",
+    "vitest": "^4.0.3",
+    "zod": "^4.0.0"
+  }
+}
+

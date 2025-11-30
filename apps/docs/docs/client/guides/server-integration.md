@@ -123,7 +123,7 @@ Now create the client using the generated types:
 
 ```typescript
 // client.ts
-import { createApiClient } from "@alt-stack/client";
+import { createApiClient } from "@alt-stack/http-client-fetch";
 import { Request, Response } from "./generated-types.js";
 
 const client = createApiClient({

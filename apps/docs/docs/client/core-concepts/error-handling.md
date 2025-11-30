@@ -79,7 +79,7 @@ import {
   UnexpectedApiClientError,
   TimeoutError,
   ApiClientError,
-} from "@alt-stack/client";
+} from "@alt-stack/http-client-fetch";
 
 try {
   await client.get("/users/{id}", {

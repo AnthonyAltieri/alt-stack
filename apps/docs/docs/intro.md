@@ -18,9 +18,10 @@ Altstack's server framework is split into a core package and framework-specific 
 
 - **`@alt-stack/server-express`**: [Express](https://expressjs.com/) adapter - creates an Express app with the same type-safe API.
 
-### Client Package
+### Client Packages
 
-- **`@alt-stack/client`**: A type-safe API client that works seamlessly with server-generated types
+- **`@alt-stack/http-client-fetch`**: Type-safe API client using native fetch
+- **`@alt-stack/http-client-ky`**: Type-safe API client using ky library
 
 ## Choosing an Adapter
 
