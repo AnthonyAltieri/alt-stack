@@ -1,4 +1,4 @@
-import type { Kafka, Consumer, KafkaConfig, KafkaMessage } from "kafkajs";
+import type { Kafka, KafkaConfig, KafkaMessage } from "kafkajs";
 import { Kafka as KafkaClass } from "kafkajs";
 import type { z } from "zod";
 import type {
@@ -7,11 +7,7 @@ import type {
   TypedWorkerContext,
   WorkerProcedure,
 } from "@alt-stack/workers-core";
-import {
-  validateInput,
-  ProcessingError,
-  middlewareMarker,
-} from "@alt-stack/workers-core";
+import { validateInput, ProcessingError, middlewareMarker } from "@alt-stack/workers-core";
 import type { MiddlewareResult } from "@alt-stack/workers-core";
 import type {
   CreateWorkerOptions,
@@ -117,10 +113,7 @@ export async function createWorker<TCustomContext extends object = Record<string
         await executeProcedure(procedure, payload, baseCtx, options);
       } catch (error) {
         if (options.onError) {
-          await options.onError(
-            error instanceof Error ? error : new Error(String(error)),
-            baseCtx,
-          );
+          await options.onError(error instanceof Error ? error : new Error(String(error)), baseCtx);
         }
         throw error;
       }
@@ -143,8 +136,13 @@ function createKafkaInstance(kafkaOrConfig: Kafka | KafkaConfig): Kafka {
   });
 }
 
-function getTopicsForRouting(
-  procedures: WorkerProcedure<InputConfig, z.ZodTypeAny | undefined, Record<string, z.ZodTypeAny> | undefined, object>[],
+function getTopicsForRouting<TCustomContext extends object>(
+  procedures: WorkerProcedure<
+    InputConfig,
+    z.ZodTypeAny | undefined,
+    Record<string, z.ZodTypeAny> | undefined,
+    TCustomContext
+  >[],
   routing: RoutingStrategy,
 ): string[] {
   if (routing.type === "single-queue") {
@@ -155,11 +153,32 @@ function getTopicsForRouting(
   return procedures.map((p) => `${prefix}${p.jobName}`);
 }
 
-function buildProcedureMap(
-  procedures: WorkerProcedure<InputConfig, z.ZodTypeAny | undefined, Record<string, z.ZodTypeAny> | undefined, object>[],
+function buildProcedureMap<TCustomContext extends object>(
+  procedures: WorkerProcedure<
+    InputConfig,
+    z.ZodTypeAny | undefined,
+    Record<string, z.ZodTypeAny> | undefined,
+    TCustomContext
+  >[],
   _routing: RoutingStrategy,
-): Map<string, WorkerProcedure<InputConfig, z.ZodTypeAny | undefined, Record<string, z.ZodTypeAny> | undefined, object>> {
-  const map = new Map<string, WorkerProcedure<InputConfig, z.ZodTypeAny | undefined, Record<string, z.ZodTypeAny> | undefined, object>>();
+): Map<
+  string,
+  WorkerProcedure<
+    InputConfig,
+    z.ZodTypeAny | undefined,
+    Record<string, z.ZodTypeAny> | undefined,
+    TCustomContext
+  >
+> {
+  const map = new Map<
+    string,
+    WorkerProcedure<
+      InputConfig,
+      z.ZodTypeAny | undefined,
+      Record<string, z.ZodTypeAny> | undefined,
+      TCustomContext
+    >
+  >();
   for (const proc of procedures) {
     map.set(proc.jobName, proc);
   }
@@ -191,7 +210,12 @@ function extractJobInfo(
 }
 
 async function executeProcedure<TCustomContext extends object>(
-  procedure: WorkerProcedure<InputConfig, z.ZodTypeAny | undefined, Record<string, z.ZodTypeAny> | undefined, TCustomContext>,
+  procedure: WorkerProcedure<
+    InputConfig,
+    z.ZodTypeAny | undefined,
+    Record<string, z.ZodTypeAny> | undefined,
+    TCustomContext
+  >,
   payload: unknown,
   baseCtx: WarpStreamContext,
   options: CreateWorkerOptions<TCustomContext>,
@@ -216,9 +240,9 @@ async function executeProcedure<TCustomContext extends object>(
         const errorResponse = result.data;
         throw new ProcessingError(
           typeof errorResponse === "object" &&
-          errorResponse !== null &&
-          "message" in errorResponse &&
-          typeof errorResponse.message === "string"
+            errorResponse !== null &&
+            "message" in errorResponse &&
+            typeof errorResponse.message === "string"
             ? errorResponse.message
             : "Error occurred",
           errorResponse,
@@ -287,4 +311,3 @@ async function executeProcedure<TCustomContext extends object>(
     procedure.config.output.parse(response);
   }
 }
-
