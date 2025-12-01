@@ -5,6 +5,7 @@ import type { Context } from "hono";
 import ky from "ky";
 import { z } from "zod";
 import { Topics } from "@real-life/workers-sdk";
+import { authServiceUrl, env, warpstreamUrl } from "./env.js";
 
 // ============================================================================
 // Types
@@ -44,12 +45,10 @@ const tasks = new Map<string, StoredTask>();
 // Auth Validation (calls backend-auth)
 // ============================================================================
 
-const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL || "http://localhost:3001";
-
 async function validateToken(token: string): Promise<string | null> {
   try {
     const res = await ky
-      .get(`${AUTH_SERVICE_URL}/api/validate`, {
+      .get(`${authServiceUrl}/api/validate`, {
         headers: { authorization: token },
       })
       .json<{ valid: boolean; userId?: string }>();
@@ -60,15 +59,29 @@ async function validateToken(token: string): Promise<string | null> {
 }
 
 // ============================================================================
-// Worker Client
+// Worker Client (lazy-initialized to avoid blocking Lambda cold start)
 // ============================================================================
 
-const WARPSTREAM_URL = process.env.WARPSTREAM_URL || "localhost:9092";
+type WorkerClient = Awaited<ReturnType<typeof createWarpStreamClient<typeof Topics>>>;
+let workerClient: WorkerClient | null = null;
+let workerClientFailed = false;
 
-const workerClient = await createWarpStreamClient({
-  bootstrapServer: WARPSTREAM_URL,
-  jobs: Topics,
-});
+async function getWorkerClient(): Promise<WorkerClient | null> {
+  if (workerClientFailed) return null;
+  if (!workerClient) {
+    try {
+      workerClient = await createWarpStreamClient({
+        bootstrapServer: warpstreamUrl,
+        jobs: Topics,
+      });
+    } catch (e) {
+      console.warn("Failed to connect to WarpStream:", e);
+      workerClientFailed = true;
+      return null;
+    }
+  }
+  return workerClient;
+}
 
 // ============================================================================
 // Procedures
@@ -120,12 +133,15 @@ const taskRouter = router<AppContext>({
         tasks.set(id, task);
 
         // Trigger notification worker
-        await workerClient.trigger("send-notification", {
-          type: "task_created",
-          userId: ctx.userId,
-          taskId: id,
-          taskTitle: input.body.title,
-        });
+        const client = await getWorkerClient();
+        if (client) {
+          await client.trigger("send-notification", {
+            type: "task_created",
+            userId: ctx.userId,
+            taskId: id,
+            taskTitle: input.body.title,
+          });
+        }
 
         return {
           ...task,
@@ -187,11 +203,14 @@ const taskRouter = router<AppContext>({
 
         // Trigger report generation when task is completed
         if (!wasCompleted && nowCompleted) {
-          await workerClient.trigger("generate-report", {
-            taskId: task.id,
-            userId: ctx.userId,
-            completedAt: task.updatedAt.toISOString(),
-          });
+          const client = await getWorkerClient();
+          if (client) {
+            await client.trigger("generate-report", {
+              taskId: task.id,
+              userId: ctx.userId,
+              completedAt: task.updatedAt.toISOString(),
+            });
+          }
         }
 
         return {
@@ -238,7 +257,9 @@ const app = createServer<AppContext>({ api: taskRouter, docs: docsRouter }, { cr
 export { taskRouter };
 export default app;
 
-const port = Number(process.env.PORT) || 3002;
-console.log(`Logic service running at http://localhost:${port}`);
-console.log(`OpenAPI docs at http://localhost:${port}/docs/openapi.json`);
-serve({ fetch: app.fetch, port });
+// Only start server when running directly (not as Lambda)
+if (!process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  console.log(`Logic service running at http://localhost:${env.PORT}`);
+  console.log(`OpenAPI docs at http://localhost:${env.PORT}/docs/openapi.json`);
+  serve({ fetch: app.fetch, port: env.PORT });
+}
