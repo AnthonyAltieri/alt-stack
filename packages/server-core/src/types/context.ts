@@ -74,10 +74,10 @@ export type InferInput<T extends InputConfig> = {
 
 /**
  * Base context interface - framework adapters extend this with their own context.
- * This is intentionally empty to allow adapters to define their own shape.
  */
 export interface BaseContext {
-  // Empty base - adapters extend this with their framework context (e.g., hono, express)
+  /** Current OpenTelemetry span (undefined if telemetry disabled or not installed) */
+  span?: import("@opentelemetry/api").Span;
 }
 
 export type TypedContext<

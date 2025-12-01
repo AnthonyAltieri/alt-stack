@@ -24,4 +24,18 @@ export type {
 } from "./openapi.js";
 export { validateInput, parseSchema, mergeInputs } from "./validation.js";
 export type { ParseResult, StructuredInput } from "./validation.js";
+export {
+  resolveTelemetryConfig,
+  shouldIgnoreRoute,
+  initTelemetry,
+  createRequestSpan,
+  endSpanWithError,
+  setSpanOk,
+} from "./telemetry.js";
+export type {
+  TelemetryConfig,
+  TelemetryOption,
+  ResolvedTelemetryConfig,
+  Span,
+} from "./telemetry.js";
 

@@ -252,6 +252,19 @@ async function createContext(c: Context): Promise<AppContext> {
 }
 
 const docsRouter = createDocsRouter({ api: taskRouter }, { title: "Tasks API", version: "1.0.0" });
+
+// Enable OpenTelemetry tracing in production:
+// const app = createServer<AppContext>(
+//   { api: taskRouter, docs: docsRouter },
+//   {
+//     createContext,
+//     telemetry: {
+//       enabled: env.NODE_ENV === "production",
+//       serviceName: "backend-logic",
+//       ignoreRoutes: ["/docs"],
+//     },
+//   },
+// );
 const app = createServer<AppContext>({ api: taskRouter, docs: docsRouter }, { createContext });
 
 export { taskRouter };

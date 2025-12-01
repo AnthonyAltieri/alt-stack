@@ -2,10 +2,21 @@ import type { Context, Hono } from "hono";
 import { Hono as HonoClass } from "hono";
 import type { z } from "zod";
 import type { ZodError } from "zod";
-import type { TypedContext, InputConfig } from "@alt-stack/server-core";
+import type { TypedContext, InputConfig, TelemetryOption } from "@alt-stack/server-core";
 import type { Procedure } from "@alt-stack/server-core";
 import type { Router } from "@alt-stack/server-core";
-import { validateInput, ServerError, ValidationError, middlewareMarker } from "@alt-stack/server-core";
+import {
+  validateInput,
+  ServerError,
+  ValidationError,
+  middlewareMarker,
+  resolveTelemetryConfig,
+  shouldIgnoreRoute,
+  initTelemetry,
+  createRequestSpan,
+  endSpanWithError,
+  setSpanOk,
+} from "@alt-stack/server-core";
 import type { MiddlewareResult } from "@alt-stack/server-core";
 
 /**
@@ -65,9 +76,17 @@ export function createServer<
       default400ErrorSchema?: z.ZodObject<any>;
       default500ErrorSchema?: z.ZodObject<any>;
     };
+    /** Enable OpenTelemetry tracing */
+    telemetry?: TelemetryOption;
   },
 ): Hono {
   const app = new HonoClass();
+  const telemetryConfig = resolveTelemetryConfig(options?.telemetry);
+
+  // Initialize telemetry if enabled
+  if (telemetryConfig.enabled) {
+    initTelemetry();
+  }
 
   // Apply middleware handlers before framework routes
   if (options?.middleware) {
@@ -128,6 +147,19 @@ export function createServer<
     const honoPath = convertPathToHono(procedure.path);
     
     const handler = async (c: Context) => {
+      // Create telemetry span if enabled
+      const shouldTrace =
+        telemetryConfig.enabled &&
+        !shouldIgnoreRoute(procedure.path, telemetryConfig);
+      const span = shouldTrace
+        ? createRequestSpan(
+            procedure.method,
+            procedure.path,
+            c.req.path,
+            telemetryConfig,
+          )
+        : undefined;
+
       try {
         const params = c.req.param();
         const queryRaw = c.req.query();
@@ -213,6 +245,7 @@ export function createServer<
           hono: c,
           input: validatedInput,
           error: errorFn,
+          span,
         } as ProcedureContext;
 
         let currentCtx: ProcedureContext = ctx;
@@ -274,6 +307,9 @@ export function createServer<
 
         const middlewareResult = await runMiddleware();
         if (middlewareResult instanceof Response) {
+          span?.setAttribute("http.response.status_code", middlewareResult.status);
+          setSpanOk(span);
+          span?.end();
           return middlewareResult;
         }
         currentCtx = middlewareResult as ProcedureContext;
@@ -282,17 +318,29 @@ export function createServer<
 
         // If handler returns a Response directly (e.g., HTML), return it as-is
         if (response instanceof Response) {
+          span?.setAttribute("http.response.status_code", response.status);
+          setSpanOk(span);
+          span?.end();
           return response;
         }
 
         if (procedure.config.output) {
           const validated = procedure.config.output.parse(response);
+          span?.setAttribute("http.response.status_code", 200);
+          setSpanOk(span);
+          span?.end();
           return c.json(validated);
         }
 
+        span?.setAttribute("http.response.status_code", 200);
+        setSpanOk(span);
+        span?.end();
         return c.json(response);
       } catch (error) {
+        endSpanWithError(span, error);
         if (error instanceof ValidationError) {
+          span?.setAttribute("http.response.status_code", 400);
+          span?.end();
           // Use default 400 error handler if available
           if (
             options?.defaultErrorHandlers &&
@@ -325,8 +373,12 @@ export function createServer<
           );
         }
         if (error instanceof ServerError) {
+          span?.setAttribute("http.response.status_code", error.statusCode);
+          span?.end();
           return c.json(error.toJSON(), error.statusCode as any);
         }
+        span?.setAttribute("http.response.status_code", 500);
+        span?.end();
         // Use default 500 error handler if available
         if (options?.defaultErrorHandlers) {
           const [_schema, instance] =

@@ -7,6 +7,7 @@ import {
 } from "@alt-stack/server-hono";
 import { serve } from "@hono/node-server";
 import { z } from "zod";
+import { env } from "./env.js";
 
 // ============================================================================
 // Types
@@ -169,12 +170,26 @@ const docsRouter = createDocsRouter<HonoBaseContext>(
   { api: authRouter },
   { title: "Auth API", version: "1.0.0" },
 );
+
+// Enable OpenTelemetry tracing in production:
+// const app = createServer<HonoBaseContext>(
+//   { api: authRouter, docs: docsRouter },
+//   {
+//     telemetry: {
+//       enabled: env.NODE_ENV === "production",
+//       serviceName: "backend-auth",
+//       ignoreRoutes: ["/docs"],
+//     },
+//   },
+// );
 const app = createServer<HonoBaseContext>({ api: authRouter, docs: docsRouter });
 
 export { authRouter };
 export default app;
 
-const port = Number(process.env.PORT) || 3001;
-console.log(`Auth service running at http://localhost:${port}`);
-console.log(`OpenAPI docs at http://localhost:${port}/docs/openapi.json`);
-serve({ fetch: app.fetch, port });
+// Only start server when running directly (not as Lambda)
+if (!process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  console.log(`Auth service running at http://localhost:${env.PORT}`);
+  console.log(`OpenAPI docs at http://localhost:${env.PORT}/docs/openapi.json`);
+  serve({ fetch: app.fetch, port: env.PORT });
+}

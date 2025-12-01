@@ -2,7 +2,7 @@ import express from "express";
 import type { Express, Request, Response, NextFunction } from "express";
 import type { z } from "zod";
 import type { ZodError } from "zod";
-import type { TypedContext, InputConfig } from "@alt-stack/server-core";
+import type { TypedContext, InputConfig, TelemetryOption } from "@alt-stack/server-core";
 import type { Procedure } from "@alt-stack/server-core";
 import type { Router } from "@alt-stack/server-core";
 import {
@@ -10,6 +10,12 @@ import {
   ServerError,
   ValidationError,
   middlewareMarker,
+  resolveTelemetryConfig,
+  shouldIgnoreRoute,
+  initTelemetry,
+  createRequestSpan,
+  endSpanWithError,
+  setSpanOk,
 } from "@alt-stack/server-core";
 import type { MiddlewareResult } from "@alt-stack/server-core";
 
@@ -50,9 +56,17 @@ export function createServer<TCustomContext extends object = Record<string, neve
       default400ErrorSchema?: z.ZodObject<any>;
       default500ErrorSchema?: z.ZodObject<any>;
     };
+    /** Enable OpenTelemetry tracing */
+    telemetry?: TelemetryOption;
   },
 ): Express {
   const app = express();
+  const telemetryConfig = resolveTelemetryConfig(options?.telemetry);
+
+  // Initialize telemetry if enabled
+  if (telemetryConfig.enabled) {
+    initTelemetry();
+  }
 
   // Parse JSON bodies
   app.use(express.json());
@@ -85,6 +99,19 @@ export function createServer<TCustomContext extends object = Record<string, neve
     const expressPath = convertPathToExpress(procedure.path);
 
     const handler = async (req: Request, res: Response, _next: NextFunction) => {
+      // Create telemetry span if enabled
+      const shouldTrace =
+        telemetryConfig.enabled &&
+        !shouldIgnoreRoute(procedure.path, telemetryConfig);
+      const span = shouldTrace
+        ? createRequestSpan(
+            procedure.method,
+            procedure.path,
+            req.path,
+            telemetryConfig,
+          )
+        : undefined;
+
       try {
         const params = req.params as Record<string, unknown>;
         const query = req.query as Record<string, unknown>;
@@ -144,6 +171,7 @@ export function createServer<TCustomContext extends object = Record<string, neve
           express: { req, res },
           input: validatedInput,
           error: errorFn,
+          span,
         } as ProcedureContext;
 
         let currentCtx: ProcedureContext = ctx;
@@ -196,6 +224,9 @@ export function createServer<TCustomContext extends object = Record<string, neve
         const middlewareResult = await runMiddleware();
         if (middlewareResult instanceof globalThis.Response) {
           // Response was already handled by middleware
+          span?.setAttribute("http.response.status_code", middlewareResult.status);
+          setSpanOk(span);
+          span?.end();
           return;
         }
         currentCtx = middlewareResult as ProcedureContext;
@@ -205,6 +236,9 @@ export function createServer<TCustomContext extends object = Record<string, neve
         // If handler returns a Response directly, we need to handle it
         if (response instanceof globalThis.Response) {
           // Express doesn't use Web Response objects, so we extract data
+          span?.setAttribute("http.response.status_code", response.status);
+          setSpanOk(span);
+          span?.end();
           const contentType = response.headers.get("content-type");
           if (contentType?.includes("text/html")) {
             res.setHeader("Content-Type", "text/html");
@@ -217,12 +251,21 @@ export function createServer<TCustomContext extends object = Record<string, neve
 
         if (procedure.config.output) {
           const validated = procedure.config.output.parse(response);
+          span?.setAttribute("http.response.status_code", 200);
+          setSpanOk(span);
+          span?.end();
           res.json(validated);
         } else {
+          span?.setAttribute("http.response.status_code", 200);
+          setSpanOk(span);
+          span?.end();
           res.json(response);
         }
       } catch (error) {
+        endSpanWithError(span, error);
         if (error instanceof ValidationError) {
+          span?.setAttribute("http.response.status_code", 400);
+          span?.end();
           if (
             options?.defaultErrorHandlers &&
             error.details &&
@@ -253,10 +296,14 @@ export function createServer<TCustomContext extends object = Record<string, neve
         }
 
         if (error instanceof ServerError) {
+          span?.setAttribute("http.response.status_code", error.statusCode);
+          span?.end();
           res.status(error.statusCode).json(error.toJSON());
           return;
         }
 
+        span?.setAttribute("http.response.status_code", 500);
+        span?.end();
         if (options?.defaultErrorHandlers) {
           const [_schema, instance] = options.defaultErrorHandlers.default500Error(error);
           res.status(500).json({ error: instance });

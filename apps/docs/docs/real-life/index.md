@@ -108,7 +108,25 @@ await client.trigger("send-notification", {
 });
 ```
 
-### 5. SDK-First Frontend
+### 5. Built-in Telemetry
+
+Enable [OpenTelemetry tracing](/guides/telemetry) with a single flag:
+
+```typescript
+const app = createServer(
+  { api: taskRouter, docs: docsRouter },
+  {
+    createContext,
+    telemetry: {
+      enabled: env.NODE_ENV === "production",
+      serviceName: "backend-logic",
+      ignoreRoutes: ["/docs"],
+    },
+  },
+);
+```
+
+### 6. SDK-First Frontend
 
 The frontend uses generated SDKs with `http-client-ky` for fully typed API calls:
 
@@ -162,10 +180,11 @@ pnpm --filter @real-life/web dev            # Port 3000
 
 | Package | Technology | Purpose |
 |---------|------------|---------|
-| `@alt-stack/server-hono` | Hono | Type-safe HTTP servers |
+| `@alt-stack/server-hono` | Hono | Type-safe HTTP servers with telemetry |
 | `@alt-stack/workers-warpstream` | WarpStream/Kafka | Background job processing |
 | `@alt-stack/workers-client-warpstream` | WarpStream/Kafka | Job triggering |
 | `@alt-stack/zod-openapi` | OpenAPI | REST API SDK generation |
 | `@alt-stack/zod-asyncapi` | AsyncAPI | Worker SDK generation |
 | `@alt-stack/http-client-ky` | ky | Type-safe HTTP client with SDK integration |
+| `@opentelemetry/api` | OpenTelemetry | Distributed tracing (optional) |
 | `Next.js` | React | Frontend framework |

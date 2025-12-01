@@ -66,6 +66,7 @@ module.exports = {
             'guides/openapi-to-typescript',
             'guides/asyncapi-to-typescript',
             'guides/ci-cd-sdk-generation',
+            'guides/telemetry',
           ],
         },
       ],
