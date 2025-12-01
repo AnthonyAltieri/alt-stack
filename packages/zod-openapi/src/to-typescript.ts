@@ -7,6 +7,12 @@ import {
   type RouteInfo,
 } from "./routes";
 
+const validIdentifierRegex = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/;
+
+function quotePropertyName(name: string): string {
+  return validIdentifierRegex.test(name) ? name : `'${name}'`;
+}
+
 function generateRouteSchemaName(
   path: string,
   method: string,
@@ -53,7 +59,7 @@ function generateRouteSchemas(
         const required: string[] = [];
         for (const param of pathParams) {
           const zodExpr = convertSchema(param.schema);
-          properties.push(`${param.name}: ${zodExpr}`);
+          properties.push(`${quotePropertyName(param.name)}: ${zodExpr}`);
           if (param.required) {
             required.push(param.name);
           }
@@ -73,7 +79,7 @@ function generateRouteSchemas(
           if (!param.required) {
             zodExpr += ".optional()";
           }
-          properties.push(`${param.name}: ${zodExpr}`);
+          properties.push(`${quotePropertyName(param.name)}: ${zodExpr}`);
         }
         lines.push(
           `export const ${names.querySchemaName} = z.object({ ${properties.join(", ")} });`,
@@ -90,7 +96,7 @@ function generateRouteSchemas(
           if (!param.required) {
             zodExpr += ".optional()";
           }
-          properties.push(`${param.name}: ${zodExpr}`);
+          properties.push(`${quotePropertyName(param.name)}: ${zodExpr}`);
         }
         lines.push(
           `export const ${names.headersSchemaName} = z.object({ ${properties.join(", ")} });`,

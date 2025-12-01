@@ -1,5 +1,11 @@
 import { AnySchema, OpenAPIObjectSchema } from "./types";
 
+const validIdentifierRegex = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/;
+
+function quotePropertyName(name: string): string {
+  return validIdentifierRegex.test(name) ? name : `'${name}'`;
+}
+
 export function convertOpenAPIObjectToZod(
   schema: OpenAPIObjectSchema,
   convertSchema: (schema: AnySchema) => string,
@@ -28,7 +34,7 @@ export function convertOpenAPIObjectToZod(
       zodProp += ".optional()";
     }
 
-    entries.push(`${propName}: ${zodProp}`);
+    entries.push(`${quotePropertyName(propName)}: ${zodProp}`);
   }
 
   let result = `z.object({ ${entries.join(", ")} })`;

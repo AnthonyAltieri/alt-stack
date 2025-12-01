@@ -229,6 +229,43 @@ describe("convertOpenAPIObjectToZod", () => {
     });
   });
 
+  describe("hyphenated property names", () => {
+    it("should quote hyphenated property names", () => {
+      const result = convertOpenAPIObjectToZod(
+        {
+          type: "object",
+          properties: {
+            "first-name": { type: "string" },
+            "last-name": { type: "string" },
+            age: { type: "number" },
+          },
+          required: ["first-name"],
+        },
+        mockConvertSchema,
+      );
+      expect(result).toBe(
+        "z.object({ 'first-name': z.string(), 'last-name': z.string().optional(), age: z.number().optional() })",
+      );
+    });
+
+    it("should quote property names with special characters", () => {
+      const result = convertOpenAPIObjectToZod(
+        {
+          type: "object",
+          properties: {
+            "x-custom-header": { type: "string" },
+            "$special": { type: "string" },
+            "_private": { type: "string" },
+          },
+        },
+        mockConvertSchema,
+      );
+      expect(result).toBe(
+        "z.object({ 'x-custom-header': z.string().optional(), $special: z.string().optional(), _private: z.string().optional() })",
+      );
+    });
+  });
+
   describe("edge cases", () => {
     it("should handle properties with unknown schema types", () => {
       const result = convertOpenAPIObjectToZod(

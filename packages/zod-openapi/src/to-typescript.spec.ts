@@ -399,6 +399,58 @@ describe("openApiToZodTsCode with routes", () => {
       expect(result).toContain("'200': GetUsers200Response");
     });
 
+    it("should quote hyphenated parameter names", () => {
+      const openapi = {
+        components: { schemas: {} },
+        paths: {
+          "/foo-bar/{user-id}": {
+            get: {
+              parameters: [
+                {
+                  name: "user-id",
+                  in: "path",
+                  required: true,
+                  schema: { type: "string" },
+                },
+                {
+                  name: "page-size",
+                  in: "query",
+                  required: false,
+                  schema: { type: "number" },
+                },
+                {
+                  name: "x-custom-header",
+                  in: "header",
+                  required: true,
+                  schema: { type: "string" },
+                },
+              ],
+              responses: {
+                "200": {
+                  content: {
+                    "application/json": {
+                      schema: { type: "object", properties: {} },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      };
+
+      const result = openApiToZodTsCode(openapi, undefined, {
+        includeRoutes: true,
+      });
+
+      expect(result).toContain("'user-id': z.string()");
+      expect(result).toContain("'page-size': z.number().optional()");
+      expect(result).toContain("'x-custom-header': z.string()");
+      expect(result).toContain("GetFooBarUserIdParams");
+      expect(result).toContain("GetFooBarUserIdQuery");
+      expect(result).toContain("GetFooBarUserIdHeaders");
+    });
+
     it("should handle multiple methods on same path", () => {
       const openapi = {
         components: {
