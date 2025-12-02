@@ -448,7 +448,8 @@ jobs:
         shell: bash
         run: |
           echo "Applying version bumps from artifacts..."
-          for pkg_json in /tmp/version-bumps/*.json 2>/dev/null || true; do
+          shopt -s nullglob
+          for pkg_json in /tmp/version-bumps/*.json; do
             if [ -f "$pkg_json" ]; then
               PKG_NAME=$(node -e "console.log(require('$pkg_json').name)")
               # Find the target directory
@@ -464,19 +465,22 @@ jobs:
               done
             fi
           done
+          shopt -u nullglob
 
       - name: Recreate and push tags
         if: env.DRY_RUN != 'true'
         shell: bash
         run: |
-          for tag_file in /tmp/tags/*.txt 2>/dev/null || true; do
+          shopt -s nullglob
+          for tag_file in /tmp/tags/*.txt; do
             if [ -f "$tag_file" ]; then
               TAG_NAME=$(cat "$tag_file")
               echo "Creating tag: $TAG_NAME"
               git tag -a "$TAG_NAME" -m "Release $TAG_NAME" 2>/dev/null || echo "Tag $TAG_NAME already exists"
             fi
           done
-          
+          shopt -u nullglob
+
           git push origin --tags || echo "No new tags to push"
 
       - name: Commit version changes
