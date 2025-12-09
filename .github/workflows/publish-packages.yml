@@ -49,6 +49,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Clean and rebuild all packages
+        run: |
+          echo "🧹 Cleaning all dist directories..."
+          find packages -name "dist" -type d -exec rm -rf {} + 2>/dev/null || true
+          echo "🔨 Rebuilding all packages..."
+          pnpm turbo run build
+          echo "✅ All packages rebuilt with fresh dist files"
+
       - name: Check if SDK regeneration needed
         id: sdk-check
         shell: bash
