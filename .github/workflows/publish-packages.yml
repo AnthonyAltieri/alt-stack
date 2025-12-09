@@ -73,6 +73,7 @@ jobs:
       - name: Build core packages for SDK generation
         if: steps.sdk-check.outputs.kafka_producer_changed == 'true' || steps.sdk-check.outputs.altstack_server_changed == 'true'
         run: |
+          pnpm --filter @alt-stack/result build
           pnpm --filter @alt-stack/zod-openapi build
           pnpm --filter @alt-stack/zod-asyncapi build
           pnpm --filter @alt-stack/kafka-core build
