@@ -1,5 +1,6 @@
 // Core types
 export type { Result, Ok, Err, ResultError } from "./result.js";
+export { TaggedError } from "./result.js";
 
 // Constructors
 export { ok, err } from "./constructors.js";

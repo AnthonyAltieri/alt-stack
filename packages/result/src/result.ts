@@ -1,15 +1,57 @@
 /**
+ * Type helper to ensure a string is a literal type, not the wider `string` type.
+ * This enforces that _tag must be a const string literal.
+ */
+type StringLiteral<T> = string extends T ? never : T;
+
+/**
+ * Base class for Result errors that automatically sets `name` from `_tag`.
+ * The `_tag` property must be a const string literal (not just `string`).
+ *
+ * The type parameter is optional and will be inferred from the `_tag` property value.
+ * When provided explicitly, it enforces that `_tag` matches the specified literal type.
+ * Subclasses must define `_tag` as a readonly property.
+ * The `name` property will automatically return the value of `_tag`.
+ *
+ * @example
+ * ```typescript
+ * // Type parameter can be omitted - TypeScript infers from _tag
+ * class NotFoundError extends TaggedError {
+ *   readonly _tag = "NotFoundError";
+ *   constructor(public readonly database: string, public readonly resourceId: string) {
+ *     super(`Resource ${resourceId} not found in ${database}`);
+ *   }
+ * }
+ * ```
+ */
+export abstract class TaggedError<Tag extends string = string> extends Error {
+  abstract readonly _tag: [string] extends [Tag] ? string : StringLiteral<Tag>;
+
+  declare name: string;
+
+  constructor(message: string) {
+    super(message);
+    // Define name as a property with a getter that returns _tag
+    // This ensures name always matches _tag without manual assignment
+    Object.defineProperty(this, "name", {
+      get: () => (this as any)._tag ?? "Error",
+      enumerable: false,
+      configurable: true,
+    });
+  }
+}
+
+/**
  * Base constraint for Result errors.
  * Errors MUST extend JavaScript's Error class AND have a readonly _tag property.
  * The _tag should be a string literal type for exhaustive switch support.
  *
  * @example
  * ```typescript
- * class NotFoundError extends Error {
- *   readonly _tag = "NotFoundError" as const;
+ * class NotFoundError extends TaggedError {
+ *   readonly _tag = "NotFoundError";
  *   constructor(public readonly database: string, public readonly resourceId: string) {
  *     super(`Resource ${resourceId} not found in ${database}`);
- *     this.name = "NotFoundError";
  *   }
  * }
  * ```

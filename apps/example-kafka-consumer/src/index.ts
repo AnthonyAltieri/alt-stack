@@ -1,4 +1,5 @@
 import { init, kafkaRouter, createConsumer, ok, err, type BaseKafkaContext } from "@alt-stack/kafka-core";
+import { TaggedError } from "@alt-stack/result";
 import { Kafka } from "kafkajs";
 import { z } from "zod";
 import { env } from "./env.js";
@@ -7,11 +8,10 @@ import { env } from "./env.js";
 // Error Classes (New Pattern)
 // ============================================================================
 
-class InvalidUserError extends Error {
-  readonly _tag = "InvalidUserError" as const;
+class InvalidUserError extends TaggedError {
+  readonly _tag = "InvalidUserError";
   constructor(message: string) {
     super(message);
-    this.name = "InvalidUserError";
   }
 }
 
