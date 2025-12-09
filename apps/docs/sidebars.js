@@ -47,6 +47,7 @@ module.exports = {
           items: [
             'core-concepts/input-validation',
             'core-concepts/output-validation',
+            'core-concepts/result-type',
             'core-concepts/error-handling',
             'core-concepts/custom-context',
             'core-concepts/middleware',

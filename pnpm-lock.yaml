@@ -317,28 +317,6 @@ importers:
         specifier: ^4.0.0
         version: 4.1.12
 
-  packages/kafka-client-upstash:
-    dependencies:
-      '@alt-stack/kafka-client-core':
-        specifier: workspace:*
-        version: link:../kafka-client-core
-    devDependencies:
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.1
-      kafkajs:
-        specifier: ^2.0.0
-        version: 2.2.4
-      tsup:
-        specifier: ^8.0.0
-        version: 8.5.0(jiti@1.21.7)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.2)(yaml@2.8.1)
-      typescript:
-        specifier: ^5.9.2
-        version: 5.9.2
-      zod:
-        specifier: ^4.0.0
-        version: 4.1.12
-
   packages/kafka-client-warpstream:
     dependencies:
       '@alt-stack/kafka-client-core':
@@ -368,6 +346,10 @@ importers:
         version: 4.1.12
 
   packages/kafka-core:
+    dependencies:
+      '@alt-stack/result':
+        specifier: workspace:*
+        version: link:../result
     devDependencies:
       '@testcontainers/kafka':
         specifier: ^10.28.0
@@ -391,7 +373,29 @@ importers:
         specifier: ^4.0.0
         version: 4.1.12
 
+  packages/result:
+    devDependencies:
+      oxlint:
+        specifier: ^1.24.0
+        version: 1.24.0
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.0(jiti@1.21.7)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.2)(yaml@2.8.1)
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.2
+      vitest:
+        specifier: ^4.0.3
+        version: 4.0.3(@types/debug@4.1.12)(@types/node@22.19.1)(jiti@1.21.7)(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1)
+      zod:
+        specifier: ^4.0.0
+        version: 4.1.12
+
   packages/server-core:
+    dependencies:
+      '@alt-stack/result':
+        specifier: workspace:*
+        version: link:../result
     devDependencies:
       '@opentelemetry/api':
         specifier: ^1.9.0
@@ -513,28 +517,6 @@ importers:
         specifier: ^4.0.0
         version: 4.1.12
 
-  packages/workers-client-upstash:
-    dependencies:
-      '@alt-stack/workers-client-core':
-        specifier: workspace:*
-        version: link:../workers-client-core
-    devDependencies:
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.1
-      kafkajs:
-        specifier: ^2.0.0
-        version: 2.2.4
-      tsup:
-        specifier: ^8.0.0
-        version: 8.5.0(jiti@1.21.7)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.2)(yaml@2.8.1)
-      typescript:
-        specifier: ^5.9.2
-        version: 5.9.2
-      zod:
-        specifier: ^4.0.0
-        version: 4.1.12
-
   packages/workers-client-warpstream:
     dependencies:
       '@alt-stack/workers-client-core':
@@ -558,6 +540,10 @@ importers:
         version: 4.1.12
 
   packages/workers-core:
+    dependencies:
+      '@alt-stack/result':
+        specifier: workspace:*
+        version: link:../result
     devDependencies:
       oxlint:
         specifier: ^1.24.0
@@ -596,28 +582,6 @@ importers:
       vitest:
         specifier: ^4.0.3
         version: 4.0.3(@types/debug@4.1.12)(@types/node@22.19.1)(jiti@1.21.7)(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1)
-      zod:
-        specifier: ^4.0.0
-        version: 4.1.12
-
-  packages/workers-upstash:
-    dependencies:
-      '@alt-stack/workers-core':
-        specifier: workspace:*
-        version: link:../workers-core
-    devDependencies:
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.1
-      kafkajs:
-        specifier: ^2.0.0
-        version: 2.2.4
-      tsup:
-        specifier: ^8.0.0
-        version: 8.5.0(jiti@1.21.7)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.2)(yaml@2.8.1)
-      typescript:
-        specifier: ^5.9.2
-        version: 5.9.2
       zod:
         specifier: ^4.0.0
         version: 4.1.12

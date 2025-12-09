@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import type { TypedWorkerContext, InferInput, InferOutput, InputConfig } from "./context.js";
+import type { TypedWorkerContext, InferInput, InputConfig, WorkerHandlerResult } from "./context.js";
 import type { AnyMiddlewareFunction } from "../middleware.js";
 
 /**
@@ -37,12 +37,10 @@ export interface WorkerProcedure<
   handler: (opts: {
     input: InferInput<TInput>;
     ctx: TypedWorkerContext<TInput, TOutput, TErrors, TCustomContext>;
-  }) =>
-    | Promise<InferOutput<NonNullable<TOutput>>>
-    | InferOutput<NonNullable<TOutput>>
-    | void
-    | Promise<void>;
+  }) => WorkerHandlerResult<TErrors, TOutput> | Promise<WorkerHandlerResult<TErrors, TOutput>>;
   middleware: AnyMiddlewareFunction[];
+  /** Flags indicating which middleware return Result types (true) vs throw (false) */
+  middlewareWithErrorsFlags?: boolean[];
 }
 
 /**
@@ -66,12 +64,10 @@ export interface ReadyWorkerProcedure<
   handler: (opts: {
     input: InferInput<TInput>;
     ctx: TypedWorkerContext<TInput, TOutput, TErrors, TCustomContext>;
-  }) =>
-    | Promise<InferOutput<NonNullable<TOutput>>>
-    | InferOutput<NonNullable<TOutput>>
-    | void
-    | Promise<void>;
+  }) => WorkerHandlerResult<TErrors, TOutput> | Promise<WorkerHandlerResult<TErrors, TOutput>>;
   middleware: AnyMiddlewareFunction[];
+  /** Flags indicating which middleware return Result types (true) vs throw (false) */
+  middlewareWithErrorsFlags?: boolean[];
 }
 
 /**
@@ -92,10 +88,8 @@ export interface PendingWorkerProcedure<
   handler: (opts: {
     input: InferInput<TInput>;
     ctx: TypedWorkerContext<TInput, TOutput, TErrors, TCustomContext>;
-  }) =>
-    | Promise<InferOutput<NonNullable<TOutput>>>
-    | InferOutput<NonNullable<TOutput>>
-    | void
-    | Promise<void>;
+  }) => WorkerHandlerResult<TErrors, TOutput> | Promise<WorkerHandlerResult<TErrors, TOutput>>;
   middleware: AnyMiddlewareFunction[];
+  /** Flags indicating which middleware return Result types (true) vs throw (false) */
+  middlewareWithErrorsFlags?: boolean[];
 }

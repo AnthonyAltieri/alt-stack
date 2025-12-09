@@ -6,6 +6,7 @@ export type {
   ErrorUnion,
   BaseWorkerContext,
   TypedWorkerContext,
+  WorkerHandlerResult,
 } from "./context.js";
 
 export type {

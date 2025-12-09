@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import type { TypedContext, InferInput, InferOutput, InputConfig } from "./context.js";
+import type { TypedContext, InferInput, InferOutput, InputConfig, HandlerResult } from "./context.js";
 import type { AnyMiddlewareFunction } from "../middleware.js";
 
 export type ExtractPathParams<T extends string> = T extends `${string}{${infer Param}}${infer Rest}`
@@ -51,10 +51,7 @@ export interface Procedure<
   };
   handler: (
     ctx: TypedContext<TInput, TErrors, TCustomContext>,
-  ) =>
-    | Promise<InferOutput<NonNullable<TOutput>> | Response>
-    | InferOutput<NonNullable<TOutput>>
-    | Response;
+  ) => HandlerResult<TErrors, TOutput> | Promise<HandlerResult<TErrors, TOutput>>;
   middleware: AnyMiddlewareFunction[];
 }
 
@@ -73,11 +70,10 @@ export interface ReadyProcedure<
   handler: (opts: {
     input: InferInput<TInput>;
     ctx: TypedContext<TInput, TErrors, TCustomContext>;
-  }) =>
-    | Promise<InferOutput<NonNullable<TOutput>> | Response>
-    | InferOutput<NonNullable<TOutput>>
-    | Response;
+  }) => HandlerResult<TErrors, TOutput> | Promise<HandlerResult<TErrors, TOutput>>;
   middleware: AnyMiddlewareFunction[];
+  /** Flags indicating which middleware return Result types (true) vs throw (false) */
+  middlewareWithErrorsFlags?: boolean[];
 }
 
 export interface PendingProcedure<
@@ -94,10 +90,9 @@ export interface PendingProcedure<
   handler: (opts: {
     input: InferInput<TInput>;
     ctx: TypedContext<TInput, TErrors, TCustomContext>;
-  }) =>
-    | Promise<InferOutput<NonNullable<TOutput>> | Response>
-    | InferOutput<NonNullable<TOutput>>
-    | Response;
+  }) => HandlerResult<TErrors, TOutput> | Promise<HandlerResult<TErrors, TOutput>>;
   middleware: AnyMiddlewareFunction[];
+  /** Flags indicating which middleware return Result types (true) vs throw (false) */
+  middlewareWithErrorsFlags?: boolean[];
 }
 

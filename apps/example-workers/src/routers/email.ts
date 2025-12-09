@@ -1,4 +1,4 @@
-import { init } from "@alt-stack/workers-trigger";
+import { init, ok } from "@alt-stack/workers-trigger";
 import { z } from "zod";
 import type { AppContext } from "../context.js";
 
@@ -31,9 +31,9 @@ export const emailRouter = router({
     .task(async ({ input, ctx }) => {
       // Simulate sending email
       const emailId = `email_${Date.now()}`;
-      
+
       console.log(`Sending welcome email to ${input.email} for user ${input.name}`);
-      
+
       // Store in our "database"
       ctx.db.emails.set(emailId, {
         to: input.email,
@@ -41,21 +41,21 @@ export const emailRouter = router({
         sentAt: new Date(),
       });
 
-      return {
+      return ok({
         emailId,
         sentAt: new Date().toISOString(),
-      };
+      });
     }),
 
   // Scheduled task: Daily digest
-  "daily-digest": loggedProcedure
-    .cron("0 9 * * *", async ({ ctx }) => {
-      console.log("Running daily digest job");
-      
-      // Get all users and send digest
-      const userCount = ctx.db.users.size;
-      console.log(`Would send daily digest to ${userCount} users`);
-    }),
+  "daily-digest": loggedProcedure.cron("0 9 * * *", async ({ ctx }) => {
+    console.log("Running daily digest job");
+
+    // Get all users and send digest
+    const userCount = ctx.db.users.size;
+    console.log(`Would send daily digest to ${userCount} users`);
+    return ok(undefined);
+  }),
 
   // Queue-based task: Process bulk emails
   "process-bulk-email": loggedProcedure
@@ -68,7 +68,7 @@ export const emailRouter = router({
     .queue("bulk-emails", async ({ input, ctx }) => {
       console.log(`Processing bulk email with template ${input.templateId}`);
       console.log(`Sending to ${input.emails.length} recipients`);
-      
+
       for (const email of input.emails) {
         const emailId = `bulk_${Date.now()}_${Math.random().toString(36).slice(2)}`;
         ctx.db.emails.set(emailId, {
@@ -77,5 +77,6 @@ export const emailRouter = router({
           sentAt: new Date(),
         });
       }
+      return ok(undefined);
     }),
 });

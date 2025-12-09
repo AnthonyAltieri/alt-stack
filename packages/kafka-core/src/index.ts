@@ -1,5 +1,25 @@
 // Main export file
 
+// Re-export Result utilities from @alt-stack/result for convenience
+export {
+  ok,
+  err,
+  isOk,
+  isErr,
+  map,
+  flatMap,
+  mapError,
+  catchError,
+  unwrap,
+  unwrapOr,
+  unwrapOrElse,
+  match,
+  fold,
+  tryCatch,
+  tryCatchAsync,
+} from "@alt-stack/result";
+export type { Result, Ok, Err, InferMessageErrors, TaggedError } from "@alt-stack/result";
+
 // Router exports
 export {
   createKafkaRouter,
@@ -32,11 +52,17 @@ export type {
 export * from "./errors.js";
 
 // Middleware exports
-export { createMiddleware } from "./middleware.js";
+export { createMiddleware, createMiddlewareWithErrors, middlewareMarker, middlewareOk } from "./middleware.js";
 export type {
   MiddlewareFunction,
   MiddlewareBuilder,
   MiddlewareResult,
+  MiddlewareResultSuccess,
+  MiddlewareFunctionWithErrors,
+  MiddlewareBuilderWithErrors,
+  MiddlewareBuilderWithErrorsStaged,
+  AnyMiddlewareBuilderWithErrors,
+  AnyMiddlewareFunctionWithErrors,
   Overwrite,
 } from "./middleware.js";
 

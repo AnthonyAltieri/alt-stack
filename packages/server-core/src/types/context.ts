@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import type { Result, InferHttpErrors } from "@alt-stack/result";
 
 export type InferOutput<T extends z.ZodTypeAny> = z.infer<T>;
 
@@ -8,6 +9,17 @@ export type InferErrorSchemas<T extends Record<number, z.ZodTypeAny>> = {
 
 export type ErrorUnion<T extends Record<number, z.ZodTypeAny>> =
   InferErrorSchemas<T>[keyof InferErrorSchemas<T>];
+
+/**
+ * Infer the Result type for a handler based on errors and output schemas.
+ * When no output schema is defined, allows any value including Response objects.
+ */
+export type HandlerResult<
+  TErrors extends Record<number, z.ZodTypeAny> | undefined,
+  TOutput extends z.ZodTypeAny | undefined,
+> = TErrors extends Record<number, z.ZodTypeAny>
+  ? Result<TOutput extends z.ZodTypeAny ? InferOutput<TOutput> : unknown, InferHttpErrors<TErrors>>
+  : Result<TOutput extends z.ZodTypeAny ? InferOutput<TOutput> : unknown, never>;
 
 // ============================================================================
 // String Input Validation Types
@@ -87,8 +99,5 @@ export type TypedContext<
 > = BaseContext &
   TCustomContext & {
     input: InferInput<TInput>;
-    error: TErrors extends Record<number, z.ZodTypeAny>
-      ? (error: ErrorUnion<TErrors>) => never
-      : never;
   };
 

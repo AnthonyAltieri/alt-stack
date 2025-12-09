@@ -1,33 +1,16 @@
 # Error Handling
 
-Handle job failures gracefully.
+Handle job failures with the Result pattern.
 
-## Error Callback
+## Result Pattern
 
-```typescript
-const worker = await createWorker(router, {
-  kafka: { brokers: ["localhost:9092"] },
-  groupId: "workers",
-  onError: async (error, ctx) => {
-    console.error(`Job ${ctx.jobName} failed:`, error);
-    
-    // Send to error tracking
-    await sentry.captureException(error, {
-      extra: {
-        jobId: ctx.jobId,
-        jobName: ctx.jobName,
-        attempt: ctx.attempt,
-      },
-    });
-  },
-});
-```
-
-## Typed Errors
-
-Define expected error shapes:
+Handlers return `Result<Errors, Output>`:
 
 ```typescript
+import { init, ok, err } from "@alt-stack/workers-trigger";
+
+const { router, procedure } = init();
+
 const jobRouter = router({
   "process-payment": procedure
     .input({ payload: z.object({ orderId: z.string() }) })
@@ -41,20 +24,56 @@ const jobRouter = router({
         reason: z.string(),
       }),
     })
-    .task(async ({ input, ctx }) => {
+    .task(async ({ input }) => {
       const balance = await getBalance();
       if (balance < 0) {
-        throw ctx.error({
-          code: "INSUFFICIENT_FUNDS",
-          balance,
+        return err({
+          data: {
+            code: "INSUFFICIENT_FUNDS" as const,
+            balance,
+          },
         });
       }
+
+      await processPayment(input.orderId);
+      return ok(undefined);
     }),
 });
+```
+
+## Error Callback
+
+```typescript
+const worker = await createWorker(router, {
+  kafka: { brokers: ["localhost:9092"] },
+  groupId: "workers",
+  onError: async (error, ctx) => {
+    console.error(`Job ${ctx.jobName} failed:`, error);
+
+    // Send to error tracking
+    await sentry.captureException(error, {
+      extra: {
+        jobId: ctx.jobId,
+        jobName: ctx.jobName,
+        attempt: ctx.attempt,
+      },
+    });
+  },
+});
+```
+
+## Success Returns
+
+Use `ok()` for all successful returns:
+
+```typescript
+// Return data
+return ok({ orderId: "123", status: "processed" });
+
+// Void return
+return ok(undefined);
 ```
 
 ## Retries
 
 Kafka consumer retries are handled at the Kafka level. Configure dead letter queues in your Kafka setup for failed messages.
-
-

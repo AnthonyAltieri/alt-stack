@@ -595,3 +595,118 @@ describe("Error Response Structure", () => {
     expect(data.error).toHaveProperty("message");
   });
 });
+
+// ============================================================================
+// V2 Routes - Result-based Business Logic Tests
+// ============================================================================
+describe("V2 Routes - Result-based Business Logic", () => {
+  describe("GET /api/v2/todos/{id}/details", () => {
+    it("returns todo with canEdit=true for owner", async () => {
+      // Create a todo first
+      const created = await createTestTodo("V2 Details Test", userAuth);
+
+      const res = await request("GET", `/api/v2/todos/${created.id}/details`, {
+        headers: userAuth,
+      });
+      expect(res.status).toBe(200);
+
+      const data = await res.json();
+      expect(data).toHaveProperty("todo");
+      expect(data.todo.id).toBe(created.id);
+      expect(data).toHaveProperty("canEdit", true);
+    });
+
+    it("returns todo with canEdit=true for admin (can edit any)", async () => {
+      // Create a todo owned by regular user
+      const created = await createTestTodo("V2 Admin Can Edit", userAuth);
+
+      const res = await request("GET", `/api/v2/todos/${created.id}/details`, {
+        headers: adminAuth,
+      });
+      expect(res.status).toBe(200);
+
+      const data = await res.json();
+      expect(data).toHaveProperty("canEdit", true); // Admin can edit any todo
+    });
+
+    it("returns todo with canEdit=false for unauthenticated user", async () => {
+      // Create a todo first
+      const created = await createTestTodo("V2 Unauth Test", userAuth);
+
+      const res = await request("GET", `/api/v2/todos/${created.id}/details`);
+      expect(res.status).toBe(200);
+
+      const data = await res.json();
+      expect(data).toHaveProperty("canEdit", false);
+    });
+
+    it("returns 404 for non-existent todo", async () => {
+      const res = await request("GET", `/api/v2/todos/${NON_EXISTENT_UUID}/details`);
+      expect(res.status).toBe(404);
+
+      const data = await res.json();
+      expect(data.error.code).toBe("NOT_FOUND");
+    });
+  });
+
+  describe("PUT /api/v2/todos/{id}", () => {
+    it("updates todo using Result-based business logic", async () => {
+      // Create a todo first
+      const created = await createTestTodo("V2 Update Test", userAuth);
+
+      const res = await request("PUT", `/api/v2/todos/${created.id}`, {
+        headers: userAuth,
+        body: { title: "Updated via V2" },
+      });
+      expect(res.status).toBe(200);
+
+      const data = await res.json();
+      expect(data.title).toBe("Updated via V2");
+    });
+
+    it("returns 404 from business logic for non-existent todo", async () => {
+      const res = await request("PUT", `/api/v2/todos/${NON_EXISTENT_UUID}`, {
+        headers: userAuth,
+        body: { title: "Won't work" },
+      });
+      expect(res.status).toBe(404);
+
+      const data = await res.json();
+      expect(data.error.code).toBe("NOT_FOUND");
+    });
+
+    it("returns 403 from business logic for non-owner", async () => {
+      // Create a todo owned by admin
+      const adminTodo = await createTestTodo("Admin's V2 todo", adminAuth);
+
+      // Try to update as regular user
+      const res = await request("PUT", `/api/v2/todos/${adminTodo.id}`, {
+        headers: userAuth,
+        body: { title: "Trying to update" },
+      });
+      expect(res.status).toBe(403);
+
+      const data = await res.json();
+      expect(data.error.code).toBe("FORBIDDEN");
+    });
+  });
+
+  describe("DELETE /api/v2/todos/{id}", () => {
+    it("deletes todo using Result-based business logic", async () => {
+      // Create a todo to delete
+      const todo = await createTestTodo("To be deleted via V2", userAuth);
+
+      const res = await request("DELETE", `/api/v2/todos/${todo.id}`, {
+        headers: userAuth,
+      });
+      expect(res.status).toBe(200);
+
+      const data = await res.json();
+      expect(data.success).toBe(true);
+
+      // Verify it's gone
+      const getRes = await request("GET", `/api/todos/${todo.id}`);
+      expect(getRes.status).toBe(404);
+    });
+  });
+});

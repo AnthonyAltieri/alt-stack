@@ -1,16 +1,18 @@
 import { z } from "zod";
 import type {
-  InferOutput,
   InputConfig,
   TypedKafkaContext,
   InferInput,
   KafkaProcedure,
   ReadyKafkaProcedure,
   PendingKafkaProcedure,
+  KafkaHandlerResult,
 } from "./types.js";
 import type {
   MiddlewareFunction,
   MiddlewareBuilder,
+  MiddlewareBuilderWithErrors,
+  AnyMiddlewareBuilderWithErrors,
   Overwrite,
 } from "./middleware.js";
 
@@ -48,6 +50,7 @@ type MergeErrors<
 /**
  * Base procedure builder that accumulates configuration and middleware.
  * The key innovation: TCustomContext tracks the narrowed context type through middleware chain.
+ * TMiddlewareErrors tracks error schemas accumulated from middleware with errors.
  */
 export class BaseKafkaProcedureBuilder<
   TBaseInput extends InputConfig = { message?: never },
@@ -55,6 +58,7 @@ export class BaseKafkaProcedureBuilder<
   TBaseErrors extends Record<string, z.ZodTypeAny> | undefined = undefined,
   TCustomContext extends object = Record<string, never>,
   TRouter = unknown,
+  TMiddlewareErrors extends Record<string, z.ZodTypeAny> = {},
 > {
   private _baseConfig: {
     input: TBaseInput;
@@ -75,6 +79,12 @@ export class BaseKafkaProcedureBuilder<
     }) => Promise<any>
   > = [];
 
+  // Track middleware error schemas for merging at runtime
+  private _middlewareErrors: TMiddlewareErrors;
+
+  // Track which middleware are Result-based (have _fn)
+  private _middlewareWithErrorsFlags: boolean[] = [];
+
   constructor(
     baseConfig?: {
       input?: TBaseInput;
@@ -92,51 +102,118 @@ export class BaseKafkaProcedureBuilder<
         >,
       ) => void;
     },
+    middlewareErrors?: TMiddlewareErrors,
+    middlewareWithErrorsFlags?: boolean[],
   ) {
     this._baseConfig = {
       input: (baseConfig?.input ?? {}) as TBaseInput,
       output: baseConfig?.output,
       errors: baseConfig?.errors,
     };
+    this._middlewareErrors = (middlewareErrors ?? {}) as TMiddlewareErrors;
     if (middleware) {
       this._middleware = [...middleware];
+    }
+    if (middlewareWithErrorsFlags) {
+      this._middlewareWithErrorsFlags = [...middlewareWithErrorsFlags];
     }
   }
 
   /**
    * Add middleware with automatic context override inference.
-   * Accepts either a single middleware function or a pre-built middleware chain.
+   * Accepts either a single middleware function, a pre-built middleware chain,
+   * or a MiddlewareBuilderWithErrors (created via createMiddlewareWithErrors)
    */
-  use<$ContextOverridesOut>(
+  use<$ContextOverridesOut, $MiddlewareErrors extends Record<string, z.ZodTypeAny> = {}>(
     middlewareOrBuilder:
       | MiddlewareFunction<
-          TypedKafkaContext<InputConfig, undefined, TBaseErrors, TCustomContext>,
+          TypedKafkaContext<
+            InputConfig,
+            undefined,
+            MergeErrors<TBaseErrors, TMiddlewareErrors>,
+            TCustomContext
+          >,
           object,
           $ContextOverridesOut
         >
       | MiddlewareBuilder<
-          TypedKafkaContext<InputConfig, undefined, TBaseErrors, TCustomContext>,
+          TypedKafkaContext<
+            InputConfig,
+            undefined,
+            MergeErrors<TBaseErrors, TMiddlewareErrors>,
+            TCustomContext
+          >,
           $ContextOverridesOut
+        >
+      | MiddlewareBuilderWithErrors<
+          TypedKafkaContext<
+            InputConfig,
+            undefined,
+            MergeErrors<TBaseErrors, TMiddlewareErrors>,
+            TCustomContext
+          >,
+          $ContextOverridesOut,
+          $MiddlewareErrors
         >,
   ): BaseKafkaProcedureBuilder<
     TBaseInput,
     TBaseOutput,
     TBaseErrors,
     Overwrite<TCustomContext, $ContextOverridesOut>,
-    TRouter
+    TRouter,
+    MergeErrors<TMiddlewareErrors, $MiddlewareErrors>
   > {
+    // Check if this is a MiddlewareBuilderWithErrors (has _fn and _errors)
+    if (
+      "_fn" in middlewareOrBuilder &&
+      "_errors" in middlewareOrBuilder &&
+      middlewareOrBuilder._fn
+    ) {
+      const builder = middlewareOrBuilder as AnyMiddlewareBuilderWithErrors;
+      const mergedErrors = {
+        ...this._middlewareErrors,
+        ...builder._errors,
+      } as MergeErrors<TMiddlewareErrors, $MiddlewareErrors>;
+
+      return new BaseKafkaProcedureBuilder<
+        TBaseInput,
+        TBaseOutput,
+        TBaseErrors,
+        Overwrite<TCustomContext, $ContextOverridesOut>,
+        TRouter,
+        MergeErrors<TMiddlewareErrors, $MiddlewareErrors>
+      >(
+        this._baseConfig,
+        [...this._middleware, builder._fn] as any,
+        this.router,
+        mergedErrors,
+        [...this._middlewareWithErrorsFlags, true],
+      );
+    }
+
+    // Extract middleware array from builder or wrap single middleware
     const newMiddleware =
       "_middlewares" in middlewareOrBuilder
-        ? middlewareOrBuilder._middlewares
+        ? (middlewareOrBuilder as MiddlewareBuilder<any, any>)._middlewares
         : [middlewareOrBuilder];
+
+    // Track that these middleware are NOT Result-based
+    const newFlags = newMiddleware.map(() => false);
 
     return new BaseKafkaProcedureBuilder<
       TBaseInput,
       TBaseOutput,
       TBaseErrors,
       Overwrite<TCustomContext, $ContextOverridesOut>,
-      TRouter
-    >(this._baseConfig, [...this._middleware, ...newMiddleware] as any, this.router);
+      TRouter,
+      MergeErrors<TMiddlewareErrors, $MiddlewareErrors>
+    >(
+      this._baseConfig,
+      [...this._middleware, ...newMiddleware] as any,
+      this.router,
+      this._middlewareErrors as MergeErrors<TMiddlewareErrors, $MiddlewareErrors>,
+      [...this._middlewareWithErrorsFlags, ...newFlags],
+    );
   }
 
   input<TInput extends InputConfig>(
@@ -146,14 +223,16 @@ export class BaseKafkaProcedureBuilder<
     TBaseOutput,
     TBaseErrors,
     TCustomContext,
-    TRouter
+    TRouter,
+    TMiddlewareErrors
   > {
     return new BaseKafkaProcedureBuilder<
       MergeInputConfig<TBaseInput, TInput>,
       TBaseOutput,
       TBaseErrors,
       TCustomContext,
-      TRouter
+      TRouter,
+      TMiddlewareErrors
     >(
       {
         input: { ...this._baseConfig.input, ...input } as MergeInputConfig<
@@ -165,6 +244,8 @@ export class BaseKafkaProcedureBuilder<
       },
       this._middleware,
       this.router,
+      this._middlewareErrors,
+      this._middlewareWithErrorsFlags,
     );
   }
 
@@ -175,14 +256,16 @@ export class BaseKafkaProcedureBuilder<
     TOutput,
     TBaseErrors,
     TCustomContext,
-    TRouter
+    TRouter,
+    TMiddlewareErrors
   > {
     return new BaseKafkaProcedureBuilder<
       TBaseInput,
       TOutput,
       TBaseErrors,
       TCustomContext,
-      TRouter
+      TRouter,
+      TMiddlewareErrors
     >(
       {
         input: this._baseConfig.input,
@@ -191,6 +274,8 @@ export class BaseKafkaProcedureBuilder<
       },
       this._middleware,
       this.router,
+      this._middlewareErrors,
+      this._middlewareWithErrorsFlags,
     );
   }
 
@@ -201,14 +286,16 @@ export class BaseKafkaProcedureBuilder<
     TBaseOutput,
     MergeErrors<TBaseErrors, TErrors>,
     TCustomContext,
-    TRouter
+    TRouter,
+    TMiddlewareErrors
   > {
     return new BaseKafkaProcedureBuilder<
       TBaseInput,
       TBaseOutput,
       MergeErrors<TBaseErrors, TErrors>,
       TCustomContext,
-      TRouter
+      TRouter,
+      TMiddlewareErrors
     >(
       {
         input: this._baseConfig.input,
@@ -220,6 +307,8 @@ export class BaseKafkaProcedureBuilder<
       },
       this._middleware,
       this.router,
+      this._middlewareErrors,
+      this._middlewareWithErrorsFlags,
     );
   }
 
@@ -241,15 +330,31 @@ export class BaseKafkaProcedureBuilder<
     TBaseOutput,
     TBaseErrors,
     TCustomContext,
-    TRouterProvided
+    TRouterProvided,
+    TMiddlewareErrors
   > {
     return new BaseKafkaProcedureBuilder<
       TBaseInput,
       TBaseOutput,
       TBaseErrors,
       TCustomContext,
-      TRouterProvided
-    >(this._baseConfig, this._middleware, router);
+      TRouterProvided,
+      TMiddlewareErrors
+    >(
+      this._baseConfig,
+      this._middleware,
+      router,
+      this._middlewareErrors,
+      this._middlewareWithErrorsFlags,
+    );
+  }
+
+  // Helper method for combined errors
+  private _allErrors(): MergeErrors<TBaseErrors, TMiddlewareErrors> {
+    return {
+      ...this._middlewareErrors,
+      ...this._baseConfig.errors,
+    } as any;
   }
 
   /**
@@ -258,17 +363,29 @@ export class BaseKafkaProcedureBuilder<
   subscribe(
     handler: (opts: {
       input: InferInput<TBaseInput>;
-      ctx: TypedKafkaContext<TBaseInput, TBaseOutput, TBaseErrors, TCustomContext>;
+      ctx: TypedKafkaContext<
+        TBaseInput,
+        TBaseOutput,
+        MergeErrors<TBaseErrors, TMiddlewareErrors>,
+        TCustomContext
+      >;
     }) =>
-      | Promise<InferOutput<NonNullable<TBaseOutput>>>
-      | InferOutput<NonNullable<TBaseOutput>>
-      | void
-      | Promise<void>,
-  ): ReadyKafkaProcedure<TBaseInput, TBaseOutput, TBaseErrors, TCustomContext> {
+      | KafkaHandlerResult<MergeErrors<TBaseErrors, TMiddlewareErrors>, TBaseOutput>
+      | Promise<KafkaHandlerResult<MergeErrors<TBaseErrors, TMiddlewareErrors>, TBaseOutput>>,
+  ): ReadyKafkaProcedure<
+    TBaseInput,
+    TBaseOutput,
+    MergeErrors<TBaseErrors, TMiddlewareErrors>,
+    TCustomContext
+  > {
     return {
-      config: this._baseConfig as any,
+      config: {
+        ...this._baseConfig,
+        errors: this._allErrors(),
+      } as any,
       handler,
       middleware: this._middleware as any,
+      middlewareWithErrorsFlags: this._middlewareWithErrorsFlags,
     };
   }
 
@@ -278,17 +395,29 @@ export class BaseKafkaProcedureBuilder<
   handler(
     handlerFn: (opts: {
       input: InferInput<TBaseInput>;
-      ctx: TypedKafkaContext<TBaseInput, TBaseOutput, TBaseErrors, TCustomContext>;
+      ctx: TypedKafkaContext<
+        TBaseInput,
+        TBaseOutput,
+        MergeErrors<TBaseErrors, TMiddlewareErrors>,
+        TCustomContext
+      >;
     }) =>
-      | Promise<InferOutput<NonNullable<TBaseOutput>>>
-      | InferOutput<NonNullable<TBaseOutput>>
-      | void
-      | Promise<void>,
-  ): PendingKafkaProcedure<TBaseInput, TBaseOutput, TBaseErrors, TCustomContext> {
+      | KafkaHandlerResult<MergeErrors<TBaseErrors, TMiddlewareErrors>, TBaseOutput>
+      | Promise<KafkaHandlerResult<MergeErrors<TBaseErrors, TMiddlewareErrors>, TBaseOutput>>,
+  ): PendingKafkaProcedure<
+    TBaseInput,
+    TBaseOutput,
+    MergeErrors<TBaseErrors, TMiddlewareErrors>,
+    TCustomContext
+  > {
     return {
-      config: this._baseConfig as any,
+      config: {
+        ...this._baseConfig,
+        errors: this._allErrors(),
+      } as any,
       handler: handlerFn,
       middleware: this._middleware as any,
+      middlewareWithErrorsFlags: this._middlewareWithErrorsFlags,
     };
   }
 }

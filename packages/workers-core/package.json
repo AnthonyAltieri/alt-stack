@@ -20,6 +20,9 @@
   "keywords": [],
   "author": "",
   "license": "MIT",
+  "dependencies": {
+    "@alt-stack/result": "workspace:*"
+  },
   "peerDependencies": {
     "zod": "^4.0.0"
   },
