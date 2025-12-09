@@ -14,7 +14,7 @@ on:
         type: boolean
 
 jobs:
-  detect-changes:
+  detect-unpublished:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -56,17 +56,17 @@ jobs:
           KAFKA_PRODUCER_CHANGED=false
           ALTSTACK_SERVER_CHANGED=false
           CHANGED_FILES=$(git diff --name-only HEAD^1 HEAD 2>/dev/null || echo "")
-          
+
           if echo "$CHANGED_FILES" | grep -q "^apps/example-kafka-producer/"; then
             KAFKA_PRODUCER_CHANGED=true
             echo "📦 Kafka producer app changed - will regenerate SDK"
           fi
-          
+
           if echo "$CHANGED_FILES" | grep -q "^apps/example-altstack-server/"; then
             ALTSTACK_SERVER_CHANGED=true
             echo "📦 Altstack server app changed - will regenerate SDK"
           fi
-          
+
           echo "kafka_producer_changed=$KAFKA_PRODUCER_CHANGED" >> $GITHUB_OUTPUT
           echo "altstack_server_changed=$ALTSTACK_SERVER_CHANGED" >> $GITHUB_OUTPUT
 
@@ -102,7 +102,7 @@ jobs:
           SERVER_PID=$!
           MAX_ATTEMPTS=30
           ATTEMPT=0
-          
+
           while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
             sleep 2
             if curl -f -s http://localhost:3000/docs/openapi.json > /dev/null 2>&1; then
@@ -112,14 +112,14 @@ jobs:
             ATTEMPT=$((ATTEMPT + 1))
             echo "Waiting for server... attempt $ATTEMPT/$MAX_ATTEMPTS"
           done
-          
+
           if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
             echo "✗ Server failed to start"
             cat server.log || true
             kill $SERVER_PID 2>/dev/null || true
             exit 1
           fi
-          
+
           cd ../..
           pnpm --filter @alt-stack/zod-openapi exec tsx src/cli.ts \
             http://localhost:3000/docs/openapi.json \
@@ -127,7 +127,7 @@ jobs:
           kill $SERVER_PID 2>/dev/null || true
           echo "✓ Regenerated example-altstack-server-sdk"
 
-      - name: Detect changed packages and set matrix
+      - name: Detect packages with unpublished versions
         id: set-matrix
         shell: bash
         run: |
@@ -135,7 +135,7 @@ jobs:
           const { execSync } = require('child_process');
           const fs = require('fs');
           const path = require('path');
-          
+
           const packageDirs = fs.readdirSync('packages')
             .map(dir => path.join('packages', dir))
             .filter(dir => {
@@ -146,71 +146,47 @@ jobs:
                 return pkgJson.name?.startsWith('@alt-stack/') && pkgJson.name !== '@alt-stack/typescript-config';
               } catch { return false; }
             });
-          
-          let changedFiles = [];
-          try {
-            changedFiles = execSync('git diff --name-only HEAD^1 HEAD', { encoding: 'utf-8' })
-              .trim().split('\n').filter(Boolean);
-          } catch {
-            changedFiles = execSync('git diff --name-only HEAD', { encoding: 'utf-8' })
-              .trim().split('\n').filter(Boolean);
-          }
-          
-          let turboPackages = [];
-          try {
-            const turboOutput = execSync('turbo run build --filter="[HEAD^1]" --dry-run=json', { 
-              encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore']
-            });
-            const turboData = JSON.parse(turboOutput);
-            if (turboData.tasks) {
-              turboPackages = turboData.tasks
-                .map(t => t.package)
-                .filter(p => p?.startsWith('@alt-stack/') && p !== '@alt-stack/typescript-config');
-            }
-          } catch {}
-          
-          const changedPackages = new Set(turboPackages);
-          
-          for (const pkgDir of packageDirs) {
-            const pkgJson = JSON.parse(fs.readFileSync(path.join(pkgDir, 'package.json'), 'utf-8'));
-            if (changedFiles.some(f => f.startsWith(pkgDir + '/'))) {
-              changedPackages.add(pkgJson.name);
-            }
-          }
-          
-          if (changedFiles.some(f => f.startsWith('apps/example-kafka-producer/'))) {
-            changedPackages.add('@alt-stack/example-kafka-producer-sdk');
-          }
-          if (changedFiles.some(f => f.startsWith('apps/example-altstack-server/'))) {
-            changedPackages.add('@alt-stack/example-altstack-server-sdk');
-          }
-          
-          // Build matrix with package info
+
           const matrix = [];
-          for (const pkgName of changedPackages) {
-            for (const dir of packageDirs) {
-              const pkgJson = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf-8'));
-              if (pkgJson.name === pkgName) {
-                matrix.push({ name: pkgName, directory: dir });
-                break;
-              }
+
+          for (const dir of packageDirs) {
+            const pkgJson = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf-8'));
+            const pkgName = pkgJson.name;
+            const localVersion = pkgJson.version;
+
+            // Check if this version exists on npm
+            let npmVersion = null;
+            try {
+              npmVersion = execSync(`npm view "${pkgName}@${localVersion}" version 2>/dev/null`, {
+                encoding: 'utf-8',
+                stdio: ['pipe', 'pipe', 'pipe']
+              }).trim();
+            } catch {
+              // Version doesn't exist on npm
+            }
+
+            if (!npmVersion) {
+              console.log(`📦 ${pkgName}@${localVersion} not on npm - will publish`);
+              matrix.push({ name: pkgName, directory: dir, version: localVersion });
+            } else {
+              console.log(`✓ ${pkgName}@${localVersion} already on npm - skipping`);
             }
           }
-          
-          console.log('Changed packages:', JSON.stringify(matrix, null, 2));
+
+          console.log('\nPackages to publish:', JSON.stringify(matrix, null, 2));
           fs.appendFileSync(process.env.GITHUB_OUTPUT, `matrix=${JSON.stringify({ include: matrix })}\n`);
           fs.appendFileSync(process.env.GITHUB_OUTPUT, `has_packages=${matrix.length > 0}\n`);
           EOF
 
   publish:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.has_packages == 'true'
+    needs: detect-unpublished
+    if: needs.detect-unpublished.outputs.has_packages == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     strategy:
       fail-fast: false
-      matrix: ${{ fromJson(needs.detect-changes.outputs.matrix) }}
+      matrix: ${{ fromJson(needs.detect-unpublished.outputs.matrix) }}
     env:
       DRY_RUN: ${{ github.event.inputs.dry_run == 'true' }}
     steps:
@@ -249,93 +225,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Analyze commits and bump version
-        id: version
-        shell: bash
-        run: |
-          node << 'EOF'
-          const { execSync } = require('child_process');
-          const fs = require('fs');
-          const path = require('path');
-          
-          const pkgName = '${{ matrix.name }}';
-          const pkgDir = '${{ matrix.directory }}';
-          const isDryRun = process.env.DRY_RUN === 'true';
-          
-          const sdkToAppDir = {
-            '@alt-stack/example-kafka-producer-sdk': 'apps/example-kafka-producer',
-            '@alt-stack/example-altstack-server-sdk': 'apps/example-altstack-server'
-          };
-          
-          const pkgJson = JSON.parse(fs.readFileSync(path.join(pkgDir, 'package.json'), 'utf-8'));
-          const currentVersion = pkgJson.version;
-          
-          // Find last tag for this package
-          let lastTag = null;
-          try {
-            const tags = execSync('git tag --sort=-version:refname', { encoding: 'utf-8' })
-              .trim().split('\n').filter(Boolean);
-            const pkgTagPattern = pkgName.replace('@alt-stack/', '');
-            for (const tag of tags) {
-              if (tag.includes(pkgTagPattern) || tag.startsWith(pkgName + '@')) {
-                lastTag = tag;
-                break;
-              }
-            }
-          } catch {}
-          
-          let sinceRef = 'HEAD^1';
-          try { execSync('git rev-parse HEAD^1', { stdio: 'ignore' }); }
-          catch { sinceRef = execSync('git rev-list --max-parents=0 HEAD', { encoding: 'utf-8' }).trim(); }
-          if (lastTag) sinceRef = lastTag;
-          
-          const commitDirs = [pkgDir];
-          if (sdkToAppDir[pkgName]) commitDirs.push(sdkToAppDir[pkgName]);
-          
-          let commits = [];
-          for (const dir of commitDirs) {
-            try {
-              const out = execSync(`git log ${sinceRef}..HEAD --pretty=format:"%s" -- ${dir}`,
-                { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] });
-              commits.push(...out.trim().split('\n').filter(Boolean));
-            } catch {}
-          }
-          
-          let bumpType = 'patch';
-          let hasBreaking = false, hasFeature = false;
-          for (const commit of commits) {
-            if (commit.includes('BREAKING CHANGE') || commit.includes('BREAKING:') || /^[^:]+!:/.test(commit)) {
-              hasBreaking = true; break;
-            }
-            if (/^(feat|feature)(\(.+\))?:/i.test(commit)) hasFeature = true;
-          }
-          if (hasBreaking) bumpType = 'major';
-          else if (hasFeature) bumpType = 'minor';
-          
-          const [major, minor, patch] = currentVersion.split('.').map(Number);
-          if (bumpType === 'major' && major === 0) {
-            console.log(`Package ${pkgName} is pre-1.0, treating breaking change as minor bump`);
-            bumpType = 'minor';
-          }
-          
-          let newVersion;
-          if (bumpType === 'major') newVersion = `${major + 1}.0.0`;
-          else if (bumpType === 'minor') newVersion = `${major}.${minor + 1}.0`;
-          else newVersion = `${major}.${minor}.${patch + 1}`;
-          
-          if (!isDryRun) {
-            execSync(`pnpm version ${bumpType} --no-git-tag`, { cwd: pkgDir, stdio: 'inherit' });
-          } else {
-            console.log(`[DRY-RUN] Would bump ${pkgName} from ${currentVersion} to ${newVersion} (${bumpType})`);
-          }
-          
-          console.log(`${isDryRun ? '[DRY-RUN] ' : ''}Bumped ${pkgName} from ${currentVersion} to ${newVersion} (${bumpType})`);
-          
-          fs.appendFileSync(process.env.GITHUB_OUTPUT, `old_version=${currentVersion}\n`);
-          fs.appendFileSync(process.env.GITHUB_OUTPUT, `new_version=${newVersion}\n`);
-          fs.appendFileSync(process.env.GITHUB_OUTPUT, `bump_type=${bumpType}\n`);
-          EOF
-
       - name: Build package
         shell: bash
         run: |
@@ -362,40 +251,28 @@ jobs:
         shell: bash
         run: |
           if [ "$DRY_RUN" == "true" ]; then
-            echo "🧪 [DRY-RUN] Would publish ${{ matrix.name }}@${{ steps.version.outputs.new_version }}"
+            echo "🧪 [DRY-RUN] Would publish ${{ matrix.name }}@${{ matrix.version }}"
           else
-            # Check if version already exists on npm
-            if npm view "${{ matrix.name }}@${{ steps.version.outputs.new_version }}" version 2>/dev/null; then
-              echo "⏭️ Skipping ${{ matrix.name }}@${{ steps.version.outputs.new_version }} - already published"
-            else
-              echo "Publishing ${{ matrix.name }}@${{ steps.version.outputs.new_version }}..."
-              cd "${{ matrix.directory }}"
-              pnpm publish --access public --no-git-checks
-              echo "✓ Successfully published ${{ matrix.name }}@${{ steps.version.outputs.new_version }}"
-            fi
+            echo "Publishing ${{ matrix.name }}@${{ matrix.version }}..."
+            cd "${{ matrix.directory }}"
+            pnpm publish --access public --no-git-checks
+            echo "✓ Successfully published ${{ matrix.name }}@${{ matrix.version }}"
           fi
 
       - name: Create git tag
         if: env.DRY_RUN != 'true'
         shell: bash
         run: |
-          TAG_NAME="${{ matrix.name }}@${{ steps.version.outputs.new_version }}"
+          TAG_NAME="${{ matrix.name }}@${{ matrix.version }}"
           echo "Creating tag: $TAG_NAME"
-          git tag -a "$TAG_NAME" -m "Release $TAG_NAME"
-
-      - name: Upload version bump info
-        uses: actions/upload-artifact@v4
-        with:
-          name: version-bump-${{ hashFiles(format('{0}/package.json', matrix.directory)) }}
-          path: ${{ matrix.directory }}/package.json
-          retention-days: 1
+          git tag -a "$TAG_NAME" -m "Release $TAG_NAME" 2>/dev/null || echo "Tag $TAG_NAME already exists"
 
       - name: Upload git tag
         if: env.DRY_RUN != 'true'
         shell: bash
         run: |
           mkdir -p /tmp/tags
-          echo "${{ matrix.name }}@${{ steps.version.outputs.new_version }}" > /tmp/tags/${{ hashFiles(format('{0}/package.json', matrix.directory)) }}.txt
+          echo "${{ matrix.name }}@${{ matrix.version }}" > /tmp/tags/${{ hashFiles(format('{0}/package.json', matrix.directory)) }}.txt
 
       - name: Upload tag artifact
         if: env.DRY_RUN != 'true'
@@ -411,12 +288,12 @@ jobs:
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "🧪 DRY-RUN SUMMARY for ${{ matrix.name }}"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "  • ${{ matrix.name }}: ${{ steps.version.outputs.old_version }} → ${{ steps.version.outputs.new_version }} (${{ steps.version.outputs.bump_type }})"
+          echo "  • Would publish: ${{ matrix.name }}@${{ matrix.version }}"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
   finalize:
-    needs: [detect-changes, publish]
-    if: always() && needs.detect-changes.outputs.has_packages == 'true' && needs.publish.result == 'success'
+    needs: [detect-unpublished, publish]
+    if: always() && needs.detect-unpublished.outputs.has_packages == 'true' && needs.publish.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -434,13 +311,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Download all version bump artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: version-bump-*
-          path: /tmp/version-bumps
-          merge-multiple: true
-
       - name: Download all tag artifacts
         if: env.DRY_RUN != 'true'
         uses: actions/download-artifact@v4
@@ -450,30 +320,7 @@ jobs:
           merge-multiple: true
         continue-on-error: true
 
-      - name: Apply version bumps
-        shell: bash
-        run: |
-          echo "Applying version bumps from artifacts..."
-          shopt -s nullglob
-          for pkg_json in /tmp/version-bumps/*.json; do
-            if [ -f "$pkg_json" ]; then
-              PKG_NAME=$(node -e "console.log(require('$pkg_json').name)")
-              # Find the target directory
-              for dir in packages/*/; do
-                if [ -f "${dir}package.json" ]; then
-                  DIR_PKG_NAME=$(node -e "console.log(require('./${dir}package.json').name)")
-                  if [ "$PKG_NAME" == "$DIR_PKG_NAME" ]; then
-                    cp "$pkg_json" "${dir}package.json"
-                    echo "✓ Updated ${dir}package.json"
-                    break
-                  fi
-                fi
-              done
-            fi
-          done
-          shopt -u nullglob
-
-      - name: Recreate and push tags
+      - name: Push tags
         if: env.DRY_RUN != 'true'
         shell: bash
         run: |
@@ -489,23 +336,6 @@ jobs:
 
           git push origin --tags || echo "No new tags to push"
 
-      - name: Commit version changes
-        if: env.DRY_RUN != 'true'
-        shell: bash
-        run: |
-          # Add SDK source files if regenerated
-          git add packages/example-kafka-producer-sdk/src/index.ts 2>/dev/null || true
-          git add packages/example-altstack-server-sdk/src/index.ts 2>/dev/null || true
-          git add apps/example-kafka-producer/asyncapi.json 2>/dev/null || true
-          
-          git add packages/*/package.json
-          if git diff --staged --quiet; then
-            echo "No version changes to commit"
-          else
-            git commit -m "chore: bump package versions [skip ci]"
-            git push origin HEAD:${{ github.ref_name }}
-          fi
-
       - name: Dry-run final summary
         if: env.DRY_RUN == 'true'
         run: |
@@ -515,5 +345,4 @@ jobs:
           echo "✅ All checks passed! This workflow would have:"
           echo "  • Published packages to npm"
           echo "  • Created git tags"
-          echo "  • Committed version bumps"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
