@@ -1,6 +1,5 @@
 import { z } from "zod";
 import type {
-  InferOutput,
   InputConfig,
   TypedWorkerContext,
   InferInput,
@@ -8,10 +7,13 @@ import type {
   ReadyWorkerProcedure,
   PendingWorkerProcedure,
   CronConfig,
+  WorkerHandlerResult,
 } from "./types/index.js";
 import type {
   MiddlewareFunction,
   MiddlewareBuilder,
+  MiddlewareBuilderWithErrors,
+  AnyMiddlewareBuilderWithErrors,
   Overwrite,
 } from "./middleware.js";
 
@@ -44,6 +46,7 @@ type MergeErrors<
 /**
  * Base procedure builder that accumulates configuration and middleware.
  * TCustomContext tracks the narrowed context type through the middleware chain.
+ * TMiddlewareErrors tracks error schemas accumulated from middleware with errors.
  */
 export class BaseWorkerProcedureBuilder<
   TBaseInput extends InputConfig = { payload?: never },
@@ -51,6 +54,7 @@ export class BaseWorkerProcedureBuilder<
   TBaseErrors extends Record<string, z.ZodTypeAny> | undefined = undefined,
   TCustomContext extends object = Record<string, never>,
   TRouter = unknown,
+  TMiddlewareErrors extends Record<string, z.ZodTypeAny> = {},
 > {
   private _baseConfig: {
     input: TBaseInput;
@@ -70,6 +74,9 @@ export class BaseWorkerProcedureBuilder<
     }) => Promise<any>
   > = [];
 
+  private _middlewareErrors: TMiddlewareErrors;
+  private _middlewareWithErrorsFlags: boolean[] = [];
+
   constructor(
     baseConfig?: {
       input?: TBaseInput;
@@ -87,50 +94,113 @@ export class BaseWorkerProcedureBuilder<
         >,
       ) => void;
     },
+    middlewareErrors?: TMiddlewareErrors,
+    middlewareWithErrorsFlags?: boolean[],
   ) {
     this._baseConfig = {
       input: (baseConfig?.input ?? {}) as TBaseInput,
       output: baseConfig?.output,
       errors: baseConfig?.errors,
     };
+    this._middlewareErrors = (middlewareErrors ?? {}) as TMiddlewareErrors;
     if (middleware) {
       this._middleware = [...middleware];
+    }
+    if (middlewareWithErrorsFlags) {
+      this._middlewareWithErrorsFlags = [...middlewareWithErrorsFlags];
     }
   }
 
   /**
    * Add middleware with automatic context override inference.
    */
-  use<$ContextOverridesOut>(
+  use<$ContextOverridesOut, $MiddlewareErrors extends Record<string, z.ZodTypeAny> = {}>(
     middlewareOrBuilder:
       | MiddlewareFunction<
-          TypedWorkerContext<InputConfig, undefined, TBaseErrors, TCustomContext>,
+          TypedWorkerContext<
+            InputConfig,
+            undefined,
+            MergeErrors<TBaseErrors, TMiddlewareErrors>,
+            TCustomContext
+          >,
           object,
           $ContextOverridesOut
         >
       | MiddlewareBuilder<
-          TypedWorkerContext<InputConfig, undefined, TBaseErrors, TCustomContext>,
+          TypedWorkerContext<
+            InputConfig,
+            undefined,
+            MergeErrors<TBaseErrors, TMiddlewareErrors>,
+            TCustomContext
+          >,
           $ContextOverridesOut
+        >
+      | MiddlewareBuilderWithErrors<
+          TypedWorkerContext<
+            InputConfig,
+            undefined,
+            MergeErrors<TBaseErrors, TMiddlewareErrors>,
+            TCustomContext
+          >,
+          $ContextOverridesOut,
+          $MiddlewareErrors
         >,
   ): BaseWorkerProcedureBuilder<
     TBaseInput,
     TBaseOutput,
     TBaseErrors,
     Overwrite<TCustomContext, $ContextOverridesOut>,
-    TRouter
+    TRouter,
+    MergeErrors<TMiddlewareErrors, $MiddlewareErrors>
   > {
+    if (
+      "_fn" in middlewareOrBuilder &&
+      "_errors" in middlewareOrBuilder &&
+      middlewareOrBuilder._fn
+    ) {
+      const builder = middlewareOrBuilder as AnyMiddlewareBuilderWithErrors;
+      const mergedErrors = {
+        ...this._middlewareErrors,
+        ...builder._errors,
+      } as MergeErrors<TMiddlewareErrors, $MiddlewareErrors>;
+
+      return new BaseWorkerProcedureBuilder<
+        TBaseInput,
+        TBaseOutput,
+        TBaseErrors,
+        Overwrite<TCustomContext, $ContextOverridesOut>,
+        TRouter,
+        MergeErrors<TMiddlewareErrors, $MiddlewareErrors>
+      >(
+        this._baseConfig,
+        [...this._middleware, builder._fn] as any,
+        this.router,
+        mergedErrors,
+        [...this._middlewareWithErrorsFlags, true],
+      );
+    }
+
     const newMiddleware =
       "_middlewares" in middlewareOrBuilder
-        ? middlewareOrBuilder._middlewares
+        ? (middlewareOrBuilder as MiddlewareBuilder<any, any>)._middlewares
         : [middlewareOrBuilder];
+
+    const newFlags = newMiddleware.map(() => false);
 
     return new BaseWorkerProcedureBuilder<
       TBaseInput,
       TBaseOutput,
       TBaseErrors,
       Overwrite<TCustomContext, $ContextOverridesOut>,
-      TRouter
-    >(this._baseConfig, [...this._middleware, ...newMiddleware] as any, this.router);
+      TRouter,
+      MergeErrors<TMiddlewareErrors, $MiddlewareErrors>
+    >(
+      this._baseConfig,
+      [...this._middleware, ...newMiddleware] as any,
+      this.router,
+      this._middlewareErrors as MergeErrors<TMiddlewareErrors, $MiddlewareErrors>,
+      [...this._middlewareWithErrorsFlags, ...newFlags],
+    );
   }
 
   /**
@@ -143,14 +213,16 @@ export class BaseWorkerProcedureBuilder<
     TBaseOutput,
     TBaseErrors,
     TCustomContext,
-    TRouter
+    TRouter,
+    TMiddlewareErrors
   > {
     return new BaseWorkerProcedureBuilder<
       MergeInputConfig<TBaseInput, TInput>,
       TBaseOutput,
       TBaseErrors,
       TCustomContext,
-      TRouter
+      TRouter,
+      TMiddlewareErrors
     >(
       {
         input: { ...this._baseConfig.input, ...input } as MergeInputConfig<
@@ -162,6 +234,8 @@ export class BaseWorkerProcedureBuilder<
       },
       this._middleware,
       this.router,
+      this._middlewareErrors,
+      this._middlewareWithErrorsFlags,
     );
   }
 
@@ -175,14 +249,16 @@ export class BaseWorkerProcedureBuilder<
     TOutput,
     TBaseErrors,
     TCustomContext,
-    TRouter
+    TRouter,
+    TMiddlewareErrors
   > {
     return new BaseWorkerProcedureBuilder<
       TBaseInput,
       TOutput,
       TBaseErrors,
       TCustomContext,
-      TRouter
+      TRouter,
+      TMiddlewareErrors
     >(
       {
         input: this._baseConfig.input,
@@ -191,6 +267,8 @@ export class BaseWorkerProcedureBuilder<
       },
       this._middleware,
       this.router,
+      this._middlewareErrors,
+      this._middlewareWithErrorsFlags,
     );
   }
 
@@ -204,14 +282,16 @@ export class BaseWorkerProcedureBuilder<
     TBaseOutput,
     MergeErrors<TBaseErrors, TErrors>,
     TCustomContext,
-    TRouter
+    TRouter,
+    TMiddlewareErrors
   > {
     return new BaseWorkerProcedureBuilder<
       TBaseInput,
       TBaseOutput,
       MergeErrors<TBaseErrors, TErrors>,
       TCustomContext,
-      TRouter
+      TRouter,
+      TMiddlewareErrors
     >(
       {
         input: this._baseConfig.input,
@@ -223,7 +303,16 @@ export class BaseWorkerProcedureBuilder<
       },
       this._middleware,
       this.router,
+      this._middlewareErrors,
+      this._middlewareWithErrorsFlags,
     );
+  }
+
+  private _allErrors(): MergeErrors<TBaseErrors, TMiddlewareErrors> {
+    return {
+      ...this._middlewareErrors,
+      ...this._baseConfig.errors,
+    } as any;
   }
 
   /**
@@ -232,56 +321,68 @@ export class BaseWorkerProcedureBuilder<
   task(
     handler: (opts: {
       input: InferInput<TBaseInput>;
-      ctx: TypedWorkerContext<TBaseInput, TBaseOutput, TBaseErrors, TCustomContext>;
+      ctx: TypedWorkerContext<
+        TBaseInput,
+        TBaseOutput,
+        MergeErrors<TBaseErrors, TMiddlewareErrors>,
+        TCustomContext
+      >;
     }) =>
-      | Promise<InferOutput<NonNullable<TBaseOutput>>>
-      | InferOutput<NonNullable<TBaseOutput>>
-      | void
-      | Promise<void>,
-  ): ReadyWorkerProcedure<TBaseInput, TBaseOutput, TBaseErrors, TCustomContext> {
+      | WorkerHandlerResult<MergeErrors<TBaseErrors, TMiddlewareErrors>, TBaseOutput>
+      | Promise<WorkerHandlerResult<MergeErrors<TBaseErrors, TMiddlewareErrors>, TBaseOutput>>,
+  ): ReadyWorkerProcedure<
+    TBaseInput,
+    TBaseOutput,
+    MergeErrors<TBaseErrors, TMiddlewareErrors>,
+    TCustomContext
+  > {
     return {
       type: "task",
-      config: this._baseConfig as any,
+      config: {
+        ...this._baseConfig,
+        errors: this._allErrors(),
+      } as any,
       handler,
       middleware: this._middleware as any,
+      middlewareWithErrorsFlags: this._middlewareWithErrorsFlags,
     };
   }
 
   /**
    * Create a scheduled job that runs on a cron schedule.
-   *
-   * @example
-   * ```typescript
-   * procedure.cron("0 9 * * *", async ({ ctx }) => {
-   *   // Runs daily at 9am
-   * });
-   *
-   * // With timezone
-   * procedure.cron({ pattern: "0 9 * * *", timezone: "America/New_York" }, async ({ ctx }) => {
-   *   // Runs daily at 9am EST
-   * });
-   * ```
    */
   cron(
     schedule: string | CronConfig,
     handler: (opts: {
       input: InferInput<TBaseInput>;
-      ctx: TypedWorkerContext<TBaseInput, TBaseOutput, TBaseErrors, TCustomContext>;
+      ctx: TypedWorkerContext<
+        TBaseInput,
+        TBaseOutput,
+        MergeErrors<TBaseErrors, TMiddlewareErrors>,
+        TCustomContext
+      >;
     }) =>
-      | Promise<InferOutput<NonNullable<TBaseOutput>>>
-      | InferOutput<NonNullable<TBaseOutput>>
-      | void
-      | Promise<void>,
-  ): ReadyWorkerProcedure<TBaseInput, TBaseOutput, TBaseErrors, TCustomContext> {
+      | WorkerHandlerResult<MergeErrors<TBaseErrors, TMiddlewareErrors>, TBaseOutput>
+      | Promise<WorkerHandlerResult<MergeErrors<TBaseErrors, TMiddlewareErrors>, TBaseOutput>>,
+  ): ReadyWorkerProcedure<
+    TBaseInput,
+    TBaseOutput,
+    MergeErrors<TBaseErrors, TMiddlewareErrors>,
+    TCustomContext
+  > {
     const cronConfig: CronConfig =
       typeof schedule === "string" ? { pattern: schedule } : schedule;
 
     return {
       type: "cron",
       cron: cronConfig,
-      config: this._baseConfig as any,
+      config: {
+        ...this._baseConfig,
+        errors: this._allErrors(),
+      } as any,
       handler,
       middleware: this._middleware as any,
+      middlewareWithErrorsFlags: this._middlewareWithErrorsFlags,
     };
   }
 
@@ -292,19 +393,31 @@ export class BaseWorkerProcedureBuilder<
     queueName: string,
     handler: (opts: {
       input: InferInput<TBaseInput>;
-      ctx: TypedWorkerContext<TBaseInput, TBaseOutput, TBaseErrors, TCustomContext>;
+      ctx: TypedWorkerContext<
+        TBaseInput,
+        TBaseOutput,
+        MergeErrors<TBaseErrors, TMiddlewareErrors>,
+        TCustomContext
+      >;
     }) =>
-      | Promise<InferOutput<NonNullable<TBaseOutput>>>
-      | InferOutput<NonNullable<TBaseOutput>>
-      | void
-      | Promise<void>,
-  ): ReadyWorkerProcedure<TBaseInput, TBaseOutput, TBaseErrors, TCustomContext> {
+      | WorkerHandlerResult<MergeErrors<TBaseErrors, TMiddlewareErrors>, TBaseOutput>
+      | Promise<WorkerHandlerResult<MergeErrors<TBaseErrors, TMiddlewareErrors>, TBaseOutput>>,
+  ): ReadyWorkerProcedure<
+    TBaseInput,
+    TBaseOutput,
+    MergeErrors<TBaseErrors, TMiddlewareErrors>,
+    TCustomContext
+  > {
     return {
       type: "queue",
       queue: queueName,
-      config: this._baseConfig as any,
+      config: {
+        ...this._baseConfig,
+        errors: this._allErrors(),
+      } as any,
       handler,
       middleware: this._middleware as any,
+      middlewareWithErrorsFlags: this._middlewareWithErrorsFlags,
     };
   }
 
@@ -315,17 +428,29 @@ export class BaseWorkerProcedureBuilder<
   handler(
     handlerFn: (opts: {
       input: InferInput<TBaseInput>;
-      ctx: TypedWorkerContext<TBaseInput, TBaseOutput, TBaseErrors, TCustomContext>;
+      ctx: TypedWorkerContext<
+        TBaseInput,
+        TBaseOutput,
+        MergeErrors<TBaseErrors, TMiddlewareErrors>,
+        TCustomContext
+      >;
     }) =>
-      | Promise<InferOutput<NonNullable<TBaseOutput>>>
-      | InferOutput<NonNullable<TBaseOutput>>
-      | void
-      | Promise<void>,
-  ): PendingWorkerProcedure<TBaseInput, TBaseOutput, TBaseErrors, TCustomContext> {
+      | WorkerHandlerResult<MergeErrors<TBaseErrors, TMiddlewareErrors>, TBaseOutput>
+      | Promise<WorkerHandlerResult<MergeErrors<TBaseErrors, TMiddlewareErrors>, TBaseOutput>>,
+  ): PendingWorkerProcedure<
+    TBaseInput,
+    TBaseOutput,
+    MergeErrors<TBaseErrors, TMiddlewareErrors>,
+    TCustomContext
+  > {
     return {
-      config: this._baseConfig as any,
+      config: {
+        ...this._baseConfig,
+        errors: this._allErrors(),
+      } as any,
       handler: handlerFn,
       middleware: this._middleware as any,
+      middlewareWithErrorsFlags: this._middlewareWithErrorsFlags,
     };
   }
 }

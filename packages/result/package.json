@@ -1,7 +1,7 @@
 {
-  "name": "@alt-stack/server-core",
+  "name": "@alt-stack/result",
   "version": "0.1.0",
-  "description": "Framework-agnostic core for type-safe server framework with Zod validation",
+  "description": "Type-safe Result type for explicit error handling inspired by Effect-TS",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -17,23 +17,24 @@
     "test": "vitest",
     "check-types": "tsc --noEmit"
   },
-  "keywords": [],
+  "keywords": [
+    "result",
+    "either",
+    "effect",
+    "error-handling",
+    "typescript"
+  ],
   "author": "",
   "license": "MIT",
-  "dependencies": {
-    "@alt-stack/result": "workspace:*"
-  },
   "peerDependencies": {
-    "@opentelemetry/api": "^1.0.0",
     "zod": "^4.0.0"
   },
   "peerDependenciesMeta": {
-    "@opentelemetry/api": {
+    "zod": {
       "optional": true
     }
   },
   "devDependencies": {
-    "@opentelemetry/api": "^1.9.0",
     "oxlint": "^1.24.0",
     "tsup": "^8.0.0",
     "typescript": "^5.9.2",

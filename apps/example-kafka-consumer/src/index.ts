@@ -1,4 +1,4 @@
-import { init, kafkaRouter, createConsumer, type BaseKafkaContext } from "@alt-stack/kafka-core";
+import { init, kafkaRouter, createConsumer, ok, err, type BaseKafkaContext } from "@alt-stack/kafka-core";
 import { Kafka } from "kafkajs";
 import { z } from "zod";
 import { env } from "./env.js";
@@ -108,10 +108,12 @@ const appRouter = kafkaRouter<AppContext>({
     })
     .subscribe(({ input, ctx }) => {
       if (!input.userId) {
-        throw ctx.error({
-          error: {
-            code: "INVALID_USER",
-            message: "User ID is required",
+        return err({
+          data: {
+            error: {
+              code: "INVALID_USER",
+              message: "User ID is required",
+            },
           },
         });
       }
@@ -129,6 +131,8 @@ const appRouter = kafkaRouter<AppContext>({
       if (input.metadata) {
         ctx.logger.log(`Metadata: ${JSON.stringify(input.metadata)}`);
       }
+
+      return ok(undefined);
     }),
 
   // Orders created topic
@@ -142,17 +146,18 @@ const appRouter = kafkaRouter<AppContext>({
 
       const processedAt = Date.now();
 
-      return {
+      return ok({
         orderId: input.orderId,
         status: "processed" as const,
         processedAt,
-      };
+      });
     }),
 
   // Notifications topic
   notifications: publicProc.input({ message: NotificationSchema }).subscribe(({ input, ctx }) => {
     ctx.logger.log(`Sending ${input.type} notification to ${input.recipient}`);
     ctx.logger.log(`Message: ${input.message}`);
+    return ok(undefined);
   }),
 });
 

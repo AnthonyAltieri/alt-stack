@@ -8,6 +8,7 @@ export type {
   BaseContext,
   TypedContext,
   StringInputObjectSchema,
+  HandlerResult,
 } from "./context.js";
 
 // Re-export all types from procedure.ts

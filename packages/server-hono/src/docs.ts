@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { router, publicProcedure, generateOpenAPISpec } from "@alt-stack/server-core";
+import { router, publicProcedure, generateOpenAPISpec, ok } from "@alt-stack/server-core";
 import type { Router, GenerateOpenAPISpecOptions } from "@alt-stack/server-core";
 
 export interface CreateDocsRouterOptions extends GenerateOpenAPISpecOptions {
@@ -76,7 +76,7 @@ export function createDocsRouter<
     .input({})
     .output(z.any())
     .get(() => {
-      return spec;
+      return ok(spec);
     });
 
   // Serve interactive documentation (Swagger UI)
@@ -101,9 +101,9 @@ export function createDocsRouter<
         // Construct openapi URL at the same mount level
         const openapiUrl = `${baseUrl}${basePath}/${openapiPath}`;
         const html = SWAGGER_UI_HTML.replace("{{OPENAPI_URL}}", openapiUrl);
-        // Return HTML response with correct content type
-        // Note: Handlers can return Response directly, which is handled by the server
-        return honoCtx.html(html);
+        // Return HTML response with correct content type wrapped in ok()
+        // The server will handle Response objects inside ok() results
+        return ok(honoCtx.html(html) as Response);
       });
   }
 

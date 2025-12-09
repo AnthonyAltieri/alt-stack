@@ -1,13 +1,40 @@
 // Main export file for server-core
 export { createRouter, mergeRouters, Router, router } from "./router.js";
 export { init, publicProcedure, default400ErrorSchema, default500ErrorSchema } from "./init.js";
+
+// Re-export Result utilities from @alt-stack/result for convenience
+export {
+  ok,
+  err,
+  isOk,
+  isErr,
+  map,
+  flatMap,
+  mapError,
+  catchError,
+  unwrap,
+  unwrapOr,
+  unwrapOrElse,
+  match,
+  fold,
+  tryCatch,
+  tryCatchAsync,
+  httpError,
+} from "@alt-stack/result";
+export type { Result, Ok, Err, InferHttpErrors } from "@alt-stack/result";
 export type { InitOptions, InitResult } from "./init.js";
 export * from "./errors.js";
-export { createMiddleware, middlewareMarker } from "./middleware.js";
+export { createMiddleware, createMiddlewareWithErrors, middlewareMarker, middlewareOk } from "./middleware.js";
 export type {
   MiddlewareFunction,
   MiddlewareBuilder,
   MiddlewareResult,
+  MiddlewareResultSuccess,
+  MiddlewareFunctionWithErrors,
+  MiddlewareBuilderWithErrors,
+  MiddlewareBuilderWithErrorsStaged,
+  AnyMiddlewareBuilderWithErrors,
+  AnyMiddlewareFunctionWithErrors,
   Overwrite,
 } from "./middleware.js";
 export type * from "./types/index.js";

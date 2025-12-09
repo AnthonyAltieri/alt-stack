@@ -1,11 +1,11 @@
 # Error Handling
 
-Define typed error schemas for structured error handling.
+Define typed error schemas using the Result pattern.
 
 ## Error Schemas
 
 ```typescript
-import { init, kafkaRouter } from "@alt-stack/kafka-core";
+import { init, kafkaRouter, ok, err } from "@alt-stack/kafka-core";
 import { z } from "zod";
 
 const { procedure } = init();
@@ -35,30 +35,35 @@ const router = kafkaRouter({
         }),
       }),
     })
-    .subscribe(({ input, ctx }) => {
+    .subscribe(({ input }) => {
       if (!isValidOrder(input.orderId)) {
-        throw ctx.error({
-          error: {
-            code: "INVALID_ORDER",
-            message: "Order not found",
-            orderId: input.orderId,
+        return err({
+          data: {
+            error: {
+              code: "INVALID_ORDER" as const,
+              message: "Order not found",
+              orderId: input.orderId,
+            },
           },
         });
       }
 
       const available = getAvailableFunds();
       if (input.amount > available) {
-        throw ctx.error({
-          error: {
-            code: "INSUFFICIENT_FUNDS",
-            message: "Insufficient funds",
-            required: input.amount,
-            available,
+        return err({
+          data: {
+            error: {
+              code: "INSUFFICIENT_FUNDS" as const,
+              message: "Insufficient funds",
+              required: input.amount,
+              available,
+            },
           },
         });
       }
 
       processOrder(input);
+      return ok(undefined);
     }),
 });
 ```
@@ -78,6 +83,27 @@ const consumer = await createConsumer(router, {
     } else {
       console.error("Unexpected error:", error);
     }
+  },
+});
+```
+
+## Result Pattern
+
+Handlers return `Result<Errors, Output>`:
+
+```typescript
+import { ok, err, isOk, isErr } from "@alt-stack/kafka-core";
+
+// Success
+return ok({ processed: true });
+
+// Success with void
+return ok(undefined);
+
+// Error
+return err({
+  data: {
+    error: { code: "FAILED" as const, message: "Processing failed" },
   },
 });
 ```

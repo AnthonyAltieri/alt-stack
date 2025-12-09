@@ -1,4 +1,4 @@
-import { init } from "@alt-stack/workers-trigger";
+import { init, ok } from "@alt-stack/workers-trigger";
 import { z } from "zod";
 import type { AppContext } from "../context.js";
 
@@ -18,7 +18,7 @@ export const userRouter = router({
     })
     .task(async ({ input, ctx }) => {
       console.log(`Syncing user ${input.userId} from ${input.source}`);
-      
+
       // Simulate fetching and updating user data
       const existingUser = ctx.db.users.get(input.userId);
       if (existingUser) {
@@ -31,14 +31,15 @@ export const userRouter = router({
           name: `User ${input.userId}`,
         });
       }
+      return ok(undefined);
     }),
 
   // Cleanup inactive users (scheduled)
-  "cleanup-inactive-users": procedure
-    .cron("0 2 * * 0", async ({ ctx }) => {
-      // Run every Sunday at 2 AM
-      console.log("Running inactive user cleanup");
-      console.log(`Checking ${ctx.db.users.size} users for inactivity...`);
-      // In a real app, you'd check last login dates, etc.
-    }),
+  "cleanup-inactive-users": procedure.cron("0 2 * * 0", async ({ ctx }) => {
+    // Run every Sunday at 2 AM
+    console.log("Running inactive user cleanup");
+    console.log(`Checking ${ctx.db.users.size} users for inactivity...`);
+    // In a real app, you'd check last login dates, etc.
+    return ok(undefined);
+  }),
 });

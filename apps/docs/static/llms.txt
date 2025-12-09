@@ -984,50 +984,50 @@ The `ctx.hono` property gives you full access to the underlying Hono context for
 
 # Error Handling
 
-Define error schemas and use type-safe `ctx.error()` for controlled error responses.
+Define error schemas and use `ok()` / `err()` for type-safe error responses with the Result pattern.
 
 ## Defining Error Schemas
 
-Specify error schemas in the route configuration:
+Specify error schemas using `.errors()`:
 
 ```typescript
+import { init, router, ok, err } from "@alt-stack/server-hono";
+
 const factory = init();
-const router = factory.router()
-  .get("/users/{id}", {
-    input: {
-      params: z.object({
-        id: z.string(),
-      }),
-    },
-    output: z.object({
-      id: z.string(),
-      name: z.string(),
-    }),
-    errors: {
+
+const userRouter = router({
+  "{id}": factory.procedure
+    .input({
+      params: z.object({ id: z.string() }),
+    })
+    .output(z.object({ id: z.string(), name: z.string() }))
+    .errors({
       404: z.object({
         error: z.object({
           code: z.literal("NOT_FOUND"),
           message: z.string(),
         }),
       }),
-    },
-  })
-  .handler((ctx) => {
-    const user = findUser(ctx.input.id);
-    
-    if (!user) {
-      // TypeScript knows this must match the 404 error schema
-      // Status code is automatically inferred from the error type
-      throw ctx.error({
-        error: {
-          code: "NOT_FOUND",
-          message: `User ${ctx.input.id} not found`,
-        },
-      });
-    }
-    
-    return user;
-  });
+    })
+    .get(({ input }) => {
+      const user = findUser(input.params.id);
+
+      if (!user) {
+        // Return error with _httpCode for status code
+        return err({
+          _httpCode: 404 as const,
+          data: {
+            error: {
+              code: "NOT_FOUND" as const,
+              message: `User ${input.params.id} not found`,
+            },
+          },
+        });
+      }
+
+      return ok(user);
+    }),
+});
 ```
 
 ## Multiple Error Types
@@ -1035,18 +1035,13 @@ const router = factory.router()
 Define multiple error status codes:
 
 ```typescript
-const factory = init();
-const router = factory.router()
-  .post("/users", {
-    input: {
-      body: z.object({
-        name: z.string(),
-      }),
-    },
-    output: z.object({
-      id: z.string(),
-    }),
-    errors: {
+const userRouter = router({
+  "/": factory.procedure
+    .input({
+      body: z.object({ email: z.string().email() }),
+    })
+    .output(z.object({ id: z.string() }))
+    .errors({
       400: z.object({
         error: z.object({
           code: z.literal("VALIDATION_ERROR"),
@@ -1059,29 +1054,42 @@ const router = factory.router()
           message: z.string(),
         }),
       }),
-    },
-  })
-  .handler((ctx) => {
-    if (userExists(ctx.input.name)) {
-      throw ctx.error({
-        error: {
-          code: "CONFLICT",
-          message: "User already exists",
-        },
-      });
-    }
-    
-    return { id: "1" };
-  });
+    })
+    .post(({ input }) => {
+      if (userExists(input.body.email)) {
+        return err({
+          _httpCode: 409 as const,
+          data: {
+            error: {
+              code: "CONFLICT" as const,
+              message: "User already exists",
+            },
+          },
+        });
+      }
+
+      const user = createUser(input.body);
+      return ok({ id: user.id });
+    }),
+});
 ```
 
-## Automatic Status Codes
+## HTTP Status Codes
 
-The status code is automatically inferred from the error type in `ctx.error()`. You don't need to specify it manually - TypeScript ensures you can only throw errors that match your defined schemas. Always use `throw ctx.error(...)` to throw the error.
+The `_httpCode` field determines the HTTP response status:
+
+```typescript
+return err({
+  _httpCode: 404 as const,  // Sets HTTP status to 404
+  data: { error: { code: "NOT_FOUND" as const, message: "Not found" } },
+});
+```
+
+Without `_httpCode`, errors default to 500.
 
 ## Validation Errors
 
-When input validation fails, a `400` response is automatically returned:
+Input validation errors are automatic. When validation fails, a `400` response is returned:
 
 ```json
 {
@@ -1093,7 +1101,39 @@ When input validation fails, a `400` response is automatically returned:
 }
 ```
 
-You don't need to handle validation errors manually - they're caught before your handler runs.
+## Middleware Errors
+
+Middleware can return `err()` just like handlers. Define errors with `.errors()` before `.use()`:
+
+```typescript
+const protectedProcedure = factory.procedure
+  .errors({
+    401: z.object({
+      error: z.object({
+        code: z.literal("UNAUTHORIZED"),
+        message: z.string(),
+      }),
+    }),
+  })
+  .use(async ({ ctx, next }) => {
+    if (!ctx.user) {
+      return err({
+        _httpCode: 401 as const,
+        data: {
+          error: {
+            code: "UNAUTHORIZED" as const,
+            message: "Authentication required",
+          },
+        },
+      });
+    }
+    return next({ ctx: { user: ctx.user } });
+  });
+```
+
+## See Also
+
+- [Result Type](./result-type) - Complete guide to Result utilities
 
 ---
 
@@ -1570,6 +1610,251 @@ const router = factory.router()
   })
   .handler((ctx) => {
     return { id: ctx.input.id };
+  });
+```
+
+---
+
+// File: core-concepts/result-type
+
+# Result Type
+
+Handlers return a `Result<E, A>` type for explicit error handling, inspired by Effect-TS.
+
+## Overview
+
+The `@alt-stack/result` package provides a type-safe way to handle errors in handlers. Instead of throwing exceptions, handlers return `Result` types that make errors explicit in the type system.
+
+```typescript
+import { ok, err, type Result } from "@alt-stack/server-hono";
+
+// Success: wrap value in ok()
+return ok({ id: "123", name: "John" });
+
+// Error: wrap error in err()
+return err({ _httpCode: 404, data: { error: { code: "NOT_FOUND", message: "User not found" } } });
+```
+
+## Basic Usage
+
+### Returning Success
+
+Use `ok()` to return successful values:
+
+```typescript
+const handler = procedure
+  .output(z.object({ id: z.string(), name: z.string() }))
+  .get(({ input }) => {
+    const user = { id: "123", name: "John" };
+    return ok(user);
+  });
+```
+
+### Returning Errors
+
+Use `err()` to return typed errors. Include `_httpCode` to set the HTTP status code:
+
+```typescript
+const handler = procedure
+  .output(UserSchema)
+  .errors({
+    404: z.object({
+      error: z.object({
+        code: z.literal("NOT_FOUND"),
+        message: z.string(),
+      }),
+    }),
+  })
+  .get(({ input }) => {
+    const user = findUser(input.params.id);
+
+    if (!user) {
+      return err({
+        _httpCode: 404 as const,
+        data: {
+          error: {
+            code: "NOT_FOUND" as const,
+            message: `User ${input.params.id} not found`,
+          },
+        },
+      });
+    }
+
+    return ok(user);
+  });
+```
+
+## Error Structure
+
+Errors have two optional tags:
+- `_httpCode`: HTTP status code (e.g., 404, 500)
+- `data`: The error payload matching your error schema
+
+```typescript
+return err({
+  _httpCode: 400 as const,
+  data: {
+    error: {
+      code: "VALIDATION_ERROR" as const,
+      message: "Invalid input",
+    },
+  },
+});
+```
+
+## Type Inference
+
+Error types are inferred from your `.errors()` definitions. TypeScript ensures you can only return errors that match defined schemas:
+
+```typescript
+procedure
+  .errors({
+    404: z.object({ error: z.object({ code: z.literal("NOT_FOUND"), message: z.string() }) }),
+    409: z.object({ error: z.object({ code: z.literal("CONFLICT"), message: z.string() }) }),
+  })
+  .handler(({ input }) => {
+    // TypeScript knows errors must match 404 or 409 schemas
+    if (!exists) {
+      return err({ _httpCode: 404 as const, data: { error: { code: "NOT_FOUND" as const, message: "Not found" } } });
+    }
+    if (conflict) {
+      return err({ _httpCode: 409 as const, data: { error: { code: "CONFLICT" as const, message: "Already exists" } } });
+    }
+    return ok(result);
+  });
+```
+
+## Result Utilities
+
+The result package includes utility functions:
+
+### Type Guards
+
+```typescript
+import { isOk, isErr } from "@alt-stack/server-hono";
+
+const result = await handler();
+if (isOk(result)) {
+  console.log(result.value);
+}
+if (isErr(result)) {
+  console.log(result.error);
+}
+```
+
+### Pattern Matching
+
+```typescript
+import { match } from "@alt-stack/server-hono";
+
+const message = match(result, {
+  ok: (value) => `Success: ${value.name}`,
+  err: (error) => `Error: ${error.data.error.message}`,
+});
+```
+
+### Transformations
+
+```typescript
+import { map, flatMap, mapError } from "@alt-stack/server-hono";
+
+// Transform success value
+const mapped = map(result, (user) => user.name);
+
+// Chain operations
+const chained = flatMap(result, (user) => {
+  if (!user.active) return err({ _code: 1, data: { message: "Inactive" } });
+  return ok(user.profile);
+});
+
+// Transform error
+const withNewError = mapError(result, (e) => ({ ...e, logged: true }));
+```
+
+### Extraction
+
+```typescript
+import { unwrap, unwrapOr } from "@alt-stack/server-hono";
+
+// Get value or throw (use sparingly)
+const value = unwrap(result);
+
+// Get value or default
+const valueOrDefault = unwrapOr(result, defaultUser);
+```
+
+### Try-Catch Wrappers
+
+```typescript
+import { tryCatch, tryCatchAsync } from "@alt-stack/server-hono";
+
+// Wrap sync function
+const result = tryCatch(
+  () => JSON.parse(input),
+  (e) => ({ _code: 1, data: { message: "Invalid JSON" } })
+);
+
+// Wrap async function
+const asyncResult = await tryCatchAsync(
+  () => fetchUser(id),
+  (e) => ({ _httpCode: 500 as const, data: { error: { code: "FETCH_ERROR", message: String(e) } } })
+);
+```
+
+## Middleware
+
+Middleware can return `err()` just like handlers. Define errors with `.errors()` before `.use()`:
+
+```typescript
+const protectedProcedure = procedure
+  .errors({
+    401: z.object({
+      error: z.object({
+        code: z.literal("UNAUTHORIZED"),
+        message: z.string(),
+      }),
+    }),
+  })
+  .use(async ({ ctx, next }) => {
+    if (!ctx.user) {
+      return err({
+        _httpCode: 401 as const,
+        data: {
+          error: {
+            code: "UNAUTHORIZED" as const,
+            message: "Authentication required",
+          },
+        },
+      });
+    }
+    return next({ ctx: { user: ctx.user } });
+  });
+```
+
+Handlers also return Result types:
+
+```typescript
+const handler = protectedProcedure.get(({ ctx }) => {
+  return ok({ user: ctx.user });
+});
+```
+
+## Kafka/Workers Result
+
+For Kafka and Workers, use `InferMessageErrors` instead of HTTP codes:
+
+```typescript
+import { ok, err } from "@alt-stack/kafka-core";
+
+const handler = procedure
+  .errors({
+    INVALID_USER: z.object({ error: z.object({ code: z.string(), message: z.string() }) }),
+  })
+  .subscribe(({ input }) => {
+    if (!input.userId) {
+      return err({ data: { error: { code: "INVALID_USER", message: "User ID required" } } });
+    }
+    return ok(undefined);
   });
 ```
 
@@ -4321,6 +4606,192 @@ export const appRouter = router({
 
 ---
 
+// File: guides/telemetry
+
+# OpenTelemetry Integration
+
+Altstack servers support [OpenTelemetry](https://opentelemetry.io/) for distributed tracing with minimal configuration. When enabled, every request is automatically traced with semantic HTTP attributes.
+
+## Installation
+
+First, install the OpenTelemetry packages:
+
+```bash
+pnpm add @opentelemetry/api @opentelemetry/sdk-trace-node @opentelemetry/exporter-trace-otlp-http
+```
+
+## Quick Start
+
+Enable telemetry by passing `telemetry: true` to `createServer`:
+
+```typescript
+import { createServer, router, init } from "@alt-stack/server-hono";
+
+const { procedure } = init<AppContext>();
+
+const appRouter = router({
+  "/todos": procedure
+    .output(z.array(TodoSchema))
+    .get(async () => {
+      return await db.todos.findMany();
+    }),
+});
+
+const app = createServer({ api: appRouter }, {
+  createContext,
+  telemetry: true, // Enable OpenTelemetry
+});
+```
+
+## Configuration Options
+
+For more control, pass a configuration object:
+
+```typescript
+const app = createServer({ api: appRouter }, {
+  createContext,
+  telemetry: {
+    enabled: true,
+    serviceName: "my-api",           // Custom service name (default: "altstack-server")
+    ignoreRoutes: ["/health", "/metrics"], // Routes to skip tracing
+  },
+});
+```
+
+### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `enabled` | `boolean` | `false` | Enable/disable telemetry |
+| `serviceName` | `string` | `"altstack-server"` | Service name for traces |
+| `ignoreRoutes` | `string[]` | `[]` | Routes to exclude from tracing |
+
+## Span Attributes
+
+Each request span includes these attributes following [OpenTelemetry HTTP semantic conventions](https://opentelemetry.io/docs/specs/semconv/http/http-spans/):
+
+| Attribute | Example | Description |
+|-----------|---------|-------------|
+| `http.request.method` | `GET` | HTTP method |
+| `http.route` | `/api/todos/{id}` | Route pattern (with path params) |
+| `url.path` | `/api/todos/123` | Actual URL path |
+| `http.response.status_code` | `200` | Response status code |
+
+## Custom Spans and Attributes
+
+Access the current span via `ctx.span` to add custom attributes or events:
+
+```typescript
+const todoRouter = router({
+  "/todos/{id}": procedure
+    .input({ params: z.object({ id: z.string() }) })
+    .get(async ({ input, ctx }) => {
+      // Add custom attributes
+      ctx.span?.setAttribute("todo.id", input.params.id);
+      
+      // Add events for significant operations
+      ctx.span?.addEvent("db-query-start");
+      const todo = await db.todos.findUnique({ 
+        where: { id: input.params.id } 
+      });
+      ctx.span?.addEvent("db-query-end");
+      
+      return todo;
+    }),
+});
+```
+
+## Setting Up the OTel SDK
+
+Before your server starts, initialize the OpenTelemetry SDK. Here's a typical setup:
+
+```typescript
+// tracing.ts - import this before your server starts
+import { NodeSDK } from "@opentelemetry/sdk-node";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+import { Resource } from "@opentelemetry/resources";
+import { ATTR_SERVICE_NAME } from "@opentelemetry/semantic-conventions";
+
+const sdk = new NodeSDK({
+  resource: new Resource({
+    [ATTR_SERVICE_NAME]: "my-api",
+  }),
+  traceExporter: new OTLPTraceExporter({
+    url: "http://localhost:4318/v1/traces", // OTLP HTTP endpoint
+  }),
+});
+
+sdk.start();
+
+// Graceful shutdown
+process.on("SIGTERM", () => {
+  sdk.shutdown().then(() => process.exit(0));
+});
+```
+
+Then import this file at the top of your main entry point:
+
+```typescript
+// index.ts
+import "./tracing.js"; // Must be first!
+import { createServer } from "@alt-stack/server-hono";
+// ... rest of your server code
+```
+
+## Example with Jaeger
+
+To visualize traces locally with [Jaeger](https://www.jaegertracing.io/):
+
+1. Run Jaeger with Docker:
+
+```bash
+docker run -d --name jaeger \
+  -p 16686:16686 \
+  -p 4318:4318 \
+  jaegertracing/all-in-one:latest
+```
+
+2. Configure the OTLP exporter to send to Jaeger:
+
+```typescript
+const sdk = new NodeSDK({
+  traceExporter: new OTLPTraceExporter({
+    url: "http://localhost:4318/v1/traces",
+  }),
+});
+```
+
+3. View traces at http://localhost:16686
+
+## Works with Both Adapters
+
+Telemetry works identically with both Hono and Express adapters:
+
+```typescript
+// Hono
+import { createServer } from "@alt-stack/server-hono";
+const app = createServer({ api: router }, { telemetry: true });
+
+// Express
+import { createServer } from "@alt-stack/server-express";
+const app = createServer({ api: router }, { telemetry: true });
+```
+
+## Graceful Degradation
+
+If `@opentelemetry/api` is not installed, telemetry is silently disabled. This allows you to:
+
+- Use the same code in development (without OTel) and production (with OTel)
+- Keep `@opentelemetry/api` as a dev dependency in some environments
+
+The `ctx.span` will be `undefined` when telemetry is disabled or not installed, so always use optional chaining:
+
+```typescript
+ctx.span?.setAttribute("key", "value"); // Safe even without OTel
+```
+
+---
+
 // File: intro
 
 # Introduction
@@ -4641,12 +5112,12 @@ const router = kafkaRouter<AppContext>({
 
 # Error Handling
 
-Define typed error schemas for structured error handling.
+Define typed error schemas using the Result pattern.
 
 ## Error Schemas
 
 ```typescript
-import { init, kafkaRouter } from "@alt-stack/kafka-core";
+import { init, kafkaRouter, ok, err } from "@alt-stack/kafka-core";
 import { z } from "zod";
 
 const { procedure } = init();
@@ -4676,30 +5147,35 @@ const router = kafkaRouter({
         }),
       }),
     })
-    .subscribe(({ input, ctx }) => {
+    .subscribe(({ input }) => {
       if (!isValidOrder(input.orderId)) {
-        throw ctx.error({
-          error: {
-            code: "INVALID_ORDER",
-            message: "Order not found",
-            orderId: input.orderId,
+        return err({
+          data: {
+            error: {
+              code: "INVALID_ORDER" as const,
+              message: "Order not found",
+              orderId: input.orderId,
+            },
           },
         });
       }
 
       const available = getAvailableFunds();
       if (input.amount > available) {
-        throw ctx.error({
-          error: {
-            code: "INSUFFICIENT_FUNDS",
-            message: "Insufficient funds",
-            required: input.amount,
-            available,
+        return err({
+          data: {
+            error: {
+              code: "INSUFFICIENT_FUNDS" as const,
+              message: "Insufficient funds",
+              required: input.amount,
+              available,
+            },
           },
         });
       }
 
       processOrder(input);
+      return ok(undefined);
     }),
 });
 ```
@@ -4719,6 +5195,27 @@ const consumer = await createConsumer(router, {
     } else {
       console.error("Unexpected error:", error);
     }
+  },
+});
+```
+
+## Result Pattern
+
+Handlers return `Result<Errors, Output>`:
+
+```typescript
+import { ok, err, isOk, isErr } from "@alt-stack/kafka-core";
+
+// Success
+return ok({ processed: true });
+
+// Success with void
+return ok(undefined);
+
+// Error
+return err({
+  data: {
+    error: { code: "FAILED" as const, message: "Processing failed" },
   },
 });
 ```
@@ -5210,7 +5707,7 @@ The authentication service handles user registration, login, and session managem
 ## Implementation
 
 ```typescript title="apps/backend-auth/src/index.ts"
-import { createDocsRouter, createServer, init, router } from "@alt-stack/server-hono";
+import { createDocsRouter, createServer, init, router, type HonoBaseContext } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 const UserSchema = z.object({
@@ -5225,10 +5722,10 @@ const SessionSchema = z.object({
   expiresAt: z.string().datetime(),
 });
 
-const factory = init();
+const factory = init<HonoBaseContext>();
 const publicProc = factory.procedure;
 
-const authRouter = router({
+const authRouter = router<HonoBaseContext>({
   "/signup": publicProc
     .input({
       body: z.object({
@@ -5264,10 +5761,10 @@ const authRouter = router({
 
   // Internal endpoint for other services to validate tokens
   "/validate": publicProc
-    .input({ headers: z.object({ authorization: z.string() }) })
     .output(z.object({ valid: z.boolean(), userId: z.string().optional() }))
-    .get(({ input }) => {
-      const token = input.headers.authorization.replace("Bearer ", "");
+    .get(({ ctx }) => {
+      const auth = ctx.hono.req.header("Authorization") ?? "";
+      const token = auth.replace("Bearer ", "");
       const session = sessions.get(token);
       if (!session || session.expiresAt < new Date()) {
         return { valid: false };
@@ -5305,6 +5802,7 @@ const spec = generateOpenAPISpec({ api: authRouter }, {
 });
 
 writeFileSync("openapi.json", JSON.stringify(spec, null, 2));
+console.log("Generated openapi.json");
 ```
 
 Run with:
@@ -5326,49 +5824,37 @@ The frontend uses `@alt-stack/http-client-ky` for type-safe HTTP requests with S
 
 ```typescript title="apps/web/src/lib/api.ts"
 import { createApiClient } from "@alt-stack/http-client-ky";
-import {
-  Request as AuthRequest,
-  Response as AuthResponse,
-} from "@real-life/backend-auth-sdk";
-import {
-  Request as LogicRequest,
-  Response as LogicResponse,
-} from "@real-life/backend-logic-sdk";
+import { Request as AuthRequest, Response as AuthResponse } from "@real-life/backend-auth-sdk";
+import { Request as LogicRequest, Response as LogicResponse } from "@real-life/backend-logic-sdk";
 
 const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_URL || "http://localhost:3001";
 const LOGIC_URL = process.env.NEXT_PUBLIC_LOGIC_URL || "http://localhost:3002";
 
 // Create type-safe clients
-export function createAuthClient(token?: string) {
-  return createApiClient({
-    baseUrl: AUTH_URL,
-    Request: AuthRequest,
-    Response: AuthResponse,
-    headers: token ? { authorization: `Bearer ${token}` } : undefined,
-  });
-}
+const authClient = createApiClient({
+  baseUrl: AUTH_URL,
+  Request: AuthRequest,
+  Response: AuthResponse,
+});
 
-export function createLogicClient(token?: string) {
-  return createApiClient({
-    baseUrl: LOGIC_URL,
-    Request: LogicRequest,
-    Response: LogicResponse,
-    headers: token ? { authorization: `Bearer ${token}` } : undefined,
-  });
-}
+const logicClient = createApiClient({
+  baseUrl: LOGIC_URL,
+  Request: LogicRequest,
+  Response: LogicResponse,
+});
 
 // Auth API
 export const authApi = {
   async login(data: { email: string; password: string }) {
-    const client = createAuthClient();
-    const result = await client.post("/api/login", { body: data });
+    const result = await authClient.post("/api/login", { body: data });
     if (!result.success) throw new Error("Login failed");
     return result.body;
   },
 
   async me(token: string) {
-    const client = createAuthClient(token);
-    const result = await client.get("/api/me", {});
+    const result = await authClient.get("/api/me", {
+      headers: { authorization: `Bearer ${token}` },
+    });
     if (!result.success) throw new Error("Failed to get user");
     return result.body;
   },
@@ -5377,15 +5863,18 @@ export const authApi = {
 // Logic API
 export const logicApi = {
   async listTasks(token?: string) {
-    const client = createLogicClient(token);
-    const result = await client.get("/api/", {});
+    const result = await logicClient.get("/api/", {
+      headers: token ? { authorization: `Bearer ${token}` } : undefined,
+    });
     if (!result.success) throw new Error("Failed to list tasks");
     return result.body;
   },
 
-  async createTask(token: string, data: { title: string }) {
-    const client = createLogicClient(token);
-    const result = await client.post("/api/", { body: data });
+  async createTask(token: string, data: { title: string; description?: string }) {
+    const result = await logicClient.post("/api/", {
+      body: data,
+      headers: { authorization: `Bearer ${token}` },
+    });
     if (!result.success) throw new Error("Failed to create task");
     return result.body;
   },
@@ -5397,13 +5886,13 @@ export const logicApi = {
 The `http-client-ky` client provides full type inference from the SDK's `Request` and `Response` objects:
 
 ```typescript
-const client = createLogicClient(token);
-
 // TypeScript knows:
 // - Valid endpoints: "/api/", "/api/{id}"
 // - Required params/body for each endpoint
 // - Response body type for each status code
-const result = await client.get("/api/", {});
+const result = await logicClient.get("/api/", {
+  headers: token ? { authorization: `Bearer ${token}` } : undefined,
+});
 
 if (result.success) {
   // result.body is typed as Task[]
@@ -5529,6 +6018,108 @@ This example demonstrates a task management system with:
                                 └───────────────────┘
 ```
 
+## Key Takeaways
+
+### 1. End-to-End Type Safety
+
+Types flow from Zod schemas through OpenAPI/AsyncAPI specs to generated SDKs:
+
+```typescript
+// Define once in backend-logic
+const TaskSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  status: z.enum(["pending", "in_progress", "completed"]),
+});
+
+// Automatically available in frontend via SDK
+import type { TaskSchema } from "@real-life/backend-logic-sdk";
+type Task = z.infer<typeof TaskSchema>;
+```
+
+### 2. Service-to-Service Auth
+
+The logic service validates tokens by calling the auth service's internal endpoint:
+
+```typescript
+// backend-logic calls backend-auth
+async function validateToken(token: string): Promise<string | null> {
+  const res = await ky.get(`${AUTH_SERVICE_URL}/api/validate`, {
+    headers: { authorization: token },
+  }).json<{ valid: boolean; userId?: string }>();
+  return res.valid ? res.userId ?? null : null;
+}
+```
+
+### 3. Protected Procedures with Middleware
+
+Create reusable authenticated procedures:
+
+```typescript
+const protectedProc = factory.procedure
+  .errors({ 401: z.object({ error: z.object({ code: z.literal("UNAUTHORIZED") }) }) })
+  .use(async ({ ctx, next }) => {
+    if (!ctx.userId) throw ctx.error({ error: { code: "UNAUTHORIZED", ... } });
+    return next({ ctx: { userId: ctx.userId } }); // narrow type
+  });
+```
+
+### 4. Type-Safe Background Jobs
+
+Trigger workers with full type inference from the SDK:
+
+```typescript
+import { Topics } from "@real-life/workers-sdk";
+
+const client = await createWarpStreamClient({ jobs: Topics, ... });
+
+// TypeScript knows the exact payload shape
+await client.trigger("send-notification", {
+  type: "task_created",  // must be valid enum
+  userId: ctx.userId,
+  taskId: id,
+  taskTitle: input.body.title,
+});
+```
+
+### 5. Built-in Telemetry
+
+Enable [OpenTelemetry tracing](/guides/telemetry) with a single flag:
+
+```typescript
+const app = createServer(
+  { api: taskRouter, docs: docsRouter },
+  {
+    createContext,
+    telemetry: {
+      enabled: env.NODE_ENV === "production",
+      serviceName: "backend-logic",
+      ignoreRoutes: ["/docs"],
+    },
+  },
+);
+```
+
+### 6. SDK-First Frontend
+
+The frontend uses generated SDKs with `http-client-ky` for fully typed API calls:
+
+```typescript
+import { createApiClient } from "@alt-stack/http-client-ky";
+import { Request, Response } from "@real-life/backend-logic-sdk";
+
+const client = createApiClient({ baseUrl, Request, Response });
+
+// Full autocomplete for paths, params, body, and response
+const result = await client.get("/api/{id}", {
+  params: { id: "..." },
+  headers: { authorization: `Bearer ${token}` },
+});
+if (result.success) {
+  console.log(result.body.title); // TypeScript knows this exists
+}
+```
+
 ## What You'll Learn
 
 | Topic | Description |
@@ -5563,12 +6154,13 @@ pnpm --filter @real-life/web dev            # Port 3000
 
 | Package | Technology | Purpose |
 |---------|------------|---------|
-| `@alt-stack/server-hono` | Hono | Type-safe HTTP servers |
+| `@alt-stack/server-hono` | Hono | Type-safe HTTP servers with telemetry |
 | `@alt-stack/workers-warpstream` | WarpStream/Kafka | Background job processing |
 | `@alt-stack/workers-client-warpstream` | WarpStream/Kafka | Job triggering |
 | `@alt-stack/zod-openapi` | OpenAPI | REST API SDK generation |
 | `@alt-stack/zod-asyncapi` | AsyncAPI | Worker SDK generation |
 | `@alt-stack/http-client-ky` | ky | Type-safe HTTP client with SDK integration |
+| `@opentelemetry/api` | OpenTelemetry | Distributed tracing (optional) |
 | `Next.js` | React | Frontend framework |
 
 ---
@@ -5706,7 +6298,8 @@ const taskRouter = router<AppContext>({
       .input({
         params: z.object({ id: z.string().uuid() }),
         body: z.object({
-          title: z.string().optional(),
+          title: z.string().min(1).max(200).optional(),
+          description: z.string().max(1000).optional(),
           status: z.enum(["pending", "in_progress", "completed"]).optional(),
         }),
       })
@@ -5880,6 +6473,7 @@ const spec = generateOpenAPISpec({ api: authRouter }, {
 });
 
 writeFileSync("openapi.json", JSON.stringify(spec, null, 2));
+console.log("Generated openapi.json");
 ```
 
 ### SDK Package
@@ -5947,6 +6541,7 @@ const spec = generateAsyncAPISpec(jobRouter, {
 });
 
 writeFileSync("asyncapi.json", JSON.stringify(spec, null, 2));
+console.log("Generated asyncapi.json");
 ```
 
 ### SDK Package
@@ -6011,12 +6606,12 @@ Background job processing using WarpStream (Kafka-compatible).
 ## Job Definitions
 
 ```typescript title="apps/workers/src/index.ts"
-import { createWorker, init, router } from "@alt-stack/workers-warpstream";
+import { createWorker, init, workerRouter } from "@alt-stack/workers-warpstream";
 import { z } from "zod";
 
 const { procedure } = init();
 
-export const jobRouter = router({
+export const jobRouter = workerRouter({
   "send-notification": procedure
     .input({
       payload: z.object({
@@ -6078,6 +6673,7 @@ const spec = generateAsyncAPISpec(jobRouter, {
 });
 
 writeFileSync("asyncapi.json", JSON.stringify(spec, null, 2));
+console.log("Generated asyncapi.json");
 ```
 
 ## SDK Generation
@@ -6203,34 +6799,17 @@ interface WarpStreamContext {
 
 # Error Handling
 
-Handle job failures gracefully.
+Handle job failures with the Result pattern.
 
-## Error Callback
+## Result Pattern
 
-```typescript
-const worker = await createWorker(router, {
-  kafka: { brokers: ["localhost:9092"] },
-  groupId: "workers",
-  onError: async (error, ctx) => {
-    console.error(`Job ${ctx.jobName} failed:`, error);
-    
-    // Send to error tracking
-    await sentry.captureException(error, {
-      extra: {
-        jobId: ctx.jobId,
-        jobName: ctx.jobName,
-        attempt: ctx.attempt,
-      },
-    });
-  },
-});
-```
-
-## Typed Errors
-
-Define expected error shapes:
+Handlers return `Result<Errors, Output>`:
 
 ```typescript
+import { init, ok, err } from "@alt-stack/workers-trigger";
+
+const { router, procedure } = init();
+
 const jobRouter = router({
   "process-payment": procedure
     .input({ payload: z.object({ orderId: z.string() }) })
@@ -6244,16 +6823,54 @@ const jobRouter = router({
         reason: z.string(),
       }),
     })
-    .task(async ({ input, ctx }) => {
+    .task(async ({ input }) => {
       const balance = await getBalance();
       if (balance < 0) {
-        throw ctx.error({
-          code: "INSUFFICIENT_FUNDS",
-          balance,
+        return err({
+          data: {
+            code: "INSUFFICIENT_FUNDS" as const,
+            balance,
+          },
         });
       }
+
+      await processPayment(input.orderId);
+      return ok(undefined);
     }),
 });
+```
+
+## Error Callback
+
+```typescript
+const worker = await createWorker(router, {
+  kafka: { brokers: ["localhost:9092"] },
+  groupId: "workers",
+  onError: async (error, ctx) => {
+    console.error(`Job ${ctx.jobName} failed:`, error);
+
+    // Send to error tracking
+    await sentry.captureException(error, {
+      extra: {
+        jobId: ctx.jobId,
+        jobName: ctx.jobName,
+        attempt: ctx.attempt,
+      },
+    });
+  },
+});
+```
+
+## Success Returns
+
+Use `ok()` for all successful returns:
+
+```typescript
+// Return data
+return ok({ orderId: "123", status: "processed" });
+
+// Void return
+return ok(undefined);
 ```
 
 ## Retries

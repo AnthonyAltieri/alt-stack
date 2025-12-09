@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import type { KafkaMessage } from "kafkajs";
 import type { AnyMiddlewareFunction } from "./middleware.js";
+import type { Result, InferMessageErrors } from "@alt-stack/result";
 
 export type InferOutput<T extends z.ZodTypeAny> = z.infer<T>;
 
@@ -10,6 +11,16 @@ export type InferErrorSchemas<T extends Record<string, z.ZodTypeAny>> = {
 
 export type ErrorUnion<T extends Record<string, z.ZodTypeAny>> =
   InferErrorSchemas<T>[keyof InferErrorSchemas<T>];
+
+/**
+ * Infer the Result type for a handler based on errors and output schemas
+ */
+export type KafkaHandlerResult<
+  TErrors extends Record<string, z.ZodTypeAny> | undefined,
+  TOutput extends z.ZodTypeAny | undefined,
+> = TErrors extends Record<string, z.ZodTypeAny>
+  ? Result<InferOutput<NonNullable<TOutput>> | void, InferMessageErrors<TErrors>>
+  : Result<InferOutput<NonNullable<TOutput>> | void, never>;
 
 export interface InputConfig {
   message?: z.ZodTypeAny;
@@ -36,9 +47,6 @@ export type TypedKafkaContext<
 > = BaseKafkaContext &
   TCustomContext & {
     input: InferInput<TInput>;
-    error: TErrors extends Record<string, z.ZodTypeAny>
-      ? (error: ErrorUnion<TErrors>) => never
-      : never;
   };
 
 export interface ProcedureConfig<
@@ -69,11 +77,7 @@ export interface KafkaProcedure<
   handler: (opts: {
     input: InferInput<TInput>;
     ctx: TypedKafkaContext<TInput, TOutput, TErrors, TCustomContext>;
-  }) =>
-    | Promise<InferOutput<NonNullable<TOutput>>>
-    | InferOutput<NonNullable<TOutput>>
-    | void
-    | Promise<void>;
+  }) => KafkaHandlerResult<TErrors, TOutput> | Promise<KafkaHandlerResult<TErrors, TOutput>>;
   middleware: AnyMiddlewareFunction[];
 }
 
@@ -95,12 +99,10 @@ export interface ReadyKafkaProcedure<
   handler: (opts: {
     input: InferInput<TInput>;
     ctx: TypedKafkaContext<TInput, TOutput, TErrors, TCustomContext>;
-  }) =>
-    | Promise<InferOutput<NonNullable<TOutput>>>
-    | InferOutput<NonNullable<TOutput>>
-    | void
-    | Promise<void>;
+  }) => KafkaHandlerResult<TErrors, TOutput> | Promise<KafkaHandlerResult<TErrors, TOutput>>;
   middleware: AnyMiddlewareFunction[];
+  /** Flags indicating which middleware return Result types (true) vs throw (false) */
+  middlewareWithErrorsFlags?: boolean[];
 }
 
 /**
@@ -121,10 +123,8 @@ export interface PendingKafkaProcedure<
   handler: (opts: {
     input: InferInput<TInput>;
     ctx: TypedKafkaContext<TInput, TOutput, TErrors, TCustomContext>;
-  }) =>
-    | Promise<InferOutput<NonNullable<TOutput>>>
-    | InferOutput<NonNullable<TOutput>>
-    | void
-    | Promise<void>;
+  }) => KafkaHandlerResult<TErrors, TOutput> | Promise<KafkaHandlerResult<TErrors, TOutput>>;
   middleware: AnyMiddlewareFunction[];
+  /** Flags indicating which middleware return Result types (true) vs throw (false) */
+  middlewareWithErrorsFlags?: boolean[];
 }

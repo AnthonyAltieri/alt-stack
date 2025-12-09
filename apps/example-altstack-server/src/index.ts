@@ -1,4 +1,14 @@
-import { createDocsRouter, createServer, init, router } from "@alt-stack/server-hono";
+import {
+  createDocsRouter,
+  createServer,
+  init,
+  router,
+  ok,
+  err,
+  isErr,
+  flatMap,
+} from "@alt-stack/server-hono";
+import type { Result } from "@alt-stack/server-hono";
 import type { Context } from "hono";
 import { z } from "zod";
 
@@ -43,6 +53,7 @@ const factory = init<AppContext>();
 const publicProc = factory.procedure;
 
 // Protected procedure with authentication middleware
+// Middleware returns err() for type-safe error handling with proper HTTP status codes
 const protectedProcedure = factory.procedure
   .errors({
     401: z.object({
@@ -56,11 +67,14 @@ const protectedProcedure = factory.procedure
     const { ctx, next } = opts;
 
     if (!ctx.user) {
-      // Only allowed to throw default errors or defined errors with ctx.error()
-      throw ctx.error({
-        error: {
-          code: "UNAUTHORIZED",
-          message: "Authentication required",
+      // Return err() with _httpCode for proper HTTP status
+      return err({
+        _httpCode: 401 as const,
+        data: {
+          error: {
+            code: "UNAUTHORIZED" as const,
+            message: "Authentication required",
+          },
         },
       });
     }
@@ -79,11 +93,14 @@ const adminProcedure = protectedProcedure
   })
   .use(async (opts) => {
     const { ctx, next } = opts;
-    if (ctx.user.role !== "admin") {
-      throw ctx.error({
-        error: {
-          code: "FORBIDDEN",
-          message: "Admin access required",
+    if (ctx.user!.role !== "admin") {
+      return err({
+        _httpCode: 403 as const,
+        data: {
+          error: {
+            code: "FORBIDDEN" as const,
+            message: "Admin access required",
+          },
         },
       });
     }
@@ -127,7 +144,7 @@ export const todoRouter = router<AppContext>({
           );
         }
 
-        return todos; // ✅ Return type matches z.array(TodoSchema)
+        return ok(todos); // ✅ Return type matches z.array(TodoSchema)
       }),
 
     post: protectedProcedure
@@ -152,7 +169,7 @@ export const todoRouter = router<AppContext>({
           userId: ctx.user!.id,
         });
 
-        return todo;
+        return ok(todo);
       }),
   },
 
@@ -177,22 +194,23 @@ export const todoRouter = router<AppContext>({
         }),
       })
       .handler((opts) => {
-        const { input, ctx } = opts;
+        const { input } = opts;
         // ✅ input.params.id is typed as string (from params)
         const todo = getTodoById(input.params.id);
 
         if (!todo) {
-          throw ctx.error({
-            // ✅ TypeScript ensures code is "NOT_FOUND"
-            // ✅ Status code (404) is automatically inferred!
-            error: {
-              code: "NOT_FOUND",
-              message: `Todo with id ${input.params.id} not found`,
+          return err({
+            _httpCode: 404 as const,
+            data: {
+              error: {
+                code: "NOT_FOUND" as const,
+                message: `Todo with id ${input.params.id} not found`,
+              },
             },
           });
         }
 
-        return todo; // ✅ Return type matches TodoSchema
+        return ok(todo); // ✅ Return type matches TodoSchema
       }),
 
     put: protectedProcedure
@@ -213,7 +231,7 @@ export const todoRouter = router<AppContext>({
       .errors({
         // ✅ 400 and 500 errors are automatically included (default validation and internal server errors)
         // ✅ Custom 400 error will be unioned with the default validation error
-        // This means ctx.error() can accept either the default validation error OR this custom error
+        // This means err() can accept either the default validation error OR this custom error
         400: z.object({
           error: z.object({
             code: z.literal("CUSTOM_VALIDATION_ERROR"),
@@ -243,20 +261,26 @@ export const todoRouter = router<AppContext>({
 
         const todo = getTodoById(input.params.id);
         if (!todo) {
-          throw ctx.error({
-            error: {
-              code: "NOT_FOUND",
-              message: `Todo with id ${input.params.id} not found`,
+          return err({
+            _httpCode: 404 as const,
+            data: {
+              error: {
+                code: "NOT_FOUND" as const,
+                message: `Todo with id ${input.params.id} not found`,
+              },
             },
           });
         }
 
         // Check ownership
         if (todo.userId !== ctx.user!.id && ctx.user!.role !== "admin") {
-          throw ctx.error({
-            error: {
-              code: "FORBIDDEN",
-              message: "You don't have permission to update this todo",
+          return err({
+            _httpCode: 403 as const,
+            data: {
+              error: {
+                code: "FORBIDDEN" as const,
+                message: "You don't have permission to update this todo",
+              },
             },
           });
         }
@@ -271,7 +295,7 @@ export const todoRouter = router<AppContext>({
           // Send notification
         }
 
-        return updated;
+        return ok(updated);
       }),
 
     delete: protectedProcedure
@@ -294,19 +318,22 @@ export const todoRouter = router<AppContext>({
         }),
       })
       .handler((opts) => {
-        const { input, ctx } = opts;
+        const { input } = opts;
         const todo = getTodoById(input.params.id);
         if (!todo) {
-          throw ctx.error({
-            error: {
-              code: "NOT_FOUND",
-              message: `Todo with id ${input.params.id} not found`,
+          return err({
+            _httpCode: 404 as const,
+            data: {
+              error: {
+                code: "NOT_FOUND" as const,
+                message: `Todo with id ${input.params.id} not found`,
+              },
             },
           });
         }
 
         deleteTodo(input.params.id);
-        return { success: true };
+        return ok({ success: true });
       }),
   },
 
@@ -333,14 +360,17 @@ export const todoRouter = router<AppContext>({
       const { input } = opts;
       const todo = getTodoById(input.params.id);
       if (!todo) {
-        throw opts.ctx.error({
-          error: {
-            code: "NOT_FOUND",
-            message: `Todo with id ${input.params.id} not found`,
+        return err({
+          _httpCode: 404 as const,
+          data: {
+            error: {
+              code: "NOT_FOUND" as const,
+              message: `Todo with id ${input.params.id} not found`,
+            },
           },
         });
       }
-      return updateTodo(input.params.id, { completed: input.body.completed });
+      return ok(updateTodo(input.params.id, { completed: input.body.completed }));
     }),
 });
 
@@ -359,11 +389,11 @@ export const userRouter = router<AppContext>({
     .get((opts) => {
       const { ctx } = opts;
       // ✅ ctx.user is guaranteed non-null after middleware
-      return {
+      return ok({
         id: ctx.user!.id,
         email: ctx.user!.email,
         role: ctx.user!.role,
-      };
+      });
     }),
 
   // GET /users/{id} - Get user by ID
@@ -388,17 +418,20 @@ export const userRouter = router<AppContext>({
       }),
     })
     .get((opts) => {
-      const { input, ctx } = opts;
+      const { input } = opts;
       const user = getUserById(input.params.id);
       if (!user) {
-        throw ctx.error({
-          error: {
-            code: "NOT_FOUND",
-            message: `User with id ${input.params.id} not found`,
+        return err({
+          _httpCode: 404 as const,
+          data: {
+            error: {
+              code: "NOT_FOUND" as const,
+              message: `User with id ${input.params.id} not found`,
+            },
           },
         });
       }
-      return { id: user.id, email: user.email };
+      return ok({ id: user.id, email: user.email });
     }),
 });
 
@@ -426,7 +459,7 @@ export const adminRouter = router<AppContext>({
       if (input.query.role) {
         users = users.filter((u) => u.role === input.query.role);
       }
-      return users;
+      return ok(users);
     }),
 
   // DELETE /admin/users/{id} - Delete user (admin only)
@@ -450,18 +483,143 @@ export const adminRouter = router<AppContext>({
       }),
     })
     .delete((opts) => {
-      const { input, ctx } = opts;
+      const { input } = opts;
       const user = getUserById(input.params.id);
       if (!user) {
-        throw ctx.error({
-          error: {
-            code: "NOT_FOUND",
-            message: `User with id ${input.params.id} not found`,
+        return err({
+          _httpCode: 404 as const,
+          data: {
+            error: {
+              code: "NOT_FOUND" as const,
+              message: `User with id ${input.params.id} not found`,
+            },
           },
         });
       }
       deleteUser(input.params.id);
-      return { success: true };
+      return ok({ success: true });
+    }),
+});
+
+// ============================================================================
+// V2 Todo Router - Using Result-based Business Logic
+// ============================================================================
+// This router demonstrates how to use Result types from business logic
+// functions directly in handlers. The business logic functions return
+// Result types, which handlers can return directly or compose.
+
+export const todoRouterV2 = router<AppContext>({
+  // PUT /v2/todos/{id} - Update using Result-based business logic
+  // The handler simply calls the business logic function and returns its Result
+  "{id}": {
+    put: protectedProcedure
+      .input({
+        params: z.object({
+          id: z.string().uuid(),
+        }),
+        body: z.object({
+          title: z.string().min(1).max(200).optional(),
+          description: z.string().max(1000).optional(),
+          completed: z.boolean().optional(),
+        }),
+      })
+      .output(TodoSchema)
+      .errors({
+        404: z.object({
+          error: z.object({
+            code: z.literal("NOT_FOUND"),
+            message: z.string(),
+          }),
+        }),
+        403: z.object({
+          error: z.object({
+            code: z.literal("FORBIDDEN"),
+            message: z.string(),
+          }),
+        }),
+      })
+      .handler((opts) => {
+        const { input, ctx } = opts;
+
+        // ✅ Business logic returns Result<Todo, TodoError>
+        // ✅ Handler can return it directly - errors flow through automatically!
+        return updateTodoWithPermission(input.params.id, ctx.user!, {
+          title: input.body.title,
+          description: input.body.description,
+          completed: input.body.completed,
+        });
+      }),
+
+    delete: protectedProcedure
+      .input({
+        params: z.object({
+          id: z.string().uuid(),
+        }),
+      })
+      .output(z.object({ success: z.boolean() }))
+      .errors({
+        404: z.object({
+          error: z.object({
+            code: z.literal("NOT_FOUND"),
+            message: z.string(),
+          }),
+        }),
+        403: z.object({
+          error: z.object({
+            code: z.literal("FORBIDDEN"),
+            message: z.string(),
+          }),
+        }),
+      })
+      .handler((opts) => {
+        const { input, ctx } = opts;
+
+        // ✅ Same pattern - business logic Result flows through
+        return deleteTodoWithPermission(input.params.id, ctx.user!);
+      }),
+  },
+
+  // GET /v2/todos/{id} - Demonstrates using isErr for conditional logic
+  "{id}/details": publicProc
+    .input({
+      params: z.object({
+        id: z.string().uuid(),
+      }),
+    })
+    .output(
+      z.object({
+        todo: TodoSchema,
+        canEdit: z.boolean(),
+      }),
+    )
+    .errors({
+      404: z.object({
+        error: z.object({
+          code: z.literal("NOT_FOUND"),
+          message: z.string(),
+        }),
+      }),
+    })
+    .get((opts) => {
+      const { input, ctx } = opts;
+
+      // ✅ Use Result from business logic
+      const todoResult = findTodoById(input.params.id);
+
+      // ✅ Check if it's an error and return early
+      if (isErr(todoResult)) {
+        return todoResult; // Type-safe error propagation
+      }
+
+      // ✅ After isErr check, TypeScript knows todoResult is Ok<Todo>
+      const todo = todoResult.value;
+
+      // Determine if user can edit (owner or admin)
+      const canEdit =
+        ctx.user !== null &&
+        (todo.userId === ctx.user.id || ctx.user.role === "admin");
+
+      return ok({ todo, canEdit });
     }),
 });
 
@@ -471,6 +629,7 @@ export const adminRouter = router<AppContext>({
 
 const appRouter = router<AppContext>({
   todos: todoRouter, // /todos/*
+  "v2/todos": todoRouterV2, // /v2/todos/* - Result-based business logic examples
   users: userRouter, // /users/*
   admin: adminRouter, // /admin/*
 });
@@ -597,6 +756,115 @@ function getUserFromRequest(authorization: unknown): User | null {
   // For demo purposes, authorization is just the user id
   if (typeof authorization !== "string") return null;
   return db.users.get(authorization) ?? null;
+}
+
+// ============================================================================
+// Business Logic with Result Types
+// ============================================================================
+// These functions demonstrate how to use Result types in your business logic
+// layer. The Result pattern allows errors to flow through the application
+// in a type-safe way without throwing exceptions.
+
+// Error types for business logic
+type NotFoundError = {
+  _httpCode: 404;
+  data: { error: { code: "NOT_FOUND"; message: string } };
+};
+
+type ForbiddenError = {
+  _httpCode: 403;
+  data: { error: { code: "FORBIDDEN"; message: string } };
+};
+
+type TodoError = NotFoundError | ForbiddenError;
+
+/**
+ * Find a todo by ID, returning a Result type
+ * This encapsulates the "not found" case as a typed error
+ */
+function findTodoById(id: string): Result<Todo, NotFoundError> {
+  const todo = db.todos.get(id);
+  if (!todo) {
+    return err({
+      _httpCode: 404 as const,
+      data: {
+        error: {
+          code: "NOT_FOUND" as const,
+          message: `Todo with id ${id} not found`,
+        },
+      },
+    });
+  }
+  return ok(todo);
+}
+
+/**
+ * Check if a user has permission to modify a todo
+ * Returns the todo if allowed, or a ForbiddenError if not
+ */
+function checkTodoPermission(
+  todo: Todo,
+  user: User,
+): Result<Todo, ForbiddenError> {
+  if (todo.userId !== user.id && user.role !== "admin") {
+    return err({
+      _httpCode: 403 as const,
+      data: {
+        error: {
+          code: "FORBIDDEN" as const,
+          message: "You don't have permission to modify this todo",
+        },
+      },
+    });
+  }
+  return ok(todo);
+}
+
+/**
+ * Update a todo with permission checking - combines multiple Result operations
+ * This shows how flatMap can compose Result-returning functions
+ */
+function updateTodoWithPermission(
+  id: string,
+  user: User,
+  updates: { title?: string; description?: string; completed?: boolean },
+): Result<Todo, TodoError> {
+  // Use flatMap to chain Result operations:
+  // 1. Find the todo (may fail with NotFoundError)
+  // 2. Check permissions (may fail with ForbiddenError)
+  // 3. Apply updates (always succeeds if we get here)
+  return flatMap(
+    flatMap(findTodoById(id), (todo) => checkTodoPermission(todo, user)),
+    (todo) => {
+      const updated: Todo = {
+        ...todo,
+        ...(updates.title !== undefined && { title: updates.title }),
+        ...(updates.description !== undefined && {
+          description: updates.description,
+        }),
+        ...(updates.completed !== undefined && { completed: updates.completed }),
+      };
+      db.todos.set(id, updated);
+      return ok(updated);
+    },
+  );
+}
+
+/**
+ * Delete a todo with permission checking
+ * Returns success boolean or an error
+ */
+function deleteTodoWithPermission(
+  id: string,
+  user: User,
+): Result<{ success: boolean }, TodoError> {
+  return flatMap(
+    flatMap(findTodoById(id), (todo) => checkTodoPermission(todo, user)),
+    (todo) => {
+      db.todos.delete(todo.id);
+      return ok({ success: true });
+    },
+  );
 }
 
 // ============================================================================

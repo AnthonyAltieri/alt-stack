@@ -3,21 +3,26 @@ import { Hono as HonoClass } from "hono";
 import type { z } from "zod";
 import type { ZodError } from "zod";
 import type { TypedContext, InputConfig, TelemetryOption } from "@alt-stack/server-core";
-import type { Procedure } from "@alt-stack/server-core";
+import type { Procedure, ReadyProcedure } from "@alt-stack/server-core";
 import type { Router } from "@alt-stack/server-core";
 import {
   validateInput,
   ServerError,
   ValidationError,
   middlewareMarker,
+  middlewareOk,
   resolveTelemetryConfig,
   shouldIgnoreRoute,
   initTelemetry,
   createRequestSpan,
   endSpanWithError,
   setSpanOk,
+  isOk,
+  isErr,
+  ok as resultOk,
+  err as resultErr,
 } from "@alt-stack/server-core";
-import type { MiddlewareResult } from "@alt-stack/server-core";
+import type { MiddlewareResult, MiddlewareResultSuccess } from "@alt-stack/server-core";
 
 /**
  * Converts OpenAPI-style path params ({param}) to Hono-style (:param)
@@ -177,60 +182,6 @@ export function createServer<
           body,
         );
 
-        const errorFn = (error: unknown): never => {
-          if (!procedure.config.errors) {
-            throw new ServerError(
-              500,
-              "INTERNAL_SERVER_ERROR",
-              "Error occurred",
-            );
-          }
-
-          let statusCode = 500;
-          let errorCode = "ERROR";
-          let message = "Error occurred";
-          for (const [code, schema] of Object.entries(
-            procedure.config.errors,
-          )) {
-            const result = (schema as z.ZodTypeAny).safeParse(error);
-            if (result.success) {
-              statusCode = Number(code);
-              const errorResponse = result.data;
-              if (
-                typeof errorResponse === "object" &&
-                errorResponse !== null &&
-                "error" in errorResponse &&
-                errorResponse.error &&
-                typeof errorResponse.error === "object"
-              ) {
-                const errorPayload = errorResponse.error as Record<
-                  string,
-                  unknown
-                >;
-                if (typeof errorPayload.code === "string") {
-                  errorCode = errorPayload.code;
-                }
-                if (typeof errorPayload.message === "string") {
-                  message = errorPayload.message;
-                }
-              }
-              throw new ServerError(
-                statusCode,
-                errorCode,
-                message,
-                errorResponse,
-              );
-            }
-          }
-
-          throw new ServerError(
-            500,
-            "INTERNAL_SERVER_ERROR",
-            "Error occurred",
-            error,
-          );
-        };
-
         const customContext = options?.createContext
           ? await options.createContext(c)
           : ({} as TCustomContext);
@@ -244,45 +195,153 @@ export function createServer<
           ...customContext,
           hono: c,
           input: validatedInput,
-          error: errorFn,
           span,
         } as ProcedureContext;
 
         let currentCtx: ProcedureContext = ctx;
         let middlewareIndex = 0;
 
-        const runMiddleware = async (): Promise<
-          ProcedureContext | Response
-        > => {
+        // Get the flags for which middleware return Result types
+        const middlewareWithErrorsFlags = (procedure as any).middlewareWithErrorsFlags as
+          | boolean[]
+          | undefined;
+
+        type MiddlewareRunResult =
+          | { ok: true; ctx: ProcedureContext }
+          | { ok: false; error: { _httpCode?: number; data?: unknown } }
+          | { ok: true; response: Response };
+
+        const runMiddleware = async (): Promise<MiddlewareRunResult> => {
           if (middlewareIndex >= procedure.middleware.length) {
-            return currentCtx;
+            return { ok: true, ctx: currentCtx };
           }
+
+          const currentIndex = middlewareIndex;
           const middleware = procedure.middleware[middlewareIndex++];
           if (!middleware) {
-            return currentCtx;
+            return { ok: true, ctx: currentCtx };
           }
-          const result = await middleware({
-            ctx: currentCtx,
-            next: async (
-              opts?: { ctx?: Partial<ProcedureContext> },
-            ): Promise<MiddlewareResult<Partial<ProcedureContext>>> => {
-              // Merge context updates if provided
+
+          // Check if this middleware returns Result types
+          const isResultMiddleware = middlewareWithErrorsFlags?.[currentIndex] ?? false;
+
+          if (isResultMiddleware) {
+            // Result-based middleware - provide next() that returns Result
+            const nextFn = async (opts?: { ctx?: Partial<ProcedureContext> }) => {
               if (opts?.ctx) {
                 currentCtx = { ...currentCtx, ...opts.ctx } as ProcedureContext;
               }
               const nextResult = await runMiddleware();
-              // Return MiddlewareResult wrapper for type safety
+
+              // Propagate errors from downstream middleware
+              if (!nextResult.ok) {
+                return resultErr(nextResult.error);
+              }
+
+              // Handle Response objects
+              if ("response" in nextResult) {
+                return middlewareOk(currentCtx);
+              }
+
+              return middlewareOk(nextResult.ctx);
+            };
+
+            const result = await (middleware as any)({
+              ctx: currentCtx,
+              next: nextFn,
+            });
+
+            // Result-based middleware returns Result<Error, MiddlewareResultSuccess>
+            if (result && typeof result === "object" && "_tag" in result) {
+              if (result._tag === "Err") {
+                const error = result.error as { _httpCode?: number; data?: unknown };
+                return { ok: false, error };
+              }
+
+              if (result._tag === "Ok") {
+                const value = result.value as MiddlewareResultSuccess<any>;
+                if (value && value.marker === middlewareMarker) {
+                  currentCtx = { ...currentCtx, ...value.ctx } as ProcedureContext;
+                }
+                return { ok: true, ctx: currentCtx };
+              }
+            }
+
+            return { ok: true, ctx: currentCtx };
+          }
+
+          // Legacy middleware - throws on error, returns MiddlewareResult
+          let result: unknown;
+          try {
+            result = await middleware({
+              ctx: currentCtx,
+              next: async (
+                opts?: { ctx?: Partial<ProcedureContext> },
+              ): Promise<MiddlewareResult<Partial<ProcedureContext>>> => {
+                // Merge context updates if provided
+                if (opts?.ctx) {
+                  currentCtx = { ...currentCtx, ...opts.ctx } as ProcedureContext;
+                }
+                const nextResult = await runMiddleware();
+
+                // Propagate errors from Result-based middleware
+                if (!nextResult.ok) {
+                  throw nextResult.error;
+                }
+
+                // Handle Response objects
+                if ("response" in nextResult) {
+                  return {
+                    marker: middlewareMarker,
+                    ok: true as const,
+                    data: nextResult.response,
+                  };
+                }
+
+                return {
+                  marker: middlewareMarker,
+                  ok: true as const,
+                  data: nextResult.ctx,
+                };
+              },
+            });
+          } catch (thrownError) {
+            // Check if this is a propagated middleware error with _httpCode
+            if (
+              thrownError &&
+              typeof thrownError === "object" &&
+              "_httpCode" in thrownError
+            ) {
               return {
-                marker: middlewareMarker,
-                ok: true as const,
-                data: nextResult,
+                ok: false,
+                error: thrownError as { _httpCode?: number; data?: unknown },
               };
-            },
-          });
+            }
+            // Re-throw other errors to be handled by outer try-catch
+            throw thrownError;
+          }
 
           // Handle both legacy middleware (returns context/Response) and new middleware (returns MiddlewareResult)
           if (result instanceof Response) {
-            return result;
+            return { ok: true, response: result };
+          }
+
+          // Check if middleware returned a Result type (err() call)
+          // This allows inline middleware to return err() even without being flagged
+          if (result && typeof result === "object" && "_tag" in result) {
+            const resultWithTag = result as { _tag: string; error?: unknown; value?: unknown };
+            if (resultWithTag._tag === "Err") {
+              const error = resultWithTag.error as { _httpCode?: number; data?: unknown };
+              return { ok: false, error };
+            }
+
+            if (resultWithTag._tag === "Ok") {
+              const value = resultWithTag.value as MiddlewareResultSuccess<any>;
+              if (value && value.marker === middlewareMarker) {
+                currentCtx = { ...currentCtx, ...value.ctx } as ProcedureContext;
+              }
+              return { ok: true, ctx: currentCtx };
+            }
           }
 
           // Check if it's a MiddlewareResult wrapper
@@ -294,27 +353,56 @@ export function createServer<
           ) {
             const data = (result as any).data;
             if (data instanceof Response) {
-              return data;
+              return { ok: true, response: data };
             }
             currentCtx = data as ProcedureContext;
-            return currentCtx;
+            return { ok: true, ctx: currentCtx };
           }
 
           // Legacy middleware - direct context return
           currentCtx = result as ProcedureContext;
-          return currentCtx;
+          return { ok: true, ctx: currentCtx };
         };
 
         const middlewareResult = await runMiddleware();
-        if (middlewareResult instanceof Response) {
-          span?.setAttribute("http.response.status_code", middlewareResult.status);
+
+        // Handle middleware errors (from Result-based middleware)
+        if (!middlewareResult.ok) {
+          const error = middlewareResult.error;
+          const statusCode = error._httpCode ?? 500;
+          const errorData = error.data ?? error;
+
+          span?.setAttribute("http.response.status_code", statusCode);
+          span?.end();
+          return c.json(errorData, statusCode as any);
+        }
+
+        // Handle Response objects from middleware
+        if ("response" in middlewareResult) {
+          span?.setAttribute("http.response.status_code", middlewareResult.response.status);
           setSpanOk(span);
           span?.end();
-          return middlewareResult;
+          return middlewareResult.response;
         }
-        currentCtx = middlewareResult as ProcedureContext;
 
-        const response = await procedure.handler(currentCtx);
+        currentCtx = middlewareResult.ctx;
+
+        const result = await procedure.handler(currentCtx);
+
+        // Handle Result type - check if it's Ok or Err
+        if (isErr(result)) {
+          // Extract HTTP status code from the error
+          const error = result.error as { _httpCode?: number; data?: unknown };
+          const statusCode = error._httpCode ?? 500;
+          const errorData = error.data ?? error;
+
+          span?.setAttribute("http.response.status_code", statusCode);
+          span?.end();
+          return c.json(errorData, statusCode as any);
+        }
+
+        // It's an Ok result
+        const response = result.value;
 
         // If handler returns a Response directly (e.g., HTML), return it as-is
         if (response instanceof Response) {

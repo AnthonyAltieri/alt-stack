@@ -1,4 +1,4 @@
-import { init } from "@alt-stack/workers-trigger";
+import { init, ok } from "@alt-stack/workers-trigger";
 import { z } from "zod";
 import type { AppContext } from "../context.js";
 
@@ -109,12 +109,12 @@ export const dataPipelineRouter = router({
         importState.recordsProcessed = input.records.length;
       }
 
-      return {
+      return ok({
         importId,
         recordsProcessed: input.records.length,
         batchesCreated: batches.length,
         status: "completed" as const,
-      };
+      });
     }),
 
   // Stage 2: Transform records
@@ -180,11 +180,11 @@ export const dataPipelineRouter = router({
         });
       }
 
-      return {
+      return ok({
         transformId,
         recordsTransformed: recordsToProcess.length,
         transformations: input.transformations,
-      };
+      });
     }),
 
   // Stage 3: Export to warehouse
@@ -228,12 +228,12 @@ export const dataPipelineRouter = router({
         }
       }
 
-      return {
+      return ok({
         exportId,
         recordsExported: records.length,
         destination: input.destination,
         completedAt: new Date().toISOString(),
-      };
+      });
     }),
 
   // Orchestrator: Run full ETL pipeline
@@ -361,7 +361,7 @@ export const dataPipelineRouter = router({
       const totalDuration = Date.now() - startTime;
       console.log(`[ETL Pipeline ${pipelineId}] Completed in ${totalDuration}ms`);
 
-      return {
+      return ok({
         pipelineId,
         stages: {
           import: importResult,
@@ -369,7 +369,7 @@ export const dataPipelineRouter = router({
           export: exportResult,
         },
         totalDuration,
-      };
+      });
     }),
 
   // Scheduled: Cleanup old pipeline data
@@ -398,5 +398,6 @@ export const dataPipelineRouter = router({
     }
 
     console.log(`[Cleanup] Removed ${cleaned} old records`);
+    return ok(undefined);
   }),
 });

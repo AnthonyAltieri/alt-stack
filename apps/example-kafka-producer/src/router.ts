@@ -1,4 +1,4 @@
-import { init, kafkaRouter } from "@alt-stack/kafka-core";
+import { init, kafkaRouter, ok } from "@alt-stack/kafka-core";
 import { z } from "zod";
 
 // ============================================================================
@@ -50,17 +50,18 @@ export const producerRouter = kafkaRouter({
     .input({ message: UserEventSchema })
     .subscribe(() => {
       // Producer-side handler is optional, used for spec generation
+      return ok(undefined);
     }),
 
   // Orders created topic
   "orders/created": procedure
     .input({ message: OrderCreatedSchema })
-    .subscribe(() => {}),
+    .subscribe(() => ok(undefined)),
 
   // Notifications topic
   notifications: procedure
     .input({ message: NotificationSchema })
-    .subscribe(() => {}),
+    .subscribe(() => ok(undefined)),
 });
 
 export type ProducerRouter = typeof producerRouter;
