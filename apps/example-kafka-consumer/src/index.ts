@@ -5,7 +5,7 @@ import { z } from "zod";
 import { env } from "./env.js";
 
 // ============================================================================
-// Error Classes (New Pattern)
+// Error Classes (using TaggedError for less boilerplate)
 // ============================================================================
 
 class InvalidUserError extends TaggedError {
