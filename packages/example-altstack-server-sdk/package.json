@@ -39,5 +39,6 @@
     "url": "https://github.com/altstack/zod-utilities.git",
     "directory": "packages/example-altstack-server-sdk"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "_publishTrigger": 1765256199099
 }

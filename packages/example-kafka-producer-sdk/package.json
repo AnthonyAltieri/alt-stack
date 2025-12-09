@@ -39,5 +39,6 @@
     "url": "https://github.com/altstack/zod-utilities.git",
     "directory": "packages/example-kafka-producer-sdk"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "_publishTrigger": 1765256199101
 }

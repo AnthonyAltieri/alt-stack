@@ -40,5 +40,6 @@
   "dependencies": {
     "tsx": "^4.19.2",
     "zod": "^4.1.12"
-  }
+  },
+  "_publishTrigger": 1765256199110
 }
