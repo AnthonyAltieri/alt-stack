@@ -1,91 +1,85 @@
-import type { z } from "zod";
+import type { ResultError } from "./result.js";
 
 /**
- * Base tagged error with optional codes
+ * Helper type to extract the _tag literal type from an error class
  *
- * @template TData - The error data type
+ * @example
+ * ```typescript
+ * class NotFoundError extends Error {
+ *   readonly _tag = "NotFoundError" as const;
+ * }
+ * type Tag = InferErrorTag<NotFoundError>; // "NotFoundError"
+ * ```
  */
-export interface TaggedError<TData> {
-  /** General error code */
-  _code?: number;
-  /** HTTP status code */
-  _httpCode?: number;
-  /** The error data */
-  data: TData;
+export type InferErrorTag<E extends ResultError> = E["_tag"];
+
+/**
+ * Helper type to extract all possible _tag values from an error union
+ *
+ * @example
+ * ```typescript
+ * type Tags = InferErrorTags<NotFoundError | ValidationError>;
+ * // "NotFoundError" | "ValidationError"
+ * ```
+ */
+export type InferErrorTags<E extends ResultError> = E extends ResultError
+  ? E["_tag"]
+  : never;
+
+/**
+ * Helper type to narrow an error union by its _tag
+ *
+ * @example
+ * ```typescript
+ * type MyError = NotFoundError | ValidationError;
+ * type Narrowed = NarrowError<MyError, "NotFoundError">; // NotFoundError
+ * ```
+ */
+export type NarrowError<
+  E extends ResultError,
+  Tag extends string,
+> = E extends { _tag: Tag } ? E : never;
+
+/**
+ * Check if an unknown value is a valid ResultError
+ *
+ * @example
+ * ```typescript
+ * try {
+ *   // ... some code that throws
+ * } catch (e) {
+ *   if (isResultError(e)) {
+ *     return err(e);
+ *   }
+ *   return err(new UnknownError(e));
+ * }
+ * ```
+ */
+export function isResultError(error: unknown): error is ResultError {
+  return error instanceof Error && typeof (error as any)._tag === "string";
 }
 
 /**
- * Infer error union from HTTP error schemas (Record<number, ZodSchema>)
- * Each error is tagged with its HTTP status code
+ * Runtime assertion that an error is a valid ResultError
+ * Throws TypeError if the error doesn't meet the ResultError constraint.
  *
  * @example
  * ```typescript
- * const errors = {
- *   404: z.object({ message: z.string() }),
- *   401: z.object({ reason: z.string() }),
- * };
- *
- * type Errors = InferHttpErrors<typeof errors>;
- * // { _httpCode: 404; data: { message: string } }
- * // | { _httpCode: 401; data: { reason: string } }
+ * try {
+ *   // ... some code that throws
+ * } catch (e) {
+ *   assertResultError(e); // throws if not a ResultError
+ *   return err(e);
+ * }
  * ```
  */
-export type InferHttpErrors<T extends Record<number, z.ZodTypeAny>> = {
-  [K in keyof T]: K extends number
-    ? {
-        _code?: number;
-        _httpCode: K;
-        data: z.infer<T[K]>;
-      }
-    : never;
-}[keyof T];
-
-/**
- * Infer error union from message error schemas (Record<string, ZodSchema>)
- * Used for Kafka and Workers which use string error codes
- *
- * @example
- * ```typescript
- * const errors = {
- *   INVALID_PAYLOAD: z.object({ field: z.string() }),
- *   NOT_FOUND: z.object({ id: z.string() }),
- * };
- *
- * type Errors = InferMessageErrors<typeof errors>;
- * // TaggedError<{ field: string }> | TaggedError<{ id: string }>
- * ```
- */
-export type InferMessageErrors<T extends Record<string, z.ZodTypeAny>> = {
-  [K in keyof T]: TaggedError<z.infer<T[K]>>;
-}[keyof T];
-
-/**
- * Helper to create an HTTP error with proper typing
- *
- * @example
- * ```typescript
- * return err(httpError(404, { message: "User not found" }));
- * ```
- */
-export function httpError<TCode extends number, TData>(
-  httpCode: TCode,
-  data: TData,
-): { _httpCode: TCode; data: TData } {
-  return { _httpCode: httpCode, data };
-}
-
-/**
- * Helper to create an error with both codes
- *
- * @example
- * ```typescript
- * return err(taggedError(1001, 400, { message: "Validation failed" }));
- * ```
- */
-export function taggedError<TCode extends number, THttpCode extends number, TData>(
-  code: TCode,
-  httpCode: THttpCode,
-  data: TData,
-): { _code: TCode; _httpCode: THttpCode; data: TData } {
-  return { _code: code, _httpCode: httpCode, data };
+export function assertResultError(
+  error: unknown,
+): asserts error is ResultError {
+  if (!(error instanceof Error)) {
+    throw new TypeError("Error must be an instance of Error");
+  }
+  if (typeof (error as any)._tag !== "string") {
+    throw new TypeError("Error must have a readonly _tag string property");
+  }
 }

@@ -19,9 +19,11 @@ export {
   fold,
   tryCatch,
   tryCatchAsync,
-  httpError,
+  isResultError,
+  assertResultError,
+  ResultAggregateError,
 } from "@alt-stack/result";
-export type { Result, Ok, Err, InferHttpErrors } from "@alt-stack/result";
+export type { Result, Ok, Err, ResultError, InferErrorTag, InferErrorTags, NarrowError } from "@alt-stack/result";
 export type { InitOptions, InitResult } from "./init.js";
 export * from "./errors.js";
 export { createMiddleware, createMiddlewareWithErrors, middlewareMarker, middlewareOk } from "./middleware.js";

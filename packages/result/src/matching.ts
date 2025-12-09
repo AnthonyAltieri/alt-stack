@@ -1,4 +1,4 @@
-import type { Result } from "./result.js";
+import type { Result, ResultError } from "./result.js";
 import { isOk } from "./guards.js";
 
 /**
@@ -6,15 +6,23 @@ import { isOk } from "./guards.js";
  *
  * @example
  * ```typescript
+ * class NotFoundError extends Error {
+ *   readonly _tag = "NotFoundError" as const;
+ *   constructor(public readonly id: string) {
+ *     super(`Not found: ${id}`);
+ *     this.name = "NotFoundError";
+ *   }
+ * }
+ *
  * const result = ok(42);
  * const message = match(result, {
  *   ok: value => `Success: ${value}`,
- *   err: error => `Error: ${error}`,
+ *   err: error => `Error: ${error._tag}`,
  * });
  * // "Success: 42"
  * ```
  */
-export function match<A, E, B, C = B>(
+export function match<A, E extends ResultError, B, C = B>(
   result: Result<A, E>,
   handlers: {
     ok: (value: A) => B;
@@ -32,7 +40,15 @@ export function match<A, E, B, C = B>(
  *
  * @example
  * ```typescript
- * const result = err("not found");
+ * class NotFoundError extends Error {
+ *   readonly _tag = "NotFoundError" as const;
+ *   constructor() {
+ *     super("Not found");
+ *     this.name = "NotFoundError";
+ *   }
+ * }
+ *
+ * const result = err(new NotFoundError());
  * const status = fold(
  *   result,
  *   error => 404,
@@ -41,7 +57,7 @@ export function match<A, E, B, C = B>(
  * // 404
  * ```
  */
-export function fold<A, E, B>(
+export function fold<A, E extends ResultError, B>(
   result: Result<A, E>,
   onErr: (error: E) => B,
   onOk: (value: A) => B,

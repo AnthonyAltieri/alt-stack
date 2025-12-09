@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import type { Result, InferHttpErrors } from "@alt-stack/result";
+import type { Result, ResultError } from "@alt-stack/result";
 import { ok as resultOk, err as resultErr, isOk, isErr } from "@alt-stack/result";
 
 /**
@@ -87,7 +87,7 @@ export type MiddlewareFunction<
   };
 }) => Promise<
   | MiddlewareResult<$ContextOverridesOut>
-  | Result<unknown, { _httpCode: number; data: unknown }>
+  | Result<unknown, ResultError>
 >;
 
 /**
@@ -211,7 +211,7 @@ export type MiddlewareFunctionWithErrors<
   TContext,
   TContextOverridesIn,
   $ContextOverridesOut,
-  $ErrorsOut extends Record<number, z.ZodTypeAny>,
+  $ErrorsOut extends Record<number, z.ZodTypeAny | string | string[]>,
 > = (opts: {
   ctx: Overwrite<TContext, TContextOverridesIn>;
   next: {
@@ -220,7 +220,7 @@ export type MiddlewareFunctionWithErrors<
       ctx: $ContextOverride;
     }): Promise<Result<MiddlewareResultSuccess<$ContextOverride>, any>>;
   };
-}) => Promise<Result<MiddlewareResultSuccess<$ContextOverridesOut>, InferHttpErrors<$ErrorsOut>>>;
+}) => Promise<Result<MiddlewareResultSuccess<$ContextOverridesOut>, ResultError>>;
 
 /**
  * Any middleware function with errors (type-erased for runtime)
@@ -233,7 +233,7 @@ export type AnyMiddlewareFunctionWithErrors = MiddlewareFunctionWithErrors<any, 
 export interface MiddlewareBuilderWithErrorsStaged<
   TContext,
   TContextOverrides,
-  TErrors extends Record<number, z.ZodTypeAny>,
+  TErrors extends Record<number, z.ZodTypeAny | string | string[]>,
 > {
   /**
    * Define the middleware function that can return errors
@@ -265,12 +265,12 @@ export interface MiddlewareBuilderWithErrorsStaged<
 export interface MiddlewareBuilderWithErrors<
   TContext,
   TContextOverrides,
-  TErrors extends Record<number, z.ZodTypeAny> = {},
+  TErrors extends Record<number, z.ZodTypeAny | string | string[]> = {},
 > {
   /**
    * Add more error schemas to this middleware
    */
-  errors<$Errors extends Record<number, z.ZodTypeAny>>(
+  errors<$Errors extends Record<number, z.ZodTypeAny | string | string[]>>(
     errors: $Errors,
   ): MiddlewareBuilderWithErrorsStaged<TContext, TContextOverrides, TErrors & $Errors>;
 
@@ -322,12 +322,12 @@ export type AnyMiddlewareBuilderWithErrors = MiddlewareBuilderWithErrors<any, an
  * ```
  */
 export function createMiddlewareWithErrors<TContext>(): {
-  errors<$Errors extends Record<number, z.ZodTypeAny>>(
+  errors<$Errors extends Record<number, z.ZodTypeAny | string | string[]>>(
     errors: $Errors,
   ): MiddlewareBuilderWithErrorsStaged<TContext, object, $Errors>;
 } {
   return {
-    errors<$Errors extends Record<number, z.ZodTypeAny>>(
+    errors<$Errors extends Record<number, z.ZodTypeAny | string | string[]>>(
       errors: $Errors,
     ): MiddlewareBuilderWithErrorsStaged<TContext, object, $Errors> {
       return {
@@ -351,7 +351,7 @@ export function createMiddlewareWithErrors<TContext>(): {
 function createMiddlewareBuilderWithErrorsImpl<
   TContext,
   TContextOverrides,
-  TErrors extends Record<number, z.ZodTypeAny>,
+  TErrors extends Record<number, z.ZodTypeAny | string | string[]>,
 >(
   errors: TErrors,
   fn: AnyMiddlewareFunctionWithErrors,
@@ -360,7 +360,7 @@ function createMiddlewareBuilderWithErrorsImpl<
     _errors: errors,
     _fn: fn,
 
-    errors<$Errors extends Record<number, z.ZodTypeAny>>(
+    errors<$Errors extends Record<number, z.ZodTypeAny | string | string[]>>(
       newErrors: $Errors,
     ): MiddlewareBuilderWithErrorsStaged<TContext, TContextOverrides, TErrors & $Errors> {
       const mergedErrors = { ...errors, ...newErrors } as TErrors & $Errors;

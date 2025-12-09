@@ -4,6 +4,18 @@ import { z } from "zod";
 import { env } from "./env.js";
 
 // ============================================================================
+// Error Classes (New Pattern)
+// ============================================================================
+
+class InvalidUserError extends Error {
+  readonly _tag = "InvalidUserError" as const;
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidUserError";
+  }
+}
+
+// ============================================================================
 // Type Definitions
 // ============================================================================
 
@@ -108,14 +120,7 @@ const appRouter = kafkaRouter<AppContext>({
     })
     .subscribe(({ input, ctx }) => {
       if (!input.userId) {
-        return err({
-          data: {
-            error: {
-              code: "INVALID_USER",
-              message: "User ID is required",
-            },
-          },
-        });
+        return err(new InvalidUserError("User ID is required"));
       }
 
       ctx.logger.log(`User event: ${input.eventType} for user ${input.userId}`);

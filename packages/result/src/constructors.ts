@@ -1,4 +1,4 @@
-import type { Ok, Err } from "./result.js";
+import type { Ok, Err, ResultError } from "./result.js";
 
 /**
  * Create a success Result
@@ -6,13 +6,13 @@ import type { Ok, Err } from "./result.js";
  * @example
  * ```typescript
  * const result = ok({ id: 1, name: "Alice" });
- * // Result<never, { id: number; name: string }>
+ * // Result<{ id: number; name: string }, never>
  * ```
  *
  * @example
  * ```typescript
  * const result = ok();
- * // Result<never, void>
+ * // Result<void, never>
  * ```
  */
 export function ok(): Ok<void>;
@@ -24,12 +24,22 @@ export function ok<A>(value?: A): Ok<A> {
 /**
  * Create a failure Result
  *
+ * The error must extend Error and have a readonly _tag property for
+ * type-safe exhaustive error handling.
+ *
  * @example
  * ```typescript
- * const result = err({ _httpCode: 404, data: { message: "Not found" } });
- * // Result<{ _httpCode: 404; data: { message: string } }, never>
+ * class ValidationError extends Error {
+ *   readonly _tag = "ValidationError" as const;
+ *   constructor(public readonly field: string, message: string) {
+ *     super(message);
+ *     this.name = "ValidationError";
+ *   }
+ * }
+ *
+ * return err(new ValidationError("email", "Invalid email format"));
  * ```
  */
-export function err<E>(error: E): Err<E> {
+export function err<E extends ResultError>(error: E): Err<E> {
   return { _tag: "Err", error };
 }

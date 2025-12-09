@@ -1,4 +1,4 @@
-import type { Result, Ok, Err } from "./result.js";
+import type { Result, Ok, Err, ResultError } from "./result.js";
 
 /**
  * Type guard for Ok
@@ -11,7 +11,9 @@ import type { Result, Ok, Err } from "./result.js";
  * }
  * ```
  */
-export function isOk<A, E>(result: Result<A, E>): result is Ok<A> {
+export function isOk<A, E extends ResultError>(
+  result: Result<A, E>,
+): result is Ok<A> {
   return result._tag === "Ok";
 }
 
@@ -20,12 +22,23 @@ export function isOk<A, E>(result: Result<A, E>): result is Ok<A> {
  *
  * @example
  * ```typescript
- * const result = err({ message: "Failed" });
+ * class MyError extends Error {
+ *   readonly _tag = "MyError" as const;
+ *   constructor(message: string) {
+ *     super(message);
+ *     this.name = "MyError";
+ *   }
+ * }
+ *
+ * const result = err(new MyError("Failed"));
  * if (isErr(result)) {
- *   console.log(result.error); // { message: "Failed" }
+ *   console.log(result.error._tag); // "MyError"
+ *   console.log(result.error.message); // "Failed"
  * }
  * ```
  */
-export function isErr<A, E>(result: Result<A, E>): result is Err<E> {
+export function isErr<A, E extends ResultError>(
+  result: Result<A, E>,
+): result is Err<E> {
   return result._tag === "Err";
 }

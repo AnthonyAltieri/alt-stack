@@ -1,4 +1,4 @@
-import type { Result } from "./result.js";
+import type { Result, ResultError } from "./result.js";
 import { ok, err } from "./constructors.js";
 import { isOk } from "./guards.js";
 
@@ -12,7 +12,10 @@ import { isOk } from "./guards.js";
  * // Ok { value: 10 }
  * ```
  */
-export function map<A, E, B>(result: Result<A, E>, fn: (a: A) => B): Result<B, E> {
+export function map<A, E extends ResultError, B>(
+  result: Result<A, E>,
+  fn: (a: A) => B,
+): Result<B, E> {
   if (isOk(result)) {
     return ok(fn(result.value));
   }
@@ -24,14 +27,22 @@ export function map<A, E, B>(result: Result<A, E>, fn: (a: A) => B): Result<B, E
  *
  * @example
  * ```typescript
+ * class NegativeError extends Error {
+ *   readonly _tag = "NegativeError" as const;
+ *   constructor() {
+ *     super("Must be positive");
+ *     this.name = "NegativeError";
+ *   }
+ * }
+ *
  * const result = ok(5);
  * const chained = flatMap(result, x =>
- *   x > 0 ? ok(x * 2) : err("Must be positive")
+ *   x > 0 ? ok(x * 2) : err(new NegativeError())
  * );
  * // Ok { value: 10 }
  * ```
  */
-export function flatMap<A, E, B, E2>(
+export function flatMap<A, E extends ResultError, B, E2 extends ResultError>(
   result: Result<A, E>,
   fn: (a: A) => Result<B, E2>,
 ): Result<B, E | E2> {
@@ -46,12 +57,22 @@ export function flatMap<A, E, B, E2>(
  *
  * @example
  * ```typescript
- * const result = err("error");
- * const mapped = mapError(result, e => ({ message: e }));
- * // Err { error: { message: "error" } }
+ * class WrappedError extends Error {
+ *   readonly _tag = "WrappedError" as const;
+ *   constructor(public readonly originalMessage: string) {
+ *     super(`Wrapped: ${originalMessage}`);
+ *     this.name = "WrappedError";
+ *   }
+ * }
+ *
+ * const result = err(new SomeError("failed"));
+ * const mapped = mapError(result, e => new WrappedError(e.message));
  * ```
  */
-export function mapError<A, E, E2>(result: Result<A, E>, fn: (e: E) => E2): Result<A, E2> {
+export function mapError<A, E extends ResultError, E2 extends ResultError>(
+  result: Result<A, E>,
+  fn: (e: E) => E2,
+): Result<A, E2> {
   if (isOk(result)) {
     return result;
   }
@@ -63,15 +84,17 @@ export function mapError<A, E, E2>(result: Result<A, E>, fn: (e: E) => E2): Resu
  *
  * @example
  * ```typescript
- * const result = err("not found");
+ * const result = err(new NotFoundError("users", "123"));
  * const recovered = catchError(result, e => ok("default"));
  * // Ok { value: "default" }
  * ```
  */
-export function catchError<A, E, B, E2>(
-  result: Result<A, E>,
-  fn: (e: E) => Result<B, E2>,
-): Result<A | B, E2> {
+export function catchError<
+  A,
+  E extends ResultError,
+  B,
+  E2 extends ResultError,
+>(result: Result<A, E>, fn: (e: E) => Result<B, E2>): Result<A | B, E2> {
   if (isOk(result)) {
     return result;
   }
