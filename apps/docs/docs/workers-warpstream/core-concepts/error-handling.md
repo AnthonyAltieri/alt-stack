@@ -2,6 +2,8 @@
 
 Handle job failures with the Result pattern.
 
+For comprehensive documentation on the Result type, see the [Result documentation](/result).
+
 ## Result Pattern
 
 Handlers return `Result<Errors, Output>`:
@@ -77,3 +79,7 @@ return ok();
 ## Retries
 
 Kafka consumer retries are handled at the Kafka level. Configure dead letter queues in your Kafka setup for failed messages.
+
+## See Also
+
+- [Result Documentation](/result) - Complete guide to the Result type

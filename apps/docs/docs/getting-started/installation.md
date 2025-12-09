@@ -2,6 +2,20 @@
 
 Choose an adapter based on your preferred HTTP framework.
 
+## Result Package (Optional)
+
+For standalone use of the Result type without server/client packages:
+
+```bash
+pnpm add @alt-stack/result
+# or
+npm install @alt-stack/result
+# or
+yarn add @alt-stack/result
+```
+
+The Result type is automatically included with the server and client packages, so you don't need to install it separately when using those. See the [Result documentation](/result) for usage details.
+
 ## Hono Adapter (Recommended)
 
 Best for new projects, edge deployments, and serverless environments.

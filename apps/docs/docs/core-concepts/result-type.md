@@ -1,18 +1,21 @@
 # Result Type
 
-Handlers return a `Result<E, A>` type for explicit error handling, inspired by Effect-TS.
+Handlers return a `Result<A, E>` type for explicit error handling, powered by `@alt-stack/result`.
+
+For comprehensive documentation on the Result type, see the [Result documentation](/result).
 
 ## Overview
 
-The `@alt-stack/result` package provides a type-safe way to handle errors in handlers. Instead of throwing exceptions, handlers return `Result` types that make errors explicit in the type system.
+The Result type makes errors explicit in your type signatures. Instead of throwing exceptions, handlers return `Result` types that are either `Ok` (success) or `Err` (failure).
 
 ```typescript
-import { ok, err, type Result } from "@alt-stack/server-hono";
+import { ok, err } from "@alt-stack/server-hono";
+// Or import directly: import { ok, err } from "@alt-stack/result";
 
 // Success: wrap value in ok()
 return ok({ id: "123", name: "John" });
 
-// Error: wrap error in err()
+// Error: wrap error in err() with _httpCode for status
 return err({ _httpCode: 404, data: { error: { code: "NOT_FOUND", message: "User not found" } } });
 ```
 
@@ -67,7 +70,7 @@ const handler = procedure
 
 ## Error Structure
 
-Errors have two optional tags:
+Server errors have two fields:
 - `_httpCode`: HTTP status code (e.g., 404, 500)
 - `data`: The error payload matching your error schema
 
@@ -93,7 +96,7 @@ procedure
     404: z.object({ error: z.object({ code: z.literal("NOT_FOUND"), message: z.string() }) }),
     409: z.object({ error: z.object({ code: z.literal("CONFLICT"), message: z.string() }) }),
   })
-  .handler(({ input }) => {
+  .get(({ input }) => {
     // TypeScript knows errors must match 404 or 409 schemas
     if (!exists) {
       return err({ _httpCode: 404 as const, data: { error: { code: "NOT_FOUND" as const, message: "Not found" } } });
@@ -107,7 +110,7 @@ procedure
 
 ## Result Utilities
 
-The result package includes utility functions:
+The server packages re-export Result utilities from `@alt-stack/result`:
 
 ### Type Guards
 
@@ -144,7 +147,7 @@ const mapped = map(result, (user) => user.name);
 
 // Chain operations
 const chained = flatMap(result, (user) => {
-  if (!user.active) return err({ _code: 1, data: { message: "Inactive" } });
+  if (!user.active) return err({ _httpCode: 403 as const, data: { message: "Inactive" } });
   return ok(user.profile);
 });
 
@@ -172,7 +175,7 @@ import { tryCatch, tryCatchAsync } from "@alt-stack/server-hono";
 // Wrap sync function
 const result = tryCatch(
   () => JSON.parse(input),
-  (e) => ({ _code: 1, data: { message: "Invalid JSON" } })
+  (e) => ({ _httpCode: 400 as const, data: { message: "Invalid JSON" } })
 );
 
 // Wrap async function
@@ -212,29 +215,7 @@ const protectedProcedure = procedure
   });
 ```
 
-Handlers also return Result types:
+## See Also
 
-```typescript
-const handler = protectedProcedure.get(({ ctx }) => {
-  return ok({ user: ctx.user });
-});
-```
-
-## Kafka/Workers Result
-
-For Kafka and Workers, use `InferMessageErrors` instead of HTTP codes:
-
-```typescript
-import { ok, err } from "@alt-stack/kafka-core";
-
-const handler = procedure
-  .errors({
-    INVALID_USER: z.object({ error: z.object({ code: z.string(), message: z.string() }) }),
-  })
-  .subscribe(({ input }) => {
-    if (!input.userId) {
-      return err({ data: { error: { code: "INVALID_USER", message: "User ID required" } } });
-    }
-    return ok();
-  });
-```
+- [Result Documentation](/result) - Complete guide to the Result type
+- [Error Handling](./error-handling) - Defining error schemas
