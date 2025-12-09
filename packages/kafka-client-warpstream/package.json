@@ -1,6 +1,6 @@
 {
   "name": "@alt-stack/kafka-client-warpstream",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "WarpStream binding for type-safe Kafka client with optimized defaults",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

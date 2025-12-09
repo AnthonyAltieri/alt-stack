@@ -1,6 +1,6 @@
 {
   "name": "@alt-stack/workers-client-warpstream",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "WarpStream binding for type-safe worker client with optimized defaults",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
