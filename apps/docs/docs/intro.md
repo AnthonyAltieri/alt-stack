@@ -8,7 +8,11 @@ Altstack is a type-safe full-stack framework with separate server and client pac
 
 ## Architecture
 
-Altstack's server framework is split into a core package and framework-specific adapters:
+Altstack is organized into foundational utilities and framework packages:
+
+### Core Utilities
+
+- **`@alt-stack/result`**: Type-safe Result type for explicit error handling. Provides `ok()`, `err()`, type guards, transformations, and pattern matching. Used throughout all Altstack packages. See [Result documentation](/result).
 
 ### Server Packages
 

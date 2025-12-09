@@ -2,6 +2,8 @@
 
 Define typed error schemas using the Result pattern.
 
+For comprehensive documentation on the Result type, see the [Result documentation](/result).
+
 ## Error Schemas
 
 ```typescript
@@ -115,3 +117,7 @@ The library exports:
 - `KafkaError` - Base error class with `code`, `message`, and optional `details`
 - `ValidationError` - Schema validation failures
 - `ProcessingError` - Handler execution errors
+
+## See Also
+
+- [Result Documentation](/result) - Complete guide to the Result type

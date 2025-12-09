@@ -2,6 +2,8 @@
 
 Define error schemas and use `ok()` / `err()` for type-safe error responses with the Result pattern.
 
+For comprehensive documentation on the Result type, see the [Result documentation](/result).
+
 ## Defining Error Schemas
 
 Specify error schemas using `.errors()`:
@@ -149,4 +151,5 @@ const protectedProcedure = factory.procedure
 
 ## See Also
 
-- [Result Type](./result-type) - Complete guide to Result utilities
+- [Result Documentation](/result) - Complete guide to the Result type
+- [Result Type](./result-type) - Server-specific Result usage

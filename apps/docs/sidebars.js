@@ -30,6 +30,21 @@ module.exports = {
     },
     {
       type: 'category',
+      label: 'Result',
+      items: [
+        'result/index',
+        'result/constructors',
+        'result/type-guards',
+        'result/transformations',
+        'result/extraction',
+        'result/pattern-matching',
+        'result/async',
+        'result/combinators',
+        'result/type-inference',
+      ],
+    },
+    {
+      type: 'category',
       label: 'Server',
       items: [
         {
