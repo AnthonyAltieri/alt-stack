@@ -34,6 +34,12 @@ describe("constructors", () => {
     expect(result.value).toBe(42);
   });
 
+  it("ok void creates success result", () => {
+    const result = ok();
+    expect(result._tag).toBe("Ok");
+    expect(result.value).toBeUndefined();
+  });
+
   it("err creates failure result", () => {
     const result = err("error");
     expect(result._tag).toBe("Err");

@@ -132,7 +132,7 @@ const appRouter = kafkaRouter<AppContext>({
         ctx.logger.log(`Metadata: ${JSON.stringify(input.metadata)}`);
       }
 
-      return ok(undefined);
+      return ok();
     }),
 
   // Orders created topic
@@ -157,7 +157,7 @@ const appRouter = kafkaRouter<AppContext>({
   notifications: publicProc.input({ message: NotificationSchema }).subscribe(({ input, ctx }) => {
     ctx.logger.log(`Sending ${input.type} notification to ${input.recipient}`);
     ctx.logger.log(`Message: ${input.message}`);
-    return ok(undefined);
+    return ok();
   }),
 });
 

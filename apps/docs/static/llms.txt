@@ -1854,7 +1854,7 @@ const handler = procedure
     if (!input.userId) {
       return err({ data: { error: { code: "INVALID_USER", message: "User ID required" } } });
     }
-    return ok(undefined);
+    return ok();
   });
 ```
 
@@ -5175,7 +5175,7 @@ const router = kafkaRouter({
       }
 
       processOrder(input);
-      return ok(undefined);
+      return ok();
     }),
 });
 ```
@@ -5210,7 +5210,7 @@ import { ok, err, isOk, isErr } from "@alt-stack/kafka-core";
 return ok({ processed: true });
 
 // Success with void
-return ok(undefined);
+return ok();
 
 // Error
 return err({
@@ -6835,7 +6835,7 @@ const jobRouter = router({
       }
 
       await processPayment(input.orderId);
-      return ok(undefined);
+      return ok();
     }),
 });
 ```
@@ -6870,7 +6870,7 @@ Use `ok()` for all successful returns:
 return ok({ orderId: "123", status: "processed" });
 
 // Void return
-return ok(undefined);
+return ok();
 ```
 
 ## Retries

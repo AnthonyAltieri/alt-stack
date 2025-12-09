@@ -235,6 +235,6 @@ const handler = procedure
     if (!input.userId) {
       return err({ data: { error: { code: "INVALID_USER", message: "User ID required" } } });
     }
-    return ok(undefined);
+    return ok();
   });
 ```

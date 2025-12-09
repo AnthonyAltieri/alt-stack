@@ -50,19 +50,18 @@ export const producerRouter = kafkaRouter({
     .input({ message: UserEventSchema })
     .subscribe(() => {
       // Producer-side handler is optional, used for spec generation
-      return ok(undefined);
+      return ok();
     }),
 
   // Orders created topic
   "orders/created": procedure
     .input({ message: OrderCreatedSchema })
-    .subscribe(() => ok(undefined)),
+    .subscribe(() => ok()),
 
   // Notifications topic
   notifications: procedure
     .input({ message: NotificationSchema })
-    .subscribe(() => ok(undefined)),
+    .subscribe(() => ok()),
 });
 
 export type ProducerRouter = typeof producerRouter;
-

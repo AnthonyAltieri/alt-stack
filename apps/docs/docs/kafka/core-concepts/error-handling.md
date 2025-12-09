@@ -63,7 +63,7 @@ const router = kafkaRouter({
       }
 
       processOrder(input);
-      return ok(undefined);
+      return ok();
     }),
 });
 ```
@@ -98,7 +98,7 @@ import { ok, err, isOk, isErr } from "@alt-stack/kafka-core";
 return ok({ processed: true });
 
 // Success with void
-return ok(undefined);
+return ok();
 
 // Error
 return err({

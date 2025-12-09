@@ -8,9 +8,17 @@ import type { Ok, Err } from "./result.js";
  * const result = ok({ id: 1, name: "Alice" });
  * // Result<never, { id: number; name: string }>
  * ```
+ *
+ * @example
+ * ```typescript
+ * const result = ok();
+ * // Result<never, void>
+ * ```
  */
-export function ok<A>(value: A): Ok<A> {
-  return { _tag: "Ok", value };
+export function ok(): Ok<void>;
+export function ok<A>(value: A): Ok<A>;
+export function ok<A>(value?: A): Ok<A> {
+  return { _tag: "Ok", value: value as A };
 }
 
 /**

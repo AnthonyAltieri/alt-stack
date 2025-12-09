@@ -36,7 +36,7 @@ const jobRouter = router({
       }
 
       await processPayment(input.orderId);
-      return ok(undefined);
+      return ok();
     }),
 });
 ```
@@ -71,7 +71,7 @@ Use `ok()` for all successful returns:
 return ok({ orderId: "123", status: "processed" });
 
 // Void return
-return ok(undefined);
+return ok();
 ```
 
 ## Retries
