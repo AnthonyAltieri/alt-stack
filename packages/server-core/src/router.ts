@@ -22,7 +22,7 @@ export class Router<TCustomContext extends object = Record<string, never>> {
   private procedures: Procedure<
     InputConfig,
     z.ZodTypeAny | undefined,
-    Record<number, z.ZodTypeAny> | undefined,
+    Record<number, z.ZodTypeAny | string | string[]> | undefined,
     TCustomContext
   >[] = [];
 
@@ -46,7 +46,7 @@ export class Router<TCustomContext extends object = Record<string, never>> {
     readyProcedure: ReadyProcedure<
       TInput,
       z.ZodTypeAny | undefined,
-      Record<number, z.ZodTypeAny> | undefined,
+      Record<number, z.ZodTypeAny | string | string[]> | undefined,
       TCustomContext
     >,
   ): this {
@@ -55,7 +55,7 @@ export class Router<TCustomContext extends object = Record<string, never>> {
     const procedure: Procedure<
       TInput,
       z.ZodTypeAny | undefined,
-      Record<number, z.ZodTypeAny> | undefined,
+      Record<number, z.ZodTypeAny | string | string[]> | undefined,
       TCustomContext
     > = {
       method: readyProcedure.method,
@@ -74,7 +74,7 @@ export class Router<TCustomContext extends object = Record<string, never>> {
       procedure as unknown as Procedure<
         InputConfig,
         z.ZodTypeAny | undefined,
-        Record<number, z.ZodTypeAny> | undefined,
+        Record<number, z.ZodTypeAny | string | string[]> | undefined,
         TCustomContext
       >,
     );
@@ -88,7 +88,7 @@ export class Router<TCustomContext extends object = Record<string, never>> {
     pendingProcedure: PendingProcedure<
       TInput,
       z.ZodTypeAny | undefined,
-      Record<number, z.ZodTypeAny> | undefined,
+      Record<number, z.ZodTypeAny | string | string[]> | undefined,
       TCustomContext
     >,
   ): this {
@@ -97,7 +97,7 @@ export class Router<TCustomContext extends object = Record<string, never>> {
     const procedure: Procedure<
       TInput,
       z.ZodTypeAny | undefined,
-      Record<number, z.ZodTypeAny> | undefined,
+      Record<number, z.ZodTypeAny | string | string[]> | undefined,
       TCustomContext
     > = {
       method: method.toUpperCase(),
@@ -116,7 +116,7 @@ export class Router<TCustomContext extends object = Record<string, never>> {
       procedure as unknown as Procedure<
         InputConfig,
         z.ZodTypeAny | undefined,
-        Record<number, z.ZodTypeAny> | undefined,
+        Record<number, z.ZodTypeAny | string | string[]> | undefined,
         TCustomContext
       >,
     );
@@ -127,7 +127,7 @@ export class Router<TCustomContext extends object = Record<string, never>> {
     procedure: Procedure<
       InputConfig,
       z.ZodTypeAny | undefined,
-      Record<number, z.ZodTypeAny> | undefined,
+      Record<number, z.ZodTypeAny | string | string[]> | undefined,
       TCustomContext
     >,
   ): this {
@@ -148,7 +148,7 @@ export class Router<TCustomContext extends object = Record<string, never>> {
   getProcedures(): Procedure<
     InputConfig,
     z.ZodTypeAny | undefined,
-    Record<number, z.ZodTypeAny> | undefined,
+    Record<number, z.ZodTypeAny | string | string[]> | undefined,
     TCustomContext
   >[] {
     return this.procedures;
@@ -245,7 +245,7 @@ export function router<
             pendingProcedure as PendingProcedure<
               InputConfig,
               z.ZodTypeAny | undefined,
-              Record<number, z.ZodTypeAny> | undefined,
+              Record<number, z.ZodTypeAny | string | string[]> | undefined,
               TCustomContext
             >,
           );
@@ -258,7 +258,7 @@ export function router<
         value as ReadyProcedure<
           InputConfig,
           z.ZodTypeAny | undefined,
-          Record<number, z.ZodTypeAny> | undefined,
+          Record<number, z.ZodTypeAny | string | string[]> | undefined,
           TCustomContext
         >,
       );

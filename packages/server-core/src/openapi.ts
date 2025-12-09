@@ -349,7 +349,7 @@ function convertOutputToOpenAPIResponse(
 }
 
 function convertErrorsToOpenAPIResponses(
-  errors: Record<number, z.ZodTypeAny> | undefined,
+  errors: Record<number, z.ZodTypeAny | string | string[]> | undefined,
   operationId: string,
   schemaRegistry: SchemaRegistry,
 ): Record<string, OpenAPIResponse> {
@@ -359,22 +359,62 @@ function convertErrorsToOpenAPIResponses(
 
   const responses: Record<string, OpenAPIResponse> = {};
 
-  for (const [statusCode, errorSchema] of Object.entries(errors)) {
-    const jsonSchema = zodToJSONSchema(errorSchema, { io: "output" });
-    const suffix = `${statusCode}Error`;
-    const schemaRef = schemaRegistry.registerSchema(
-      operationId,
-      suffix,
-      jsonSchema,
-    );
-    responses[statusCode] = {
-      description: `Error response`,
-      content: {
-        "application/json": {
-          schema: schemaRef,
+  for (const [statusCode, errorValue] of Object.entries(errors)) {
+    // Handle new string-based error tags
+    if (typeof errorValue === "string" || Array.isArray(errorValue)) {
+      const tags = Array.isArray(errorValue) ? errorValue : [errorValue];
+      // Generate a simple error schema for string tags
+      const jsonSchema: Record<string, unknown> = {
+        type: "object",
+        properties: {
+          error: {
+            type: "object",
+            properties: {
+              code: {
+                type: "string",
+                enum: tags,
+              },
+              message: {
+                type: "string",
+              },
+            },
+            required: ["code", "message"],
+          },
         },
-      },
-    };
+        required: ["error"],
+      };
+      const suffix = `${statusCode}Error`;
+      const schemaRef = schemaRegistry.registerSchema(
+        operationId,
+        suffix,
+        jsonSchema,
+      );
+      responses[statusCode] = {
+        description: `Error response`,
+        content: {
+          "application/json": {
+            schema: schemaRef,
+          },
+        },
+      };
+    } else {
+      // Handle Zod schema errors (legacy support)
+      const jsonSchema = zodToJSONSchema(errorValue, { io: "output" });
+      const suffix = `${statusCode}Error`;
+      const schemaRef = schemaRegistry.registerSchema(
+        operationId,
+        suffix,
+        jsonSchema,
+      );
+      responses[statusCode] = {
+        description: `Error response`,
+        content: {
+          "application/json": {
+            schema: schemaRef,
+          },
+        },
+      };
+    }
   }
 
   return responses;
@@ -390,7 +430,7 @@ function convertProcedureToOpenAPIOperation<
   procedure: Procedure<
     InputConfig,
     z.ZodTypeAny | undefined,
-    Record<number, z.ZodTypeAny> | undefined,
+    Record<number, z.ZodTypeAny | string | string[]> | undefined,
     TCustomContext
   >,
   schemaRegistry: SchemaRegistry,
@@ -462,7 +502,7 @@ function convertProceduresToOpenAPIPaths<
   procedures: Procedure<
     InputConfig,
     z.ZodTypeAny | undefined,
-    Record<number, z.ZodTypeAny> | undefined,
+    Record<number, z.ZodTypeAny | string | string[]> | undefined,
     TCustomContext
   >[],
   schemaRegistry: SchemaRegistry,
@@ -506,7 +546,7 @@ export function generateOpenAPISpec<
   const allProcedures: Procedure<
     InputConfig,
     z.ZodTypeAny | undefined,
-    Record<number, z.ZodTypeAny> | undefined,
+    Record<number, z.ZodTypeAny | string | string[]> | undefined,
     TCustomContext
   >[] = [];
 

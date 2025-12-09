@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import type { Result, InferMessageErrors } from "@alt-stack/result";
+import type { Result, ResultError } from "@alt-stack/result";
 import { ok as resultOk, err as resultErr, isOk, isErr } from "@alt-stack/result";
 
 /**
@@ -155,7 +155,7 @@ export type MiddlewareFunctionWithErrors<
       ctx: $ContextOverride;
     }): Promise<Result<MiddlewareResultSuccess<$ContextOverride>, any>>;
   };
-}) => Promise<Result<MiddlewareResultSuccess<$ContextOverridesOut>, InferMessageErrors<$ErrorsOut>>>;
+}) => Promise<Result<MiddlewareResultSuccess<$ContextOverridesOut>, ResultError>>;
 
 /**
  * Any middleware function with errors (type-erased for runtime)

@@ -1,16 +1,20 @@
-import type { Result } from "./result.js";
+import type { Result, ResultError } from "./result.js";
 import { ok, err } from "./constructors.js";
 import { isOk, isErr } from "./guards.js";
 
 /**
  * Helper types for all() function
  */
-type ResultValues<T extends readonly Result<unknown, unknown>[]> = {
-  -readonly [K in keyof T]: T[K] extends Result<infer A, unknown> ? A : never;
+type ResultValues<T extends readonly Result<unknown, ResultError>[]> = {
+  -readonly [K in keyof T]: T[K] extends Result<infer A, ResultError>
+    ? A
+    : never;
 };
 
-type ResultErrors<T extends readonly Result<unknown, unknown>[]> = {
-  [K in keyof T]: T[K] extends Result<unknown, infer E> ? E : never;
+type ResultErrors<T extends readonly Result<unknown, ResultError>[]> = {
+  [K in keyof T]: T[K] extends Result<unknown, infer E extends ResultError>
+    ? E
+    : never;
 }[number];
 
 /**
@@ -22,11 +26,11 @@ type ResultErrors<T extends readonly Result<unknown, unknown>[]> = {
  * const results = all([ok(1), ok(2), ok(3)]);
  * // Ok { value: [1, 2, 3] }
  *
- * const withError = all([ok(1), err("failed"), ok(3)]);
- * // Err { error: "failed" }
+ * const withError = all([ok(1), err(new MyError("failed")), ok(3)]);
+ * // Err { error: MyError }
  * ```
  */
-export function all<T extends readonly Result<unknown, unknown>[]>(
+export function all<T extends readonly Result<unknown, ResultError>[]>(
   results: [...T],
 ): Result<ResultValues<T>, ResultErrors<T>> {
   const values: unknown[] = [];
@@ -42,18 +46,34 @@ export function all<T extends readonly Result<unknown, unknown>[]>(
 }
 
 /**
- * Return first Ok or collect all Errors
+ * AggregateError for firstOk combinator
+ * Collects all errors when no Result succeeds
+ */
+export class ResultAggregateError extends Error {
+  readonly _tag = "ResultAggregateError" as const;
+
+  constructor(public readonly errors: ResultError[]) {
+    const messages = errors.map((e) => e.message).join(", ");
+    super(`All results failed: ${messages}`);
+    this.name = "ResultAggregateError";
+  }
+}
+
+/**
+ * Return first Ok or collect all Errors into an AggregateError
  *
  * @example
  * ```typescript
- * const result = firstOk([err("a"), ok(1), err("b")]);
+ * const result = firstOk([err(new ErrorA()), ok(1), err(new ErrorB())]);
  * // Ok { value: 1 }
  *
- * const allFailed = firstOk([err("a"), err("b")]);
- * // Err { error: ["a", "b"] }
+ * const allFailed = firstOk([err(new ErrorA()), err(new ErrorB())]);
+ * // Err { error: ResultAggregateError { errors: [ErrorA, ErrorB] } }
  * ```
  */
-export function firstOk<A, E>(results: Result<A, E>[]): Result<A, E[]> {
+export function firstOk<A, E extends ResultError>(
+  results: Result<A, E>[],
+): Result<A, ResultAggregateError> {
   const errors: E[] = [];
 
   for (const result of results) {
@@ -63,7 +83,7 @@ export function firstOk<A, E>(results: Result<A, E>[]): Result<A, E[]> {
     errors.push(result.error);
   }
 
-  return err(errors);
+  return err(new ResultAggregateError(errors));
 }
 
 /**
@@ -76,7 +96,10 @@ export function firstOk<A, E>(results: Result<A, E>[]): Result<A, E[]> {
  * // Returns: Ok { value: 42 }
  * ```
  */
-export function tap<A, E>(result: Result<A, E>, fn: (value: A) => void): Result<A, E> {
+export function tap<A, E extends ResultError>(
+  result: Result<A, E>,
+  fn: (value: A) => void,
+): Result<A, E> {
   if (isOk(result)) {
     fn(result.value);
   }
@@ -88,12 +111,23 @@ export function tap<A, E>(result: Result<A, E>, fn: (value: A) => void): Result<
  *
  * @example
  * ```typescript
- * const result = tapError(err("failed"), error => console.error(error));
- * // Logs: "failed"
- * // Returns: Err { error: "failed" }
+ * class MyError extends Error {
+ *   readonly _tag = "MyError" as const;
+ *   constructor(message: string) {
+ *     super(message);
+ *     this.name = "MyError";
+ *   }
+ * }
+ *
+ * const result = tapError(err(new MyError("failed")), error => console.error(error._tag));
+ * // Logs: "MyError"
+ * // Returns: Err { error: MyError }
  * ```
  */
-export function tapError<A, E>(result: Result<A, E>, fn: (error: E) => void): Result<A, E> {
+export function tapError<A, E extends ResultError>(
+  result: Result<A, E>,
+  fn: (error: E) => void,
+): Result<A, E> {
   if (isErr(result)) {
     fn(result.error);
   }

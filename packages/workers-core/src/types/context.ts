@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import type { Result, InferMessageErrors } from "@alt-stack/result";
+import type { Result, ResultError } from "@alt-stack/result";
 
 export type InferOutput<T extends z.ZodTypeAny> = z.infer<T>;
 
@@ -11,14 +11,13 @@ export type ErrorUnion<T extends Record<string, z.ZodTypeAny>> =
   InferErrorSchemas<T>[keyof InferErrorSchemas<T>];
 
 /**
- * Infer the Result type for a worker handler based on errors and output schemas
+ * Infer the Result type for a worker handler based on errors and output schemas.
+ * Errors must extend Error with a readonly _tag property.
  */
 export type WorkerHandlerResult<
   TErrors extends Record<string, z.ZodTypeAny> | undefined,
   TOutput extends z.ZodTypeAny | undefined,
-> = TErrors extends Record<string, z.ZodTypeAny>
-  ? Result<InferOutput<NonNullable<TOutput>> | void, InferMessageErrors<TErrors>>
-  : Result<InferOutput<NonNullable<TOutput>> | void, never>;
+> = Result<InferOutput<NonNullable<TOutput>> | void, ResultError>;
 
 export interface InputConfig {
   payload?: z.ZodTypeAny;

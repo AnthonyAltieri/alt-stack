@@ -53,6 +53,46 @@ function normalizePath(prefix: string, path: string): string {
   return `${normalizedPrefix}${cleanPath}`;
 }
 
+/**
+ * Find HTTP status code for an error by matching its _tag against declared error tags.
+ * Error tags can be a single string or array of strings per status code.
+ */
+function findHttpStatusForError(
+  tag: string,
+  errorTags: Record<number, string | string[]> | undefined,
+): number {
+  if (!errorTags) return 500;
+  for (const [status, expectedTags] of Object.entries(errorTags)) {
+    const tags = Array.isArray(expectedTags) ? expectedTags : [expectedTags];
+    if (tags.includes(tag)) {
+      return Number(status);
+    }
+  }
+  return 500;
+}
+
+/**
+ * Serialize a ResultError for JSON response.
+ * Extracts error properties beyond the base Error fields.
+ */
+function serializeError(error: Error & { _tag: string }): object {
+  // Get all own enumerable properties except standard Error fields
+  const props: Record<string, unknown> = {};
+  for (const key of Object.keys(error)) {
+    if (key !== "name" && key !== "message" && key !== "stack") {
+      props[key] = (error as any)[key];
+    }
+  }
+
+  return {
+    error: {
+      code: error._tag,
+      message: error.message,
+      ...props,
+    },
+  };
+}
+
 export function createServer<
   TCustomContext extends object = Record<string, never>,
 >(
@@ -125,7 +165,7 @@ export function createServer<
   const procedures: Procedure<
     InputConfig,
     z.ZodTypeAny | undefined,
-    Record<number, z.ZodTypeAny> | undefined,
+    Record<number, z.ZodTypeAny | string | string[]> | undefined,
     TCustomContext
   >[] = [];
 
@@ -187,7 +227,7 @@ export function createServer<
           : ({} as TCustomContext);
         type ProcedureContext = TypedContext<
           InputConfig,
-          Record<number, z.ZodTypeAny> | undefined,
+          Record<number, z.ZodTypeAny | string | string[]> | undefined,
           TCustomContext
         >;
 
@@ -208,7 +248,7 @@ export function createServer<
 
         type MiddlewareRunResult =
           | { ok: true; ctx: ProcedureContext }
-          | { ok: false; error: { _httpCode?: number; data?: unknown } }
+          | { ok: false; error: Error & { _tag: string } }
           | { ok: true; response: Response };
 
         const runMiddleware = async (): Promise<MiddlewareRunResult> => {
@@ -251,10 +291,10 @@ export function createServer<
               next: nextFn,
             });
 
-            // Result-based middleware returns Result<Error, MiddlewareResultSuccess>
+            // Result-based middleware returns Result<MiddlewareResultSuccess, Error>
             if (result && typeof result === "object" && "_tag" in result) {
               if (result._tag === "Err") {
-                const error = result.error as { _httpCode?: number; data?: unknown };
+                const error = result.error as Error & { _tag: string };
                 return { ok: false, error };
               }
 
@@ -306,15 +346,15 @@ export function createServer<
               },
             });
           } catch (thrownError) {
-            // Check if this is a propagated middleware error with _httpCode
+            // Check if this is a propagated middleware error with _tag
             if (
               thrownError &&
-              typeof thrownError === "object" &&
-              "_httpCode" in thrownError
+              thrownError instanceof Error &&
+              typeof (thrownError as any)._tag === "string"
             ) {
               return {
                 ok: false,
-                error: thrownError as { _httpCode?: number; data?: unknown },
+                error: thrownError as Error & { _tag: string },
               };
             }
             // Re-throw other errors to be handled by outer try-catch
@@ -331,7 +371,7 @@ export function createServer<
           if (result && typeof result === "object" && "_tag" in result) {
             const resultWithTag = result as { _tag: string; error?: unknown; value?: unknown };
             if (resultWithTag._tag === "Err") {
-              const error = resultWithTag.error as { _httpCode?: number; data?: unknown };
+              const error = resultWithTag.error as Error & { _tag: string };
               return { ok: false, error };
             }
 
@@ -368,9 +408,9 @@ export function createServer<
 
         // Handle middleware errors (from Result-based middleware)
         if (!middlewareResult.ok) {
-          const error = middlewareResult.error;
-          const statusCode = error._httpCode ?? 500;
-          const errorData = error.data ?? error;
+          const error = middlewareResult.error as Error & { _tag: string };
+          const statusCode = findHttpStatusForError(error._tag, procedure.config.errors as any);
+          const errorData = serializeError(error);
 
           span?.setAttribute("http.response.status_code", statusCode);
           span?.end();
@@ -391,10 +431,10 @@ export function createServer<
 
         // Handle Result type - check if it's Ok or Err
         if (isErr(result)) {
-          // Extract HTTP status code from the error
-          const error = result.error as { _httpCode?: number; data?: unknown };
-          const statusCode = error._httpCode ?? 500;
-          const errorData = error.data ?? error;
+          // Extract HTTP status code by matching error._tag against declared error tags
+          const error = result.error;
+          const statusCode = findHttpStatusForError(error._tag, procedure.config.errors as any);
+          const errorData = serializeError(error);
 
           span?.setAttribute("http.response.status_code", statusCode);
           span?.end();

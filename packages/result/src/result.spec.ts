@@ -22,10 +22,59 @@ import {
   firstOk,
   tap,
   tapError,
-  httpError,
-  taggedError,
+  isResultError,
+  assertResultError,
+  ResultAggregateError,
   type Result,
+  type ResultError,
 } from "./index.js";
+
+// Test error classes
+class TestError extends Error {
+  readonly _tag = "TestError" as const;
+  constructor(message: string) {
+    super(message);
+    this.name = "TestError";
+  }
+}
+
+class NotFoundError extends Error {
+  readonly _tag = "NotFoundError" as const;
+  constructor(
+    public readonly database: string,
+    public readonly resourceId: string,
+  ) {
+    super(`Resource ${resourceId} not found in ${database}`);
+    this.name = "NotFoundError";
+  }
+}
+
+class ValidationError extends Error {
+  readonly _tag = "ValidationError" as const;
+  constructor(
+    public readonly field: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ValidationError";
+  }
+}
+
+class ParseError extends Error {
+  readonly _tag = "ParseError" as const;
+  constructor(public readonly originalError: unknown) {
+    super(`Parse failed: ${String(originalError)}`);
+    this.name = "ParseError";
+  }
+}
+
+class WrappedError extends Error {
+  readonly _tag = "WrappedError" as const;
+  constructor(public readonly original: ResultError) {
+    super(`Wrapped: ${original.message}`);
+    this.name = "WrappedError";
+  }
+}
 
 describe("constructors", () => {
   it("ok creates success result", () => {
@@ -40,10 +89,13 @@ describe("constructors", () => {
     expect(result.value).toBeUndefined();
   });
 
-  it("err creates failure result", () => {
-    const result = err("error");
+  it("err creates failure result with tagged error", () => {
+    const error = new TestError("something went wrong");
+    const result = err(error);
     expect(result._tag).toBe("Err");
-    expect(result.error).toBe("error");
+    expect(result.error).toBe(error);
+    expect(result.error._tag).toBe("TestError");
+    expect(result.error.message).toBe("something went wrong");
   });
 });
 
@@ -55,16 +107,34 @@ describe("guards", () => {
   });
 
   it("isErr returns true for Err", () => {
-    const result = err("error");
+    const result = err(new TestError("error"));
     expect(isErr(result)).toBe(true);
     expect(isOk(result)).toBe(false);
   });
 
   it("type narrows correctly", () => {
-    const result: Result<string, number> = ok(42);
+    const result: Result<number, TestError> = ok(42);
     if (isOk(result)) {
       const value: number = result.value;
       expect(value).toBe(42);
+    }
+  });
+
+  it("error type narrows correctly with _tag", () => {
+    const result: Result<number, NotFoundError | ValidationError> = err(
+      new NotFoundError("users", "123"),
+    );
+    if (isErr(result)) {
+      // Can use exhaustive switch on _tag
+      switch (result.error._tag) {
+        case "NotFoundError":
+          expect(result.error.database).toBe("users");
+          expect(result.error.resourceId).toBe("123");
+          break;
+        case "ValidationError":
+          // This branch won't execute
+          break;
+      }
     }
   });
 });
@@ -77,8 +147,15 @@ describe("transformations", () => {
     });
 
     it("passes through Err", () => {
-      const result = map(err("error") as Result<string, number>, (x) => x * 2);
-      expect(result).toEqual(err("error"));
+      const error = new TestError("error");
+      const result = map(
+        err(error) as Result<number, TestError>,
+        (x) => x * 2,
+      );
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error).toBe(error);
+      }
     });
   });
 
@@ -89,31 +166,53 @@ describe("transformations", () => {
     });
 
     it("short-circuits on Err", () => {
-      const result = flatMap(err("first") as Result<string, number>, (x) => ok(x * 2));
-      expect(result).toEqual(err("first"));
+      const error = new TestError("first");
+      const result = flatMap(
+        err(error) as Result<number, TestError>,
+        (x) => ok(x * 2),
+      );
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error).toBe(error);
+      }
     });
 
     it("returns inner Err", () => {
-      const result = flatMap(ok(5), (_x) => err("inner"));
-      expect(result).toEqual(err("inner"));
+      const innerError = new ValidationError("email", "Invalid email");
+      const result = flatMap(ok(5), (_x) => err(innerError));
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error).toBe(innerError);
+      }
     });
   });
 
   describe("mapError", () => {
     it("transforms Err value", () => {
-      const result = mapError(err("error"), (e) => ({ message: e }));
-      expect(result).toEqual(err({ message: "error" }));
+      const original = new TestError("error");
+      const result = mapError(err(original), (e) => new WrappedError(e));
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error._tag).toBe("WrappedError");
+        expect(result.error.original).toBe(original);
+      }
     });
 
     it("passes through Ok", () => {
-      const result = mapError(ok(42) as Result<string, number>, (e) => ({ message: e }));
+      const result = mapError(
+        ok(42) as Result<number, TestError>,
+        (e) => new WrappedError(e),
+      );
       expect(result).toEqual(ok(42));
     });
   });
 
   describe("catchError", () => {
     it("recovers from Err", () => {
-      const result = catchError(err("error") as Result<string, number>, (_e) => ok(0));
+      const result = catchError(
+        err(new TestError("error")) as Result<number, TestError>,
+        (_e) => ok(0),
+      );
       expect(result).toEqual(ok(0));
     });
 
@@ -130,8 +229,9 @@ describe("extraction", () => {
       expect(unwrap(ok(42))).toBe(42);
     });
 
-    it("throws on Err", () => {
-      expect(() => unwrap(err("error"))).toThrow("error");
+    it("throws the Error instance on Err", () => {
+      const error = new TestError("test error");
+      expect(() => unwrap(err(error))).toThrow(error);
     });
   });
 
@@ -141,7 +241,9 @@ describe("extraction", () => {
     });
 
     it("returns default for Err", () => {
-      expect(unwrapOr(err("error") as Result<string, number>, 0)).toBe(0);
+      expect(
+        unwrapOr(err(new TestError("error")) as Result<number, TestError>, 0),
+      ).toBe(0);
     });
   });
 
@@ -150,8 +252,11 @@ describe("extraction", () => {
       expect(unwrapOrElse(ok(42), () => 0)).toBe(42);
     });
 
-    it("computes default for Err", () => {
-      expect(unwrapOrElse(err("error") as Result<string, number>, (e) => e.length)).toBe(5);
+    it("computes default from error", () => {
+      const result: Result<number, NotFoundError> = err(
+        new NotFoundError("users", "123"),
+      );
+      expect(unwrapOrElse(result, (e) => e.resourceId.length)).toBe(3);
     });
   });
 
@@ -161,7 +266,7 @@ describe("extraction", () => {
     });
 
     it("returns undefined for Err", () => {
-      expect(getOrUndefined(err("error"))).toBeUndefined();
+      expect(getOrUndefined(err(new TestError("error")))).toBeUndefined();
     });
   });
 
@@ -171,7 +276,8 @@ describe("extraction", () => {
     });
 
     it("returns error for Err", () => {
-      expect(getErrorOrUndefined(err("error"))).toBe("error");
+      const error = new TestError("error");
+      expect(getErrorOrUndefined(err(error))).toBe(error);
     });
   });
 });
@@ -181,17 +287,20 @@ describe("matching", () => {
     it("calls ok handler for Ok", () => {
       const result = match(ok(42), {
         ok: (v) => `value: ${v}`,
-        err: (e) => `error: ${e}`,
+        err: (e) => `error: ${e._tag}`,
       });
       expect(result).toBe("value: 42");
     });
 
     it("calls err handler for Err", () => {
-      const result = match(err("failed") as Result<string, number>, {
-        ok: (v) => `value: ${v}`,
-        err: (e) => `error: ${e}`,
-      });
-      expect(result).toBe("error: failed");
+      const result = match(
+        err(new TestError("failed")) as Result<number, TestError>,
+        {
+          ok: (v) => `value: ${v}`,
+          err: (e) => `error: ${e._tag}`,
+        },
+      );
+      expect(result).toBe("error: TestError");
     });
   });
 
@@ -207,11 +316,14 @@ describe("matching", () => {
 
     it("applies onErr for Err", () => {
       const result = fold(
-        err("error") as Result<string, number>,
-        (e) => e.length,
+        err(new NotFoundError("users", "123")) as Result<
+          number,
+          NotFoundError
+        >,
+        (e) => e.resourceId.length,
         (v) => v * 2,
       );
-      expect(result).toBe(5);
+      expect(result).toBe(3);
     });
   });
 });
@@ -221,17 +333,23 @@ describe("async", () => {
     it("returns Ok for success", () => {
       const result = tryCatch(
         () => JSON.parse('{"a":1}'),
-        () => "parse error",
+        (e) => new ParseError(e),
       );
-      expect(result).toEqual(ok({ a: 1 }));
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value).toEqual({ a: 1 });
+      }
     });
 
     it("returns Err for failure", () => {
       const result = tryCatch(
         () => JSON.parse("invalid"),
-        () => "parse error",
+        (e) => new ParseError(e),
       );
-      expect(result).toEqual(err("parse error"));
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error._tag).toBe("ParseError");
+      }
     });
   });
 
@@ -239,7 +357,7 @@ describe("async", () => {
     it("returns Ok for success", async () => {
       const result = await tryCatchAsync(
         async () => 42,
-        () => "error",
+        (e) => new TestError(String(e)),
       );
       expect(result).toEqual(ok(42));
     });
@@ -249,21 +367,33 @@ describe("async", () => {
         async () => {
           throw new Error("failed");
         },
-        () => "error",
+        (e) => new TestError(String(e)),
       );
-      expect(result).toEqual(err("error"));
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error._tag).toBe("TestError");
+      }
     });
   });
 
   describe("fromPromise", () => {
     it("returns Ok for resolved promise", async () => {
-      const result = await fromPromise(Promise.resolve(42), () => "error");
+      const result = await fromPromise(
+        Promise.resolve(42),
+        (e) => new TestError(String(e)),
+      );
       expect(result).toEqual(ok(42));
     });
 
     it("returns Err for rejected promise", async () => {
-      const result = await fromPromise(Promise.reject(new Error("failed")), () => "error");
-      expect(result).toEqual(err("error"));
+      const result = await fromPromise(
+        Promise.reject(new Error("failed")),
+        (e) => new TestError(String(e)),
+      );
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error._tag).toBe("TestError");
+      }
     });
   });
 });
@@ -276,8 +406,16 @@ describe("combinators", () => {
     });
 
     it("returns first Err", () => {
-      const result = all([ok(1), err("error"), ok(3)] as Result<string, number>[]);
-      expect(result).toEqual(err("error"));
+      const error = new TestError("error");
+      const result = all([
+        ok(1),
+        err(error) as Result<number, TestError>,
+        ok(3),
+      ]);
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error).toBe(error);
+      }
     });
 
     it("handles empty array", () => {
@@ -288,13 +426,26 @@ describe("combinators", () => {
 
   describe("firstOk", () => {
     it("returns first Ok", () => {
-      const result = firstOk([err("a"), ok(1), err("b")] as Result<string, number>[]);
+      const result = firstOk([
+        err(new TestError("a")),
+        ok(1),
+        err(new TestError("b")),
+      ] as Result<number, TestError>[]);
       expect(result).toEqual(ok(1));
     });
 
-    it("collects all errors if no Ok", () => {
-      const result = firstOk([err("a"), err("b")]);
-      expect(result).toEqual(err(["a", "b"]));
+    it("returns AggregateError if no Ok", () => {
+      const errorA = new TestError("a");
+      const errorB = new TestError("b");
+      const result = firstOk([err(errorA), err(errorB)]);
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error._tag).toBe("ResultAggregateError");
+        expect(result.error).toBeInstanceOf(ResultAggregateError);
+        expect(result.error.errors).toHaveLength(2);
+        expect(result.error.errors[0]).toBe(errorA);
+        expect(result.error.errors[1]).toBe(errorB);
+      }
     });
   });
 
@@ -310,10 +461,13 @@ describe("combinators", () => {
 
     it("skips side effect for Err", () => {
       let sideEffect = 0;
-      const result = tap(err("error") as Result<string, number>, (v) => {
-        sideEffect = v;
-      });
-      expect(result).toEqual(err("error"));
+      const result = tap(
+        err(new TestError("error")) as Result<number, TestError>,
+        (v) => {
+          sideEffect = v;
+        },
+      );
+      expect(isErr(result)).toBe(true);
       expect(sideEffect).toBe(0);
     });
   });
@@ -321,43 +475,93 @@ describe("combinators", () => {
   describe("tapError", () => {
     it("runs side effect for Err", () => {
       let sideEffect = "";
-      const result = tapError(err("error"), (e) => {
-        sideEffect = e;
+      const error = new TestError("error");
+      const result = tapError(err(error), (e) => {
+        sideEffect = e._tag;
       });
-      expect(result).toEqual(err("error"));
-      expect(sideEffect).toBe("error");
+      expect(isErr(result)).toBe(true);
+      expect(sideEffect).toBe("TestError");
     });
 
     it("skips side effect for Ok", () => {
       let sideEffect = "";
-      const result = tapError(ok(42) as Result<string, number>, (e) => {
-        sideEffect = e;
-      });
+      const result = tapError(
+        ok(42) as Result<number, TestError>,
+        (e) => {
+          sideEffect = e._tag;
+        },
+      );
       expect(result).toEqual(ok(42));
       expect(sideEffect).toBe("");
     });
   });
 });
 
-describe("error helpers", () => {
-  describe("httpError", () => {
-    it("creates tagged HTTP error", () => {
-      const error = httpError(404, { message: "Not found" });
-      expect(error).toEqual({
-        _httpCode: 404,
-        data: { message: "Not found" },
-      });
+describe("error inference helpers", () => {
+  describe("isResultError", () => {
+    it("returns true for valid ResultError", () => {
+      const error = new TestError("test");
+      expect(isResultError(error)).toBe(true);
+    });
+
+    it("returns false for plain Error without _tag", () => {
+      const error = new Error("test");
+      expect(isResultError(error)).toBe(false);
+    });
+
+    it("returns false for non-Error objects", () => {
+      expect(isResultError({ _tag: "Test" })).toBe(false);
+      expect(isResultError("error")).toBe(false);
+      expect(isResultError(null)).toBe(false);
     });
   });
 
-  describe("taggedError", () => {
-    it("creates error with both codes", () => {
-      const error = taggedError(1001, 400, { message: "Validation failed" });
-      expect(error).toEqual({
-        _code: 1001,
-        _httpCode: 400,
-        data: { message: "Validation failed" },
-      });
+  describe("assertResultError", () => {
+    it("does not throw for valid ResultError", () => {
+      const error = new TestError("test");
+      expect(() => assertResultError(error)).not.toThrow();
     });
+
+    it("throws TypeError for plain Error without _tag", () => {
+      const error = new Error("test");
+      expect(() => assertResultError(error)).toThrow(TypeError);
+      expect(() => assertResultError(error)).toThrow(
+        "Error must have a readonly _tag string property",
+      );
+    });
+
+    it("throws TypeError for non-Error objects", () => {
+      expect(() => assertResultError({ _tag: "Test" })).toThrow(TypeError);
+      expect(() => assertResultError({ _tag: "Test" })).toThrow(
+        "Error must be an instance of Error",
+      );
+    });
+  });
+});
+
+describe("exhaustive error handling", () => {
+  it("supports exhaustive switch on error _tag", () => {
+    type MyErrors = NotFoundError | ValidationError;
+    const result: Result<number, MyErrors> = err(
+      new NotFoundError("todos", "123"),
+    );
+
+    if (isErr(result)) {
+      const handleError = (error: MyErrors): string => {
+        switch (error._tag) {
+          case "NotFoundError":
+            return `Not found: ${error.resourceId} in ${error.database}`;
+          case "ValidationError":
+            return `Validation failed on ${error.field}`;
+          default: {
+            // This ensures exhaustive checking - TypeScript will error if we miss a case
+            const _exhaustive: never = error;
+            return _exhaustive;
+          }
+        }
+      };
+
+      expect(handleError(result.error)).toBe("Not found: 123 in todos");
+    }
   });
 });

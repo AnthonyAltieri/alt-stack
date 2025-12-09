@@ -1,25 +1,44 @@
 import type { z } from "zod";
-import type { Result, InferHttpErrors } from "@alt-stack/result";
+import type { Result, ResultError } from "@alt-stack/result";
 
 export type InferOutput<T extends z.ZodTypeAny> = z.infer<T>;
 
-export type InferErrorSchemas<T extends Record<number, z.ZodTypeAny>> = {
+export type InferErrorSchemas<T extends Record<number, z.ZodTypeAny | string | string[]>> = {
   [K in keyof T]: z.infer<T[K]>;
 };
 
-export type ErrorUnion<T extends Record<number, z.ZodTypeAny>> =
+export type ErrorUnion<T extends Record<number, z.ZodTypeAny | string | string[]>> =
   InferErrorSchemas<T>[keyof InferErrorSchemas<T>];
 
 /**
  * Infer the Result type for a handler based on errors and output schemas.
  * When no output schema is defined, allows any value including Response objects.
+ *
+ * Errors must extend ResultError (Error with _tag property).
+ * The TErrors record maps HTTP status codes to error tag strings or arrays of tag strings.
+ *
+ * @example
+ * ```typescript
+ * class NotFoundError extends Error {
+ *   readonly _tag = "NotFoundError" as const;
+ *   constructor(public readonly id: string) {
+ *     super(`Resource ${id} not found`);
+ *     this.name = "NotFoundError";
+ *   }
+ * }
+ *
+ * // In handler:
+ * .errors({ 404: "NotFoundError" })
+ * .handler((opts) => {
+ *   if (!found) return err(new NotFoundError(id));
+ *   return ok(data);
+ * })
+ * ```
  */
 export type HandlerResult<
-  TErrors extends Record<number, z.ZodTypeAny> | undefined,
+  TErrors extends Record<number, z.ZodTypeAny | string | string[]> | undefined,
   TOutput extends z.ZodTypeAny | undefined,
-> = TErrors extends Record<number, z.ZodTypeAny>
-  ? Result<TOutput extends z.ZodTypeAny ? InferOutput<TOutput> : unknown, InferHttpErrors<TErrors>>
-  : Result<TOutput extends z.ZodTypeAny ? InferOutput<TOutput> : unknown, never>;
+> = Result<TOutput extends z.ZodTypeAny ? InferOutput<TOutput> : unknown, ResultError>;
 
 // ============================================================================
 // String Input Validation Types
@@ -94,7 +113,7 @@ export interface BaseContext {
 
 export type TypedContext<
   TInput extends InputConfig,
-  TErrors extends Record<number, z.ZodTypeAny> | undefined,
+  TErrors extends Record<number, z.ZodTypeAny | string | string[]> | undefined,
   TCustomContext extends object = Record<string, never>,
 > = BaseContext &
   TCustomContext & {

@@ -36,13 +36,21 @@ type MergeInputConfig<TBase extends InputConfig, TOverride extends InputConfig> 
   body: TOverride["body"] extends z.ZodTypeAny ? TOverride["body"] : TBase["body"];
 };
 
+/**
+ * Error config value type - can be either:
+ * - Zod schema (legacy pattern)
+ * - String tag (new pattern - single error tag)
+ * - String array (new pattern - multiple error tags for same status)
+ */
+type ErrorConfigValue = z.ZodTypeAny | string | string[];
+
 // Helper type to merge error configs - unions schemas when status codes overlap
 type MergeErrors<
-  TBaseErrors extends Record<number, z.ZodTypeAny> | undefined,
-  TRouteErrors extends Record<number, z.ZodTypeAny> | undefined,
+  TBaseErrors extends Record<number, ErrorConfigValue> | undefined,
+  TRouteErrors extends Record<number, ErrorConfigValue> | undefined,
 > =
-  TRouteErrors extends Record<number, z.ZodTypeAny>
-    ? TBaseErrors extends Record<number, z.ZodTypeAny>
+  TRouteErrors extends Record<number, ErrorConfigValue>
+    ? TBaseErrors extends Record<number, ErrorConfigValue>
       ? {
           [K in keyof TBaseErrors | keyof TRouteErrors]: K extends keyof TBaseErrors
             ? K extends keyof TRouteErrors
@@ -68,11 +76,11 @@ export class BaseProcedureBuilder<
     body?: never;
   },
   TBaseOutput extends z.ZodTypeAny | undefined = undefined,
-  TBaseErrors extends Record<number, z.ZodTypeAny> | undefined = undefined,
+  TBaseErrors extends Record<number, ErrorConfigValue> | undefined = undefined,
   TCustomContext extends object = Record<string, never>,
   TRouter = unknown,
-  TDefaultErrors extends Record<number, z.ZodTypeAny> = {},
-  TMiddlewareErrors extends Record<number, z.ZodTypeAny> = {},
+  TDefaultErrors extends Record<number, ErrorConfigValue> = {},
+  TMiddlewareErrors extends Record<number, ErrorConfigValue> = {},
 > {
   private _baseConfig: {
     input: TBaseInput;
@@ -83,7 +91,7 @@ export class BaseProcedureBuilder<
   // Middleware stored with type erasure for runtime, but builder generic tracks narrowed context
   private _middleware: Array<
     (opts: {
-      ctx: TypedContext<InputConfig, Record<number, z.ZodTypeAny> | undefined, any>;
+      ctx: TypedContext<InputConfig, Record<number, ErrorConfigValue> | undefined, any>;
       next: (opts?: { ctx?: any }) => Promise<any>;
     }) => Promise<any>
   > = [];
@@ -106,7 +114,7 @@ export class BaseProcedureBuilder<
         proc: Procedure<
           InputConfig,
           z.ZodTypeAny | undefined,
-          Record<number, z.ZodTypeAny> | undefined,
+          Record<number, ErrorConfigValue> | undefined,
           any
         >,
       ) => void;
@@ -158,7 +166,7 @@ export class BaseProcedureBuilder<
    * const protected = builder.use(authMiddleware); // 401 error merged into procedure
    * ```
    */
-  use<$ContextOverridesOut, $MiddlewareErrors extends Record<number, z.ZodTypeAny> = {}>(
+  use<$ContextOverridesOut, $MiddlewareErrors extends Record<number, ErrorConfigValue> = {}>(
     middlewareOrBuilder:
       | MiddlewareFunction<
           TypedContext<
@@ -314,7 +322,7 @@ export class BaseProcedureBuilder<
     );
   }
 
-  errors<TErrors extends Record<number, z.ZodTypeAny>>(
+  errors<TErrors extends Record<number, ErrorConfigValue>>(
     errors: TErrors,
   ): BaseProcedureBuilder<
     TBaseInput,
@@ -352,7 +360,7 @@ export class BaseProcedureBuilder<
         proc: Procedure<
           InputConfig,
           z.ZodTypeAny | undefined,
-          Record<number, z.ZodTypeAny> | undefined,
+          Record<number, ErrorConfigValue> | undefined,
           TCustomContext
         >,
       ) => void;
@@ -657,7 +665,7 @@ export class ProcedureBuilder<
         proc: Procedure<
           InputConfig,
           z.ZodTypeAny | undefined,
-          Record<number, z.ZodTypeAny> | undefined,
+          Record<number, ErrorConfigValue> | undefined,
           TCustomContext
         >,
       ) => void;
@@ -686,7 +694,7 @@ export class ProcedureBuilder<
         this.build() as unknown as Procedure<
           InputConfig,
           z.ZodTypeAny | undefined,
-          Record<number, z.ZodTypeAny> | undefined,
+          Record<number, ErrorConfigValue> | undefined,
           TCustomContext
         >,
       );
