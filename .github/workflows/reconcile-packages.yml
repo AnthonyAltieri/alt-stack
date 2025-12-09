@@ -1,0 +1,257 @@
+name: Reconcile Package Versions
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run - report issues without publishing'
+        required: false
+        default: 'true'
+        type: boolean
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org/'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-store-
+        continue-on-error: true
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Configure npm (for publishing)
+        if: inputs.dry_run != true
+        shell: bash
+        run: |
+          if [ -z "${{ secrets.NPM_TOKEN }}" ]; then
+            echo "Error: NPM_TOKEN secret is required for publishing"
+            exit 1
+          fi
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
+
+      - name: Reconcile package versions
+        id: reconcile
+        shell: bash
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          node << 'EOF'
+          const { execSync } = require('child_process');
+          const fs = require('fs');
+          const path = require('path');
+
+          const isDryRun = process.env.DRY_RUN === 'true';
+          console.log(`\n${'='.repeat(60)}`);
+          console.log(isDryRun ? '🔍 DRY RUN MODE - No changes will be made' : '🚀 PUBLISH MODE - Will fix missing versions');
+          console.log(`${'='.repeat(60)}\n`);
+
+          // Helper to run npm view commands
+          function npmView(pkg, field = '') {
+            try {
+              const cmd = field ? `npm view ${pkg} ${field} --json` : `npm view ${pkg} --json`;
+              const result = execSync(cmd, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+              return JSON.parse(result);
+            } catch (e) {
+              return null;
+            }
+          }
+
+          // Helper to check if a specific version exists on npm
+          function versionExists(pkg, version) {
+            try {
+              execSync(`npm view ${pkg}@${version} version`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+              return true;
+            } catch {
+              return false;
+            }
+          }
+
+          // Get all @alt-stack packages from the repo
+          function getLocalPackages() {
+            const packagesDir = 'packages';
+            const packages = [];
+
+            for (const dir of fs.readdirSync(packagesDir)) {
+              const pkgJsonPath = path.join(packagesDir, dir, 'package.json');
+              if (fs.existsSync(pkgJsonPath)) {
+                try {
+                  const pkgJson = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf-8'));
+                  if (pkgJson.name?.startsWith('@alt-stack/') && pkgJson.name !== '@alt-stack/typescript-config') {
+                    packages.push({
+                      name: pkgJson.name,
+                      localVersion: pkgJson.version,
+                      directory: path.join(packagesDir, dir)
+                    });
+                  }
+                } catch {}
+              }
+            }
+
+            return packages;
+          }
+
+          // Main reconciliation logic
+          async function reconcile() {
+            const localPackages = getLocalPackages();
+            console.log(`📦 Found ${localPackages.length} local @alt-stack packages\n`);
+
+            const missingVersions = [];
+            const checkedDeps = new Set();
+
+            // For each local package, check all published versions' dependencies
+            for (const pkg of localPackages) {
+              const versions = npmView(pkg.name, 'versions');
+              if (!versions || !Array.isArray(versions)) {
+                console.log(`  ⚪ ${pkg.name} - not published yet`);
+                continue;
+              }
+
+              console.log(`  📦 ${pkg.name} - ${versions.length} published version(s)`);
+
+              for (const version of versions) {
+                const deps = npmView(`${pkg.name}@${version}`, 'dependencies');
+                if (!deps) continue;
+
+                for (const [depName, depVersion] of Object.entries(deps)) {
+                  if (!depName.startsWith('@alt-stack/')) continue;
+
+                  const depKey = `${depName}@${depVersion}`;
+                  if (checkedDeps.has(depKey)) continue;
+                  checkedDeps.add(depKey);
+
+                  if (!versionExists(depName, depVersion)) {
+                    missingVersions.push({
+                      package: depName,
+                      version: depVersion,
+                      requiredBy: `${pkg.name}@${version}`
+                    });
+                  }
+                }
+              }
+            }
+
+            console.log(`\n${'='.repeat(60)}`);
+
+            if (missingVersions.length === 0) {
+              console.log('✅ All dependencies are satisfied! No missing versions found.');
+              return;
+            }
+
+            console.log(`\n❌ Found ${missingVersions.length} missing version(s):\n`);
+            for (const mv of missingVersions) {
+              console.log(`  • ${mv.package}@${mv.version}`);
+              console.log(`    └─ Required by: ${mv.requiredBy}`);
+            }
+
+            if (isDryRun) {
+              console.log(`\n${'='.repeat(60)}`);
+              console.log('🔍 DRY RUN COMPLETE - Run with dry_run=false to publish missing versions');
+              console.log(`${'='.repeat(60)}\n`);
+              return;
+            }
+
+            // Dedupe missing versions (same package+version may be required by multiple packages)
+            const uniqueMissing = [];
+            const seen = new Set();
+            for (const mv of missingVersions) {
+              const key = `${mv.package}@${mv.version}`;
+              if (!seen.has(key)) {
+                seen.add(key);
+                uniqueMissing.push(mv);
+              }
+            }
+
+            console.log(`\n🔧 Publishing ${uniqueMissing.length} missing version(s)...\n`);
+
+            for (const mv of uniqueMissing) {
+              const localPkg = localPackages.find(p => p.name === mv.package);
+              if (!localPkg) {
+                console.log(`  ⚠️  ${mv.package}@${mv.version} - package not found locally, skipping`);
+                continue;
+              }
+
+              console.log(`  📤 Publishing ${mv.package}@${mv.version}...`);
+
+              const pkgJsonPath = path.join(localPkg.directory, 'package.json');
+              const originalPkgJson = fs.readFileSync(pkgJsonPath, 'utf-8');
+              const pkgJson = JSON.parse(originalPkgJson);
+
+              try {
+                // Temporarily set the version
+                pkgJson.version = mv.version;
+                fs.writeFileSync(pkgJsonPath, JSON.stringify(pkgJson, null, 2) + '\n');
+
+                // Build the package
+                try {
+                  execSync(`pnpm turbo run build --filter="${mv.package}"`, {
+                    stdio: 'inherit',
+                    cwd: process.cwd()
+                  });
+                } catch (buildError) {
+                  console.log(`     ⚠️  Build failed, trying without turbo...`);
+                  execSync('pnpm build', {
+                    stdio: 'inherit',
+                    cwd: localPkg.directory
+                  });
+                }
+
+                // Publish
+                execSync('pnpm publish --access public --no-git-checks', {
+                  stdio: 'inherit',
+                  cwd: localPkg.directory
+                });
+
+                console.log(`     ✅ Successfully published ${mv.package}@${mv.version}`);
+
+              } catch (error) {
+                console.log(`     ❌ Failed to publish: ${error.message}`);
+              } finally {
+                // Always restore original package.json
+                fs.writeFileSync(pkgJsonPath, originalPkgJson);
+              }
+            }
+
+            console.log(`\n${'='.repeat(60)}`);
+            console.log('🎉 Reconciliation complete!');
+            console.log(`${'='.repeat(60)}\n`);
+          }
+
+          reconcile().catch(err => {
+            console.error('Reconciliation failed:', err);
+            process.exit(1);
+          });
+          EOF
+
+      - name: Summary
+        run: |
+          echo "### Package Reconciliation Complete" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ inputs.dry_run }}" == "true" ]; then
+            echo "🔍 **Dry run** - no changes were made" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ **Publishing complete** - missing versions have been published" >> $GITHUB_STEP_SUMMARY
+          fi
