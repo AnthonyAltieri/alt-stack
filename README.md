@@ -4,6 +4,9 @@ A type-safe full-stack framework built with Zod validation. Inspired by tRPC's b
 
 ## Packages
 
+### Core
+- `@alt-stack/result` - Type-safe Result type for explicit error handling
+
 ### Server
 - `@alt-stack/server-core` - Framework-agnostic core
 - `@alt-stack/server-hono` - Hono adapter *(recommended)*

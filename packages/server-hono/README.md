@@ -81,12 +81,43 @@ export default app;
 
 - **Type-safe routes**: Full TypeScript inference from Zod schemas
 - **Builder pattern**: Fluent API for defining routes with `.get()`, `.post()`, etc.
-- **Type-safe errors**: `ctx.error()` with automatic status code inference
+- **Result-based error handling**: Use `ok()` and `err()` for explicit error returns
 - **Reusable procedures**: Create middleware chains with context extension
 - **Router combination**: Nest routers for modular API design
 - **Validation**: Automatic Zod validation for params, query, and body
 - **OpenAPI generation**: Built-in Swagger UI with `createDocsRouter()`
 - **Native Hono context**: Access full Hono API via `ctx.hono`
+
+## Error Handling
+
+Use `ok()` and `err()` from the Result pattern for type-safe error handling:
+
+```typescript
+import { ok, err } from "@alt-stack/server-hono";
+
+const userRouter = router({
+  "/users/{id}": factory.procedure
+    .input({ params: z.object({ id: z.string() }) })
+    .output(z.object({ id: z.string(), name: z.string() }))
+    .errors({
+      404: z.object({
+        error: z.object({ code: z.literal("NOT_FOUND"), message: z.string() }),
+      }),
+    })
+    .get(({ input }) => {
+      const user = findUser(input.params.id);
+      if (!user) {
+        return err({
+          _httpCode: 404 as const,
+          data: { error: { code: "NOT_FOUND" as const, message: "User not found" } },
+        });
+      }
+      return ok(user);
+    }),
+});
+```
+
+See [`@alt-stack/result`](../result/README.md) for full Result type documentation.
 
 ## Context Access
 
@@ -97,7 +128,7 @@ In handlers and middleware, access the Hono context via `ctx.hono`:
   // Access Hono's context directly
   const url = ctx.hono.req.url;
   const headers = ctx.hono.req.header();
-  
+
   // Return responses
   return ctx.hono.json({ message: "Hello" });
 })
@@ -163,6 +194,7 @@ Handler code remains the same - `ctx.hono` is still available.
 
 ## Related Packages
 
+- [`@alt-stack/result`](../result/README.md) - Result type for error handling
 - [`@alt-stack/server-core`](../server-core/README.md) - Core types and utilities
 - [`@alt-stack/server-express`](../server-express/README.md) - Express adapter
 - [`@alt-stack/http-client-fetch`](../http-client-fetch/README.md) - Type-safe API client (fetch)

@@ -11,7 +11,7 @@ pnpm add @alt-stack/workers-core zod
 ## Usage
 
 ```typescript
-import { init } from "@alt-stack/workers-core";
+import { init, ok, err } from "@alt-stack/workers-core";
 import { z } from "zod";
 
 // Define your context type
@@ -25,12 +25,19 @@ const { router, procedure } = init<AppContext>();
 
 // Define jobs
 const emailRouter = router({
-  // On-demand task
+  // On-demand task with Result-based error handling
   "send-welcome-email": procedure
     .input({ payload: z.object({ userId: z.string(), email: z.string() }) })
+    .errors({
+      INVALID_EMAIL: z.object({ code: z.literal("INVALID_EMAIL"), message: z.string() }),
+    })
     .task(async ({ input, ctx }) => {
+      if (!isValidEmail(input.email)) {
+        return err({ data: { code: "INVALID_EMAIL" as const, message: "Invalid email format" } });
+      }
       ctx.logger.info(`Sending welcome email to ${input.email}`);
       await sendEmail(input.email, "Welcome!");
+      return ok();
     }),
 
   // Scheduled cron job
@@ -38,6 +45,7 @@ const emailRouter = router({
     .cron("0 9 * * *", async ({ ctx }) => {
       ctx.logger.info("Running daily digest");
       await generateDailyDigest();
+      return ok();
     }),
 
   // Queue-based job
@@ -45,11 +53,14 @@ const emailRouter = router({
     .input({ payload: z.object({ fileId: z.string() }) })
     .queue("uploads", async ({ input, ctx }) => {
       await processFile(input.fileId);
+      return ok();
     }),
 });
 
 export { emailRouter };
 ```
+
+See [`@alt-stack/result`](../result/README.md) for full Result type documentation.
 
 ## Middleware
 

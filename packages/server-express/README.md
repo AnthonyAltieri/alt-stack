@@ -89,12 +89,43 @@ app.listen(3000, () => {
 
 - **Type-safe routes**: Full TypeScript inference from Zod schemas
 - **Builder pattern**: Fluent API for defining routes with `.get()`, `.post()`, etc.
-- **Type-safe errors**: `ctx.error()` with automatic status code inference
+- **Result-based error handling**: Use `ok()` and `err()` for explicit error returns
 - **Reusable procedures**: Create middleware chains with context extension
 - **Router combination**: Nest routers for modular API design
 - **Validation**: Automatic Zod validation for params, query, and body
 - **OpenAPI generation**: Built-in Swagger UI with `createDocsRouter()`
 - **Native Express context**: Access full Express API via `ctx.express`
+
+## Error Handling
+
+Use `ok()` and `err()` from the Result pattern for type-safe error handling:
+
+```typescript
+import { ok, err } from "@alt-stack/server-express";
+
+const userRouter = router({
+  "/users/{id}": factory.procedure
+    .input({ params: z.object({ id: z.string() }) })
+    .output(z.object({ id: z.string(), name: z.string() }))
+    .errors({
+      404: z.object({
+        error: z.object({ code: z.literal("NOT_FOUND"), message: z.string() }),
+      }),
+    })
+    .get(({ input }) => {
+      const user = findUser(input.params.id);
+      if (!user) {
+        return err({
+          _httpCode: 404 as const,
+          data: { error: { code: "NOT_FOUND" as const, message: "User not found" } },
+        });
+      }
+      return ok(user);
+    }),
+});
+```
+
+See [`@alt-stack/result`](../result/README.md) for full Result type documentation.
 
 ## Context Access
 
@@ -105,7 +136,7 @@ In handlers and middleware, access the Express request/response via `ctx.express
   // Access Express req/res directly
   const url = ctx.express.req.url;
   const headers = ctx.express.req.headers;
-  
+
   // For most cases, just return data (auto-serialized to JSON)
   return { message: "Hello" };
 })
@@ -165,6 +196,7 @@ Since HTTP path parameters and query strings are always strings, `input.params` 
 
 ## Related Packages
 
+- [`@alt-stack/result`](../result/README.md) - Result type for error handling
 - [`@alt-stack/server-core`](../server-core/README.md) - Core types and utilities
 - [`@alt-stack/server-hono`](../server-hono/README.md) - Hono adapter
 - [`@alt-stack/http-client-fetch`](../http-client-fetch/README.md) - Type-safe API client (fetch)
