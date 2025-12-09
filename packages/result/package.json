@@ -1,6 +1,6 @@
 {
   "name": "@alt-stack/result",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Type-safe Result type for explicit error handling inspired by Effect-TS",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -40,6 +40,5 @@
     "typescript": "^5.9.2",
     "vitest": "^4.0.3",
     "zod": "^4.0.0"
-  },
-  "_publishTrigger": 1765256199105
+  }
 }

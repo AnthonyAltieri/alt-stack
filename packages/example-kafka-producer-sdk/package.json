@@ -1,6 +1,6 @@
 {
   "name": "@alt-stack/example-kafka-producer-sdk",
-  "version": "1.0.4",
+  "version": "1.1.0",
   "description": "Auto-generated TypeScript SDK for example-kafka-producer",
   "type": "module",
   "main": "./dist/index.js",
@@ -39,6 +39,5 @@
     "url": "https://github.com/altstack/zod-utilities.git",
     "directory": "packages/example-kafka-producer-sdk"
   },
-  "license": "MIT",
-  "_publishTrigger": 1765256199101
+  "license": "MIT"
 }

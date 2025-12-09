@@ -1,6 +1,6 @@
 {
   "name": "@alt-stack/server-core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Framework-agnostic core for type-safe server framework with Zod validation",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -39,6 +39,5 @@
     "typescript": "^5.9.2",
     "vitest": "^4.0.3",
     "zod": "^4.0.0"
-  },
-  "_publishTrigger": 1765256199106
+  }
 }

@@ -364,10 +364,15 @@ jobs:
           if [ "$DRY_RUN" == "true" ]; then
             echo "🧪 [DRY-RUN] Would publish ${{ matrix.name }}@${{ steps.version.outputs.new_version }}"
           else
-            echo "Publishing ${{ matrix.name }}@${{ steps.version.outputs.new_version }}..."
-            cd "${{ matrix.directory }}"
-            pnpm publish --access public --no-git-checks
-            echo "✓ Successfully published ${{ matrix.name }}@${{ steps.version.outputs.new_version }}"
+            # Check if version already exists on npm
+            if npm view "${{ matrix.name }}@${{ steps.version.outputs.new_version }}" version 2>/dev/null; then
+              echo "⏭️ Skipping ${{ matrix.name }}@${{ steps.version.outputs.new_version }} - already published"
+            else
+              echo "Publishing ${{ matrix.name }}@${{ steps.version.outputs.new_version }}..."
+              cd "${{ matrix.directory }}"
+              pnpm publish --access public --no-git-checks
+              echo "✓ Successfully published ${{ matrix.name }}@${{ steps.version.outputs.new_version }}"
+            fi
           fi
 
       - name: Create git tag

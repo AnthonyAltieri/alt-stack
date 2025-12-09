@@ -1,6 +1,6 @@
 {
   "name": "@alt-stack/workers-client-trigger",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Trigger.dev binding for type-safe worker client",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -38,6 +38,5 @@
     "tsup": "^8.0.0",
     "typescript": "^5.9.2",
     "zod": "^4.0.0"
-  },
-  "_publishTrigger": 1765256199108
+  }
 }

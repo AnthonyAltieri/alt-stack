@@ -1,6 +1,6 @@
 {
   "name": "@alt-stack/workers-trigger",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Trigger.dev integration for @alt-stack/workers-core",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -34,6 +34,5 @@
     "typescript": "^5.9.2",
     "vitest": "^4.0.3",
     "zod": "^4.0.0"
-  },
-  "_publishTrigger": 1765256199109
+  }
 }
