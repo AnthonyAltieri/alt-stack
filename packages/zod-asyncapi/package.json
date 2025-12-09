@@ -1,6 +1,6 @@
 {
   "name": "@alt-stack/zod-asyncapi",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Convert AsyncAPI schemas to Zod schemas with TypeScript code generation",
   "type": "module",
   "main": "./dist/index.cjs",

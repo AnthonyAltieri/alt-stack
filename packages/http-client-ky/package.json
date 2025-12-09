@@ -1,6 +1,6 @@
 {
   "name": "@alt-stack/http-client-ky",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Type-safe HTTP client using ky library",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

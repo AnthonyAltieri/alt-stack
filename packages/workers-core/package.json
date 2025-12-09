@@ -1,6 +1,6 @@
 {
   "name": "@alt-stack/workers-core",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Framework-agnostic core for type-safe background workers with Zod validation",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

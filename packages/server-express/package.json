@@ -1,6 +1,6 @@
 {
   "name": "@alt-stack/server-express",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Type-safe server framework built on Express with Zod validation",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
