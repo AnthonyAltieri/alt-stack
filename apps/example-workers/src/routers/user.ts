@@ -31,7 +31,7 @@ export const userRouter = router({
           name: `User ${input.userId}`,
         });
       }
-      return ok(undefined);
+      return ok();
     }),
 
   // Cleanup inactive users (scheduled)
@@ -40,6 +40,6 @@ export const userRouter = router({
     console.log("Running inactive user cleanup");
     console.log(`Checking ${ctx.db.users.size} users for inactivity...`);
     // In a real app, you'd check last login dates, etc.
-    return ok(undefined);
+    return ok();
   }),
 });

@@ -398,6 +398,6 @@ export const dataPipelineRouter = router({
     }
 
     console.log(`[Cleanup] Removed ${cleaned} old records`);
-    return ok(undefined);
+    return ok();
   }),
 });

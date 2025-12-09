@@ -54,7 +54,7 @@ export const emailRouter = router({
     // Get all users and send digest
     const userCount = ctx.db.users.size;
     console.log(`Would send daily digest to ${userCount} users`);
-    return ok(undefined);
+    return ok();
   }),
 
   // Queue-based task: Process bulk emails
@@ -77,6 +77,6 @@ export const emailRouter = router({
           sentAt: new Date(),
         });
       }
-      return ok(undefined);
+      return ok();
     }),
 });
