@@ -1,6 +1,6 @@
 {
   "name": "@alt-stack/workers-trigger",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Trigger.dev integration for @alt-stack/workers-core",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
