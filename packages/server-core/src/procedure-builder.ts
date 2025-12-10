@@ -37,12 +37,11 @@ type MergeInputConfig<TBase extends InputConfig, TOverride extends InputConfig> 
 };
 
 /**
- * Error config value type - can be either:
- * - Zod schema (legacy pattern)
- * - String tag (new pattern - single error tag)
- * - String array (new pattern - multiple error tags for same status)
+ * Error config value type - must be a Zod schema with `_tag: z.literal("...")`
+ * The schema documents the error shape for OpenAPI generation and the _tag
+ * literal is extracted for type-safe error enforcement.
  */
-type ErrorConfigValue = z.ZodTypeAny | string | string[];
+type ErrorConfigValue = z.ZodTypeAny;
 
 // Helper type to merge error configs - unions schemas when status codes overlap
 type MergeErrors<

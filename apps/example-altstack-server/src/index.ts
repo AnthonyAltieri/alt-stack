@@ -7,52 +7,71 @@ import {
   err,
   isErr,
   flatMap,
+  TaggedError,
 } from "@alt-stack/server-hono";
 import type { Result } from "@alt-stack/server-hono";
 import type { Context } from "hono";
 import { z } from "zod";
 
 // ============================================================================
-// Error Classes (New Pattern)
+// Error Classes
 // ============================================================================
 
-class UnauthorizedError extends Error {
+class UnauthorizedError extends TaggedError {
   readonly _tag = "UnauthorizedError" as const;
-  constructor(message = "Authentication required") {
+  constructor(public readonly message: string = "Authentication required") {
     super(message);
-    this.name = "UnauthorizedError";
   }
 }
 
-class ForbiddenError extends Error {
+const UnauthorizedErrorSchema = z.object({
+  _tag: z.literal("UnauthorizedError"),
+  message: z.string(),
+});
+
+class ForbiddenError extends TaggedError {
   readonly _tag = "ForbiddenError" as const;
-  constructor(message = "Access denied") {
+  constructor(public readonly message: string = "Access denied") {
     super(message);
-    this.name = "ForbiddenError";
   }
 }
 
-class NotFoundError extends Error {
+const ForbiddenErrorSchema = z.object({
+  _tag: z.literal("ForbiddenError"),
+  message: z.string(),
+});
+
+class NotFoundError extends TaggedError {
   readonly _tag = "NotFoundError" as const;
   constructor(
     public readonly database: string,
     public readonly resourceId: string,
   ) {
     super(`Resource ${resourceId} not found in ${database}`);
-    this.name = "NotFoundError";
   }
 }
 
-class CustomValidationError extends Error {
+const NotFoundErrorSchema = z.object({
+  _tag: z.literal("NotFoundError"),
+  database: z.string(),
+  resourceId: z.string(),
+});
+
+class CustomValidationError extends TaggedError {
   readonly _tag = "CustomValidationError" as const;
   constructor(
     public readonly field: string,
-    message: string,
+    public readonly message: string,
   ) {
     super(message);
-    this.name = "CustomValidationError";
   }
 }
+
+const CustomValidationErrorSchema = z.object({
+  _tag: z.literal("CustomValidationError"),
+  field: z.string(),
+  message: z.string(),
+});
 
 // ============================================================================
 // Type Definitions
@@ -98,7 +117,7 @@ const publicProc = factory.procedure;
 // Middleware returns err() for type-safe error handling with proper HTTP status codes
 const protectedProcedure = factory.procedure
   .errors({
-    401: "UnauthorizedError",
+    401: UnauthorizedErrorSchema,
   })
   .use(async (opts) => {
     const { ctx, next } = opts;
@@ -112,7 +131,7 @@ const protectedProcedure = factory.procedure
 // Admin-only procedure
 const adminProcedure = protectedProcedure
   .errors({
-    403: "ForbiddenError",
+    403: ForbiddenErrorSchema,
   })
   .use(async (opts) => {
     const { ctx, next } = opts;
@@ -201,7 +220,7 @@ export const todoRouter = router<AppContext>({
       })
       .output(TodoSchema)
       .errors({
-        404: "NotFoundError",
+        404: NotFoundErrorSchema,
       })
       .handler((opts) => {
         const { input } = opts;
@@ -233,9 +252,9 @@ export const todoRouter = router<AppContext>({
       .errors({
         // ✅ 400 and 500 errors are automatically included (default validation and internal server errors)
         // ✅ Custom 400 error will be unioned with the default validation error
-        400: "CustomValidationError",
-        404: "NotFoundError",
-        403: "ForbiddenError",
+        400: CustomValidationErrorSchema,
+        404: NotFoundErrorSchema,
+        403: ForbiddenErrorSchema,
       })
       .handler((opts) => {
         const { input, ctx } = opts;
@@ -279,7 +298,7 @@ export const todoRouter = router<AppContext>({
         }),
       )
       .errors({
-        404: "NotFoundError",
+        404: NotFoundErrorSchema,
       })
       .handler((opts) => {
         const { input } = opts;
@@ -305,7 +324,7 @@ export const todoRouter = router<AppContext>({
     })
     .output(TodoSchema)
     .errors({
-      404: "NotFoundError",
+      404: NotFoundErrorSchema,
     })
     .patch((opts) => {
       const { input } = opts;
@@ -353,7 +372,7 @@ export const userRouter = router<AppContext>({
       }),
     )
     .errors({
-      404: "NotFoundError",
+      404: NotFoundErrorSchema,
     })
     .get((opts) => {
       const { input } = opts;
@@ -405,7 +424,7 @@ export const adminRouter = router<AppContext>({
       }),
     )
     .errors({
-      404: "NotFoundError",
+      404: NotFoundErrorSchema,
     })
     .delete((opts) => {
       const { input } = opts;
@@ -442,8 +461,8 @@ export const todoRouterV2 = router<AppContext>({
       })
       .output(TodoSchema)
       .errors({
-        404: "NotFoundError",
-        403: "ForbiddenError",
+        404: NotFoundErrorSchema,
+        403: ForbiddenErrorSchema,
       })
       .handler((opts) => {
         const { input, ctx } = opts;
@@ -465,8 +484,8 @@ export const todoRouterV2 = router<AppContext>({
       })
       .output(z.object({ success: z.boolean() }))
       .errors({
-        404: "NotFoundError",
-        403: "ForbiddenError",
+        404: NotFoundErrorSchema,
+        403: ForbiddenErrorSchema,
       })
       .handler((opts) => {
         const { input, ctx } = opts;
@@ -490,7 +509,7 @@ export const todoRouterV2 = router<AppContext>({
       }),
     )
     .errors({
-      404: "NotFoundError",
+      404: NotFoundErrorSchema,
     })
     .get((opts) => {
       const { input, ctx } = opts;

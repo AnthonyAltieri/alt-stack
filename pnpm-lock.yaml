@@ -60,6 +60,9 @@ importers:
       '@alt-stack/http-client-fetch':
         specifier: workspace:*
         version: link:../../packages/http-client-fetch
+      '@alt-stack/result':
+        specifier: workspace:*
+        version: link:../../packages/result
       '@alt-stack/server-hono':
         specifier: workspace:*
         version: link:../../packages/server-hono

@@ -986,6 +986,8 @@ The `ctx.hono` property gives you full access to the underlying Hono context for
 
 Define error schemas and use `ok()` / `err()` for type-safe error responses with the Result pattern.
 
+For comprehensive documentation on the Result type, see the [Result documentation](/result).
+
 ## Defining Error Schemas
 
 Specify error schemas using `.errors()`:
@@ -1133,7 +1135,8 @@ const protectedProcedure = factory.procedure
 
 ## See Also
 
-- [Result Type](./result-type) - Complete guide to Result utilities
+- [Result Documentation](/result) - Complete guide to the Result type
+- [Result Type](./result-type) - Server-specific Result usage
 
 ---
 
@@ -1619,19 +1622,22 @@ const router = factory.router()
 
 # Result Type
 
-Handlers return a `Result<E, A>` type for explicit error handling, inspired by Effect-TS.
+Handlers return a `Result<A, E>` type for explicit error handling, powered by `@alt-stack/result`.
+
+For comprehensive documentation on the Result type, see the [Result documentation](/result).
 
 ## Overview
 
-The `@alt-stack/result` package provides a type-safe way to handle errors in handlers. Instead of throwing exceptions, handlers return `Result` types that make errors explicit in the type system.
+The Result type makes errors explicit in your type signatures. Instead of throwing exceptions, handlers return `Result` types that are either `Ok` (success) or `Err` (failure).
 
 ```typescript
-import { ok, err, type Result } from "@alt-stack/server-hono";
+import { ok, err } from "@alt-stack/server-hono";
+// Or import directly: import { ok, err } from "@alt-stack/result";
 
 // Success: wrap value in ok()
 return ok({ id: "123", name: "John" });
 
-// Error: wrap error in err()
+// Error: wrap error in err() with _httpCode for status
 return err({ _httpCode: 404, data: { error: { code: "NOT_FOUND", message: "User not found" } } });
 ```
 
@@ -1686,7 +1692,7 @@ const handler = procedure
 
 ## Error Structure
 
-Errors have two optional tags:
+Server errors have two fields:
 - `_httpCode`: HTTP status code (e.g., 404, 500)
 - `data`: The error payload matching your error schema
 
@@ -1712,7 +1718,7 @@ procedure
     404: z.object({ error: z.object({ code: z.literal("NOT_FOUND"), message: z.string() }) }),
     409: z.object({ error: z.object({ code: z.literal("CONFLICT"), message: z.string() }) }),
   })
-  .handler(({ input }) => {
+  .get(({ input }) => {
     // TypeScript knows errors must match 404 or 409 schemas
     if (!exists) {
       return err({ _httpCode: 404 as const, data: { error: { code: "NOT_FOUND" as const, message: "Not found" } } });
@@ -1726,7 +1732,7 @@ procedure
 
 ## Result Utilities
 
-The result package includes utility functions:
+The server packages re-export Result utilities from `@alt-stack/result`:
 
 ### Type Guards
 
@@ -1763,7 +1769,7 @@ const mapped = map(result, (user) => user.name);
 
 // Chain operations
 const chained = flatMap(result, (user) => {
-  if (!user.active) return err({ _code: 1, data: { message: "Inactive" } });
+  if (!user.active) return err({ _httpCode: 403 as const, data: { message: "Inactive" } });
   return ok(user.profile);
 });
 
@@ -1791,7 +1797,7 @@ import { tryCatch, tryCatchAsync } from "@alt-stack/server-hono";
 // Wrap sync function
 const result = tryCatch(
   () => JSON.parse(input),
-  (e) => ({ _code: 1, data: { message: "Invalid JSON" } })
+  (e) => ({ _httpCode: 400 as const, data: { message: "Invalid JSON" } })
 );
 
 // Wrap async function
@@ -1831,32 +1837,10 @@ const protectedProcedure = procedure
   });
 ```
 
-Handlers also return Result types:
+## See Also
 
-```typescript
-const handler = protectedProcedure.get(({ ctx }) => {
-  return ok({ user: ctx.user });
-});
-```
-
-## Kafka/Workers Result
-
-For Kafka and Workers, use `InferMessageErrors` instead of HTTP codes:
-
-```typescript
-import { ok, err } from "@alt-stack/kafka-core";
-
-const handler = procedure
-  .errors({
-    INVALID_USER: z.object({ error: z.object({ code: z.string(), message: z.string() }) }),
-  })
-  .subscribe(({ input }) => {
-    if (!input.userId) {
-      return err({ data: { error: { code: "INVALID_USER", message: "User ID required" } } });
-    }
-    return ok();
-  });
-```
+- [Result Documentation](/result) - Complete guide to the Result type
+- [Error Handling](./error-handling) - Defining error schemas
 
 ---
 
@@ -2486,6 +2470,20 @@ export const userRouter = router({
 # Installation
 
 Choose an adapter based on your preferred HTTP framework.
+
+## Result Package (Optional)
+
+For standalone use of the Result type without server/client packages:
+
+```bash
+pnpm add @alt-stack/result
+# or
+npm install @alt-stack/result
+# or
+yarn add @alt-stack/result
+```
+
+The Result type is automatically included with the server and client packages, so you don't need to install it separately when using those. See the [Result documentation](/result) for usage details.
 
 ## Hono Adapter (Recommended)
 
@@ -4800,7 +4798,11 @@ Altstack is a type-safe full-stack framework with separate server and client pac
 
 ## Architecture
 
-Altstack's server framework is split into a core package and framework-specific adapters:
+Altstack is organized into foundational utilities and framework packages:
+
+### Core Utilities
+
+- **`@alt-stack/result`**: Type-safe Result type for explicit error handling. Provides `ok()`, `err()`, type guards, transformations, and pattern matching. Used throughout all Altstack packages. See [Result documentation](/result).
 
 ### Server Packages
 
@@ -5114,6 +5116,8 @@ const router = kafkaRouter<AppContext>({
 
 Define typed error schemas using the Result pattern.
 
+For comprehensive documentation on the Result type, see the [Result documentation](/result).
+
 ## Error Schemas
 
 ```typescript
@@ -5227,6 +5231,10 @@ The library exports:
 - `KafkaError` - Base error class with `code`, `message`, and optional `details`
 - `ValidationError` - Schema validation failures
 - `ProcessingError` - Handler execution errors
+
+## See Also
+
+- [Result Documentation](/result) - Complete guide to the Result type
 
 ---
 
@@ -6729,6 +6737,2624 @@ await client.trigger("send-notification", {
 
 ---
 
+// File: result/async
+
+# Async Utilities
+
+Work with async operations using `ResultAsync`, `fromPromise()`, `tryCatch()`, and `tryCatchAsync()`.
+
+## ResultAsync
+
+Type alias for a Promise that resolves to a Result:
+
+```typescript
+type ResultAsync<A, E extends ResultError> = Promise<Result<A, E>>;
+```
+
+Use this type for functions that perform async operations and return Results:
+
+```typescript
+import { type ResultAsync, ok, err, TaggedError } from "@alt-stack/result";
+
+class FetchError extends TaggedError {
+  readonly _tag = "FetchError";
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+async function fetchUser(id: string): ResultAsync<User, FetchError> {
+  try {
+    const response = await fetch(`/api/users/${id}`);
+    if (!response.ok) {
+      return err(new FetchError(`HTTP ${response.status}`));
+    }
+    const user = await response.json();
+    return ok(user);
+  } catch (e) {
+    return err(new FetchError(String(e)));
+  }
+}
+```
+
+## fromPromise()
+
+Convert a Promise to a ResultAsync by catching rejections:
+
+```typescript
+import { fromPromise, TaggedError } from "@alt-stack/result";
+
+class NetworkError extends TaggedError {
+  readonly _tag = "NetworkError";
+  constructor(public readonly cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause));
+  }
+}
+
+const result = await fromPromise(
+  fetch("/api/data").then((r) => r.json()),
+  (error) => new NetworkError(error)
+);
+// Result<unknown, NetworkError>
+```
+
+### Type Signature
+
+```typescript
+function fromPromise<A, E extends ResultError>(
+  promise: Promise<A>,
+  onReject: (error: unknown) => E
+): ResultAsync<A, E>;
+```
+
+### Behavior
+
+- If the promise resolves, returns `Ok` with the value
+- If the promise rejects, calls `onReject` with the rejection reason and returns `Err`
+
+### Examples
+
+**Wrapping fetch:**
+
+```typescript
+const userResult = await fromPromise(
+  fetch("/api/user/123").then((r) => {
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  }),
+  (error) => new FetchError(error)
+);
+```
+
+**Database operations:**
+
+```typescript
+const queryResult = await fromPromise(
+  db.query("SELECT * FROM users WHERE id = ?", [userId]),
+  (error) => new DatabaseError(error)
+);
+```
+
+**External APIs:**
+
+```typescript
+const weatherResult = await fromPromise(
+  weatherApi.getForecast(location),
+  (error) => new WeatherApiError(error)
+);
+```
+
+## tryCatch()
+
+Wrap a synchronous function that might throw:
+
+```typescript
+import { tryCatch, TaggedError } from "@alt-stack/result";
+
+class ParseError extends TaggedError {
+  readonly _tag = "ParseError";
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+const result = tryCatch(
+  () => JSON.parse(userInput),
+  (error) => new ParseError(error instanceof Error ? error.message : "Parse failed")
+);
+// Result<unknown, ParseError>
+```
+
+### Type Signature
+
+```typescript
+function tryCatch<A, E extends ResultError>(
+  fn: () => A,
+  onError: (error: unknown) => E
+): Result<A, E>;
+```
+
+### Behavior
+
+- Executes the function in a try-catch
+- If it returns successfully, returns `Ok` with the value
+- If it throws, calls `onError` with the thrown value and returns `Err`
+
+### Examples
+
+**JSON parsing:**
+
+```typescript
+const configResult = tryCatch(
+  () => JSON.parse(configString),
+  (error) => new ConfigParseError(error)
+);
+
+if (isOk(configResult)) {
+  applyConfig(configResult.value);
+}
+```
+
+**Regex operations:**
+
+```typescript
+const regexResult = tryCatch(
+  () => new RegExp(userPattern),
+  (error) => new InvalidRegexError(userPattern, error)
+);
+```
+
+**Validation:**
+
+```typescript
+const validated = tryCatch(
+  () => schema.parse(input),
+  (error) => new ValidationError(error)
+);
+```
+
+## tryCatchAsync()
+
+Wrap an async function that might throw or reject:
+
+```typescript
+import { tryCatchAsync, TaggedError } from "@alt-stack/result";
+
+class ApiError extends TaggedError {
+  readonly _tag = "ApiError";
+  constructor(message: string, public readonly statusCode?: number) {
+    super(message);
+  }
+}
+
+const result = await tryCatchAsync(
+  async () => {
+    const response = await fetch("/api/data");
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    return response.json();
+  },
+  (error) => new ApiError(error instanceof Error ? error.message : "Request failed")
+);
+```
+
+### Type Signature
+
+```typescript
+function tryCatchAsync<A, E extends ResultError>(
+  fn: () => Promise<A>,
+  onError: (error: unknown) => E
+): ResultAsync<A, E>;
+```
+
+### Behavior
+
+- Executes the async function
+- If it resolves, returns `Ok` with the value
+- If it throws synchronously or rejects, calls `onError` and returns `Err`
+
+### Examples
+
+**Fetching with error handling:**
+
+```typescript
+const fetchUserResult = await tryCatchAsync(
+  async () => {
+    const response = await fetch(`/api/users/${id}`);
+    if (!response.ok) {
+      throw new Error(`User fetch failed: ${response.status}`);
+    }
+    return response.json() as Promise<User>;
+  },
+  (error) => new FetchError(error)
+);
+```
+
+**Database transactions:**
+
+```typescript
+const transactionResult = await tryCatchAsync(
+  async () => {
+    await db.beginTransaction();
+    await db.insert("users", userData);
+    await db.insert("profiles", profileData);
+    await db.commit();
+    return { userId, profileId };
+  },
+  async (error) => {
+    await db.rollback();
+    return new TransactionError(error);
+  }
+);
+```
+
+**File operations:**
+
+```typescript
+const fileResult = await tryCatchAsync(
+  async () => {
+    const content = await fs.readFile(path, "utf-8");
+    return JSON.parse(content);
+  },
+  (error) => new FileReadError(path, error)
+);
+```
+
+## Combining with Other Utilities
+
+Async Results work with all other Result utilities:
+
+```typescript
+import { tryCatchAsync, flatMap, map, match, isOk } from "@alt-stack/result";
+
+// Chaining async operations
+async function processUser(id: string) {
+  const userResult = await tryCatchAsync(
+    () => fetchUser(id),
+    (e) => new FetchError(e)
+  );
+
+  if (isOk(userResult)) {
+    const profileResult = await tryCatchAsync(
+      () => fetchProfile(userResult.value.profileId),
+      (e) => new FetchError(e)
+    );
+
+    return map(profileResult, (profile) => ({
+      user: userResult.value,
+      profile,
+    }));
+  }
+
+  return userResult;
+}
+
+// Pattern matching on async result
+const message = match(await fetchUserResult, {
+  ok: (user) => `Loaded ${user.name}`,
+  err: (error) => `Failed: ${error.message}`,
+});
+```
+
+## fromPromise vs tryCatchAsync
+
+| Function | Input | Catches |
+|----------|-------|---------|
+| `fromPromise` | Existing Promise | Promise rejections only |
+| `tryCatchAsync` | Function returning Promise | Sync throws AND Promise rejections |
+
+**Use `fromPromise`** when you have an existing Promise:
+
+```typescript
+const promise = someLibrary.doSomething();
+const result = await fromPromise(promise, handleError);
+```
+
+**Use `tryCatchAsync`** when you're creating the Promise and might throw synchronously:
+
+```typescript
+const result = await tryCatchAsync(
+  async () => {
+    validateInput(input); // Might throw synchronously
+    return await fetchData(input); // Might reject
+  },
+  handleError
+);
+```
+
+---
+
+// File: result/combinators
+
+# Combinators
+
+Combine and observe Results with `all()`, `firstOk()`, `tap()`, and `tapError()`.
+
+## all()
+
+Combine multiple Results into a single Result containing an array of values. Fails fast on the first error:
+
+```typescript
+import { ok, err, all, TaggedError } from "@alt-stack/result";
+
+class ValidationError extends TaggedError {
+  readonly _tag = "ValidationError";
+  constructor(public readonly field: string) {
+    super(`Invalid field: ${field}`);
+  }
+}
+
+const results = [
+  ok({ name: "Alice" }),
+  ok({ name: "Bob" }),
+  ok({ name: "Charlie" }),
+];
+
+const combined = all(results);
+// Result<[{ name: string }, { name: string }, { name: string }], ValidationError>
+
+if (isOk(combined)) {
+  console.log(combined.value);
+  // [{ name: "Alice" }, { name: "Bob" }, { name: "Charlie" }]
+}
+```
+
+### Type Signature
+
+```typescript
+function all<T extends readonly Result<any, ResultError>[]>(
+  results: T
+): Result<
+  { [K in keyof T]: T[K] extends Result<infer A, any> ? A : never },
+  T[number] extends Result<any, infer E> ? E : never
+>;
+```
+
+### Fail-Fast Behavior
+
+Returns the first error encountered:
+
+```typescript
+const results = [
+  ok(1),
+  err(new ValidationError("email")), // First error
+  err(new ValidationError("name")),  // Never checked
+];
+
+const combined = all(results);
+// Err<ValidationError> with field: "email"
+```
+
+### Examples
+
+**Validating multiple fields:**
+
+```typescript
+function validateUser(input: unknown) {
+  return all([
+    validateName(input.name),
+    validateEmail(input.email),
+    validateAge(input.age),
+  ]);
+}
+
+const result = validateUser(formData);
+if (isOk(result)) {
+  const [name, email, age] = result.value;
+  createUser({ name, email, age });
+}
+```
+
+**Fetching multiple resources:**
+
+```typescript
+const [user, profile, settings] = unwrap(
+  all([
+    await getUser(userId),
+    await getProfile(userId),
+    await getSettings(userId),
+  ])
+);
+```
+
+## firstOk()
+
+Return the first successful Result, or aggregate all errors:
+
+```typescript
+import { ok, err, firstOk, TaggedError } from "@alt-stack/result";
+
+class CacheError extends TaggedError {
+  readonly _tag = "CacheError";
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+class DatabaseError extends TaggedError {
+  readonly _tag = "DatabaseError";
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+const results = [
+  err(new CacheError("Cache miss")),
+  ok({ id: "123", name: "Alice" }), // First success
+  ok({ id: "456", name: "Bob" }),   // Not checked
+];
+
+const first = firstOk(results);
+// Ok<{ id: string; name: string }>
+```
+
+### Type Signature
+
+```typescript
+function firstOk<A, E extends ResultError>(
+  results: Result<A, E>[]
+): Result<A, ResultAggregateError<E>>;
+```
+
+### ResultAggregateError
+
+When all Results are errors, returns a `ResultAggregateError` containing all errors:
+
+```typescript
+import { ResultAggregateError } from "@alt-stack/result";
+
+const results = [
+  err(new CacheError("Cache miss")),
+  err(new DatabaseError("Connection failed")),
+];
+
+const result = firstOk(results);
+
+if (isErr(result) && result.error instanceof ResultAggregateError) {
+  console.log(result.error.errors);
+  // [CacheError, DatabaseError]
+
+  for (const e of result.error.errors) {
+    console.log(e._tag, e.message);
+  }
+}
+```
+
+### Use Cases
+
+**Fallback strategies:**
+
+```typescript
+const userData = firstOk([
+  await getFromCache(userId),
+  await getFromDatabase(userId),
+  await getFromBackup(userId),
+]);
+```
+
+**Multiple data sources:**
+
+```typescript
+const config = firstOk([
+  loadFromEnv(),
+  loadFromFile("./config.json"),
+  ok(defaultConfig),
+]);
+```
+
+## tap()
+
+Execute a side effect on success without changing the Result:
+
+```typescript
+import { ok, err, tap } from "@alt-stack/result";
+
+const result = ok({ id: "123", name: "Alice" });
+
+const same = tap(result, (user) => {
+  console.log(`Loaded user: ${user.name}`);
+  analytics.track("user_loaded", { userId: user.id });
+});
+// Returns the same Result, side effect executed
+```
+
+### Type Signature
+
+```typescript
+function tap<A, E extends ResultError>(
+  result: Result<A, E>,
+  fn: (value: A) => void
+): Result<A, E>;
+```
+
+### Behavior
+
+- If `Ok`, executes the function and returns the same `Ok`
+- If `Err`, returns the same `Err` without calling the function
+
+### Examples
+
+**Logging:**
+
+```typescript
+const result = tap(getUserResult, (user) => {
+  logger.info("User fetched successfully", { userId: user.id });
+});
+```
+
+**Metrics:**
+
+```typescript
+const result = tap(operationResult, () => {
+  metrics.increment("operations.success");
+});
+```
+
+**Caching:**
+
+```typescript
+const result = tap(fetchResult, (data) => {
+  cache.set(cacheKey, data, { ttl: 3600 });
+});
+```
+
+## tapError()
+
+Execute a side effect on error without changing the Result:
+
+```typescript
+import { ok, err, tapError, TaggedError } from "@alt-stack/result";
+
+class NotFoundError extends TaggedError {
+  readonly _tag = "NotFoundError";
+  constructor(public readonly id: string) {
+    super(`Not found: ${id}`);
+  }
+}
+
+const result = err(new NotFoundError("123"));
+
+const same = tapError(result, (error) => {
+  console.error(`Error occurred: ${error._tag}`);
+  errorReporter.capture(error);
+});
+// Returns the same Result, side effect executed
+```
+
+### Type Signature
+
+```typescript
+function tapError<A, E extends ResultError>(
+  result: Result<A, E>,
+  fn: (error: E) => void
+): Result<A, E>;
+```
+
+### Behavior
+
+- If `Err`, executes the function and returns the same `Err`
+- If `Ok`, returns the same `Ok` without calling the function
+
+### Examples
+
+**Error logging:**
+
+```typescript
+const result = tapError(operationResult, (error) => {
+  logger.error("Operation failed", {
+    errorType: error._tag,
+    message: error.message,
+  });
+});
+```
+
+**Error reporting:**
+
+```typescript
+const result = tapError(apiResult, (error) => {
+  sentry.captureException(error);
+});
+```
+
+**Metrics:**
+
+```typescript
+const result = tapError(result, (error) => {
+  metrics.increment(`errors.${error._tag}`);
+});
+```
+
+## Combining tap and tapError
+
+Chain both to observe all outcomes:
+
+```typescript
+const result = tap(
+  tapError(operationResult, (error) => {
+    logger.error("Failed", { error: error._tag });
+    metrics.increment("failures");
+  }),
+  (value) => {
+    logger.info("Succeeded", { value });
+    metrics.increment("successes");
+  }
+);
+```
+
+## Comparison
+
+| Function | Success Behavior | Error Behavior | Returns |
+|----------|-----------------|----------------|---------|
+| `all` | Combines all values | Fails on first error | Single Result with array |
+| `firstOk` | Returns first success | Aggregates all errors | Single Result |
+| `tap` | Executes side effect | Unchanged | Same Result |
+| `tapError` | Unchanged | Executes side effect | Same Result |
+
+## Real-World Example
+
+```typescript
+import { all, tap, tapError, tryCatchAsync } from "@alt-stack/result";
+
+async function processOrder(orderId: string) {
+  // Fetch all required data
+  const dataResult = all([
+    await tryCatchAsync(() => getOrder(orderId), (e) => new OrderError(e)),
+    await tryCatchAsync(() => getCustomer(customerId), (e) => new CustomerError(e)),
+    await tryCatchAsync(() => getInventory(productId), (e) => new InventoryError(e)),
+  ]);
+
+  // Log the outcome
+  const logged = tap(
+    tapError(dataResult, (error) => {
+      logger.error("Order processing failed", { orderId, error: error._tag });
+    }),
+    ([order, customer, inventory]) => {
+      logger.info("Order data loaded", { orderId, customerId: customer.id });
+    }
+  );
+
+  // Process the order
+  if (isOk(logged)) {
+    const [order, customer, inventory] = logged.value;
+    return processOrderWithData(order, customer, inventory);
+  }
+
+  return logged;
+}
+```
+
+---
+
+// File: result/constructors
+
+# Constructors
+
+Create Result values with `ok()` and `err()`.
+
+## ok()
+
+Creates a success Result containing a value:
+
+```typescript
+import { ok } from "@alt-stack/result";
+
+// With a value
+const result = ok({ id: "123", name: "Alice" });
+// Result<{ id: string; name: string }, never>
+
+// Without a value (void)
+const voidResult = ok();
+// Result<void, never>
+```
+
+### Type Signature
+
+```typescript
+function ok<A>(value: A): Ok<A>;
+function ok(): Ok<void>;
+```
+
+### Examples
+
+```typescript
+// Primitive values
+const numberResult = ok(42);
+const stringResult = ok("hello");
+const boolResult = ok(true);
+
+// Objects
+const userResult = ok({ id: "123", name: "Alice", email: "alice@example.com" });
+
+// Arrays
+const listResult = ok([1, 2, 3]);
+
+// Void (no value)
+const doneResult = ok();
+```
+
+## err()
+
+Creates a failure Result containing an error. The error must extend `Error` and have a `_tag` property:
+
+```typescript
+import { err, TaggedError } from "@alt-stack/result";
+
+class NotFoundError extends TaggedError {
+  readonly _tag = "NotFoundError";
+  constructor(public readonly id: string) {
+    super(`Resource ${id} not found`);
+  }
+}
+
+const result = err(new NotFoundError("123"));
+// Result<never, NotFoundError>
+```
+
+### Type Signature
+
+```typescript
+function err<E extends ResultError>(error: E): Err<E>;
+```
+
+### Error Requirements
+
+Errors passed to `err()` must satisfy the `ResultError` type:
+
+```typescript
+type ResultError = Error & { readonly _tag: string };
+```
+
+This means:
+1. Must extend JavaScript's `Error` class
+2. Must have a `_tag` property with a string literal type
+
+### Creating Errors
+
+**Option 1: Extend TaggedError (recommended)**
+
+```typescript
+import { TaggedError } from "@alt-stack/result";
+
+class ValidationError extends TaggedError {
+  readonly _tag = "ValidationError";
+  constructor(
+    public readonly field: string,
+    message: string
+  ) {
+    super(message);
+  }
+}
+```
+
+**Option 2: Extend Error directly**
+
+```typescript
+class DatabaseError extends Error {
+  readonly _tag = "DatabaseError" as const;
+  constructor(
+    message: string,
+    public readonly code: string
+  ) {
+    super(message);
+    this.name = "DatabaseError";
+  }
+}
+```
+
+### Examples
+
+```typescript
+// Simple error
+const notFound = err(new NotFoundError("user-123"));
+
+// Error with metadata
+class RateLimitError extends TaggedError {
+  readonly _tag = "RateLimitError";
+  constructor(
+    public readonly retryAfter: number,
+    public readonly limit: number
+  ) {
+    super(`Rate limit exceeded. Retry after ${retryAfter}s`);
+  }
+}
+
+const rateLimited = err(new RateLimitError(60, 100));
+
+// Accessing error properties
+if (isErr(rateLimited)) {
+  console.log(rateLimited.error.retryAfter); // 60
+  console.log(rateLimited.error.limit); // 100
+}
+```
+
+## Usage in Functions
+
+Combine `ok()` and `err()` in functions that return `Result`:
+
+```typescript
+import { ok, err, type Result, TaggedError } from "@alt-stack/result";
+
+class NotFoundError extends TaggedError {
+  readonly _tag = "NotFoundError";
+  constructor(public readonly id: string) {
+    super(`User ${id} not found`);
+  }
+}
+
+class InactiveError extends TaggedError {
+  readonly _tag = "InactiveError";
+  constructor(public readonly id: string) {
+    super(`User ${id} is inactive`);
+  }
+}
+
+interface User {
+  id: string;
+  name: string;
+  active: boolean;
+}
+
+function getActiveUser(
+  id: string
+): Result<User, NotFoundError | InactiveError> {
+  const user = db.find(id);
+
+  if (!user) {
+    return err(new NotFoundError(id));
+  }
+
+  if (!user.active) {
+    return err(new InactiveError(id));
+  }
+
+  return ok(user);
+}
+```
+
+## Void Returns
+
+Use `ok()` without arguments for functions that succeed without returning a value:
+
+```typescript
+function deleteUser(id: string): Result<void, NotFoundError> {
+  const user = db.find(id);
+  if (!user) {
+    return err(new NotFoundError(id));
+  }
+
+  db.delete(id);
+  return ok(); // Success with no value
+}
+```
+
+---
+
+// File: result/extraction
+
+# Extraction
+
+Extract values from Results with `unwrap()`, `unwrapOr()`, `unwrapOrElse()`, `getOrUndefined()`, and `getErrorOrUndefined()`.
+
+## unwrap()
+
+Get the value or throw the error:
+
+```typescript
+import { ok, err, unwrap, TaggedError } from "@alt-stack/result";
+
+class NotFoundError extends TaggedError {
+  readonly _tag = "NotFoundError";
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+// Success case
+const value = unwrap(ok(42)); // 42
+
+// Error case - throws!
+const value2 = unwrap(err(new NotFoundError("Not found"))); // throws NotFoundError
+```
+
+### Type Signature
+
+```typescript
+function unwrap<A, E extends ResultError>(result: Result<A, E>): A;
+```
+
+### When to Use
+
+Use `unwrap()` sparingly, only when:
+- You're certain the Result is `Ok`
+- Throwing is acceptable behavior
+- Testing scenarios
+
+```typescript
+// In tests where failure should fail the test
+const user = unwrap(await createTestUser());
+expect(user.name).toBe("Test User");
+
+// After validation that guarantees success
+const validated = validateInput(input);
+if (isErr(validated)) {
+  throw validated.error;
+}
+// At this point we know it's Ok
+const value = unwrap(validated);
+```
+
+## unwrapOr()
+
+Get the value or return a default:
+
+```typescript
+import { ok, err, unwrapOr } from "@alt-stack/result";
+
+const successResult = ok({ name: "Alice" });
+const errorResult = err(new NotFoundError("User not found"));
+
+// Success case - returns value
+const user1 = unwrapOr(successResult, { name: "Guest" });
+// { name: "Alice" }
+
+// Error case - returns default
+const user2 = unwrapOr(errorResult, { name: "Guest" });
+// { name: "Guest" }
+```
+
+### Type Signature
+
+```typescript
+function unwrapOr<A, E extends ResultError>(result: Result<A, E>, defaultValue: A): A;
+```
+
+### Use Cases
+
+```typescript
+// Default values for optional data
+const theme = unwrapOr(getUserPreference("theme"), "light");
+
+// Fallback for failed operations
+const config = unwrapOr(loadConfig(), defaultConfig);
+
+// Safe property access
+const count = unwrapOr(getItemCount(), 0);
+```
+
+## unwrapOrElse()
+
+Get the value or compute a default from the error:
+
+```typescript
+import { ok, err, unwrapOrElse } from "@alt-stack/result";
+
+const result = err(new NotFoundError("user-123"));
+
+const value = unwrapOrElse(result, (error) => {
+  console.log(`Using default because: ${error.message}`);
+  return { id: "default", name: "Guest" };
+});
+```
+
+### Type Signature
+
+```typescript
+function unwrapOrElse<A, E extends ResultError>(
+  result: Result<A, E>,
+  fn: (error: E) => A
+): A;
+```
+
+### Use Cases
+
+**Logging errors while providing defaults:**
+
+```typescript
+const user = unwrapOrElse(getUser(id), (error) => {
+  logger.warn(`Failed to get user: ${error.message}`);
+  return guestUser;
+});
+```
+
+**Computing defaults based on error type:**
+
+```typescript
+const data = unwrapOrElse(fetchData(), (error) => {
+  switch (error._tag) {
+    case "NetworkError":
+      return cachedData;
+    case "NotFoundError":
+      return [];
+    default:
+      return defaultData;
+  }
+});
+```
+
+**Lazy evaluation:**
+
+```typescript
+// The function is only called if the result is an error
+const config = unwrapOrElse(loadConfig(), () => computeExpensiveDefault());
+```
+
+## getOrUndefined()
+
+Get the value or `undefined`:
+
+```typescript
+import { ok, err, getOrUndefined } from "@alt-stack/result";
+
+const success = ok({ name: "Alice" });
+const failure = err(new NotFoundError("Not found"));
+
+getOrUndefined(success); // { name: "Alice" }
+getOrUndefined(failure); // undefined
+```
+
+### Type Signature
+
+```typescript
+function getOrUndefined<A, E extends ResultError>(result: Result<A, E>): A | undefined;
+```
+
+### Use Cases
+
+**Optional chaining:**
+
+```typescript
+const user = getOrUndefined(getUser(id));
+const name = user?.name ?? "Unknown";
+```
+
+**Conditional rendering:**
+
+```typescript
+const data = getOrUndefined(result);
+if (data) {
+  renderData(data);
+}
+```
+
+**Array filtering:**
+
+```typescript
+const results = [getUser("1"), getUser("2"), getUser("3")];
+const users = results.map(getOrUndefined).filter(Boolean);
+// Only successful results
+```
+
+## getErrorOrUndefined()
+
+Get the error or `undefined`:
+
+```typescript
+import { ok, err, getErrorOrUndefined } from "@alt-stack/result";
+
+const success = ok({ name: "Alice" });
+const failure = err(new NotFoundError("Not found"));
+
+getErrorOrUndefined(success); // undefined
+getErrorOrUndefined(failure); // NotFoundError
+```
+
+### Type Signature
+
+```typescript
+function getErrorOrUndefined<A, E extends ResultError>(
+  result: Result<A, E>
+): E | undefined;
+```
+
+### Use Cases
+
+**Error logging:**
+
+```typescript
+const error = getErrorOrUndefined(result);
+if (error) {
+  logger.error(error);
+}
+```
+
+**Collecting errors:**
+
+```typescript
+const results = await Promise.all(items.map(process));
+const errors = results.map(getErrorOrUndefined).filter(Boolean);
+
+if (errors.length > 0) {
+  reportErrors(errors);
+}
+```
+
+**Error metrics:**
+
+```typescript
+const error = getErrorOrUndefined(result);
+if (error) {
+  metrics.increment(`errors.${error._tag}`);
+}
+```
+
+## Comparison
+
+| Function | Returns | Throws | Use When |
+|----------|---------|--------|----------|
+| `unwrap` | Value | Error | You're certain it's Ok, or throwing is acceptable |
+| `unwrapOr` | Value or default | Never | You have a static default value |
+| `unwrapOrElse` | Value or computed | Never | Default depends on error or is expensive to compute |
+| `getOrUndefined` | Value or undefined | Never | Working with optional values |
+| `getErrorOrUndefined` | Error or undefined | Never | Inspecting errors without type guards |
+
+## Safety Guidelines
+
+**Prefer safe extraction methods:**
+
+```typescript
+// Good - handles both cases
+const value = unwrapOr(result, defaultValue);
+
+// Good - explicit handling
+if (isOk(result)) {
+  return result.value;
+}
+return handleError(result.error);
+
+// Use with caution - can throw
+const value = unwrap(result);
+```
+
+**Use `unwrap()` only when failure is exceptional:**
+
+```typescript
+// Good - test assertion
+const user = unwrap(createTestUser());
+
+// Bad - runtime uncertainty
+const user = unwrap(getUser(id)); // Might throw!
+
+// Better
+const userResult = getUser(id);
+if (isErr(userResult)) {
+  return err(userResult.error);
+}
+const user = userResult.value;
+```
+
+---
+
+// File: result/index
+
+# Result
+
+Type-safe error handling with explicit success and failure states.
+
+## Overview
+
+The `@alt-stack/result` package provides a `Result<A, E>` type for explicit error handling without exceptions. Instead of throwing errors, functions return a `Result` that is either `Ok` (success) or `Err` (failure).
+
+```typescript
+import { ok, err, isOk, isErr, type Result } from "@alt-stack/result";
+
+function divide(a: number, b: number): Result<number, DivisionError> {
+  if (b === 0) {
+    return err(new DivisionError("Cannot divide by zero"));
+  }
+  return ok(a / b);
+}
+
+const result = divide(10, 2);
+if (isOk(result)) {
+  console.log(result.value); // 5
+}
+```
+
+## Installation
+
+```bash
+pnpm add @alt-stack/result
+# or
+npm install @alt-stack/result
+# or
+yarn add @alt-stack/result
+```
+
+## Why Result?
+
+Traditional exception handling has drawbacks:
+
+- **Hidden control flow** - Exceptions can be thrown from anywhere, making code hard to follow
+- **No type information** - TypeScript can't track what errors a function might throw
+- **Easy to forget** - Nothing forces you to handle potential errors
+
+The Result pattern solves these:
+
+- **Explicit** - Errors are part of the return type, visible in the function signature
+- **Type-safe** - TypeScript knows exactly what errors can occur
+- **Exhaustive** - You can ensure all error cases are handled at compile time
+
+## Core Types
+
+### Result
+
+A discriminated union of `Ok<A>` (success) or `Err<E>` (failure):
+
+```typescript
+type Result<A, E extends ResultError = never> = Ok<A> | Err<E>;
+```
+
+### Ok
+
+Contains the success value:
+
+```typescript
+interface Ok<A> {
+  readonly _tag: "Ok";
+  readonly value: A;
+}
+```
+
+### Err
+
+Contains the error:
+
+```typescript
+interface Err<E extends ResultError> {
+  readonly _tag: "Err";
+  readonly error: E;
+}
+```
+
+## Error Requirements
+
+Errors must extend JavaScript's `Error` class and have a `_tag` property with a string literal type. This enables exhaustive pattern matching:
+
+```typescript
+class NotFoundError extends Error {
+  readonly _tag = "NotFoundError" as const;
+  constructor(public readonly id: string) {
+    super(`Resource ${id} not found`);
+    this.name = "NotFoundError";
+  }
+}
+
+class ValidationError extends Error {
+  readonly _tag = "ValidationError" as const;
+  constructor(public readonly field: string, message: string) {
+    super(message);
+    this.name = "ValidationError";
+  }
+}
+```
+
+### TaggedError Base Class
+
+For convenience, extend `TaggedError` which automatically sets `name` from `_tag`:
+
+```typescript
+import { TaggedError } from "@alt-stack/result";
+
+class NotFoundError extends TaggedError {
+  readonly _tag = "NotFoundError";
+  constructor(public readonly id: string) {
+    super(`Resource ${id} not found`);
+  }
+}
+// error.name automatically returns "NotFoundError"
+```
+
+## Basic Usage
+
+### Creating Results
+
+```typescript
+import { ok, err } from "@alt-stack/result";
+
+// Success with value
+const success = ok({ id: "123", name: "Alice" });
+
+// Success without value (void)
+const voidSuccess = ok();
+
+// Error
+const failure = err(new NotFoundError("123"));
+```
+
+### Checking Results
+
+```typescript
+import { isOk, isErr } from "@alt-stack/result";
+
+if (isOk(result)) {
+  console.log(result.value);
+}
+
+if (isErr(result)) {
+  console.log(result.error._tag, result.error.message);
+}
+```
+
+### Exhaustive Error Handling
+
+The `_tag` property enables TypeScript to verify all error cases are handled:
+
+```typescript
+type GetUserError = NotFoundError | ValidationError | DatabaseError;
+
+function handleError(result: Result<User, GetUserError>) {
+  if (isErr(result)) {
+    switch (result.error._tag) {
+      case "NotFoundError":
+        console.log(`User ${result.error.id} not found`);
+        break;
+      case "ValidationError":
+        console.log(`Invalid field: ${result.error.field}`);
+        break;
+      case "DatabaseError":
+        console.log(`Database error: ${result.error.message}`);
+        break;
+      // TypeScript ensures all cases are handled
+    }
+  }
+}
+```
+
+## Complete Example
+
+```typescript
+import {
+  ok,
+  err,
+  isOk,
+  isErr,
+  map,
+  match,
+  TaggedError,
+  type Result,
+} from "@alt-stack/result";
+
+// Define errors
+class NotFoundError extends TaggedError {
+  readonly _tag = "NotFoundError";
+  constructor(public readonly userId: string) {
+    super(`User ${userId} not found`);
+  }
+}
+
+class InactiveError extends TaggedError {
+  readonly _tag = "InactiveError";
+  constructor(public readonly userId: string) {
+    super(`User ${userId} is inactive`);
+  }
+}
+
+// Define types
+interface User {
+  id: string;
+  name: string;
+  active: boolean;
+}
+
+// Function returning Result
+function getActiveUser(
+  id: string
+): Result<User, NotFoundError | InactiveError> {
+  const user = db.find(id);
+
+  if (!user) {
+    return err(new NotFoundError(id));
+  }
+
+  if (!user.active) {
+    return err(new InactiveError(id));
+  }
+
+  return ok(user);
+}
+
+// Using the result
+const result = getActiveUser("123");
+
+const message = match(result, {
+  ok: (user) => `Welcome, ${user.name}!`,
+  err: (error) => {
+    switch (error._tag) {
+      case "NotFoundError":
+        return `User ${error.userId} does not exist`;
+      case "InactiveError":
+        return `User ${error.userId} is deactivated`;
+    }
+  },
+});
+```
+
+## Framework Integration
+
+The Result type is used throughout Altstack:
+
+- **Server** - Route handlers return Results with HTTP status codes
+- **Kafka** - Message handlers return Results with error codes
+- **Workers** - Job handlers return Results with error codes
+
+Each framework re-exports the Result utilities, but you can also import directly from `@alt-stack/result` for standalone use.
+
+## Next Steps
+
+- [Constructors](./constructors) - Creating `ok()` and `err()` values
+- [Type Guards](./type-guards) - `isOk()` and `isErr()` for narrowing
+- [Transformations](./transformations) - `map()`, `flatMap()`, `mapError()`
+- [Extraction](./extraction) - `unwrap()`, `unwrapOr()`, `getOrUndefined()`
+- [Pattern Matching](./pattern-matching) - `match()` and `fold()`
+- [Async Utilities](./async) - `fromPromise()`, `tryCatch()`, `tryCatchAsync()`
+- [Combinators](./combinators) - `all()`, `firstOk()`, `tap()`
+- [Type Inference](./type-inference) - `InferErrorTag`, `NarrowError`
+
+---
+
+// File: result/pattern-matching
+
+# Pattern Matching
+
+Handle both success and error cases with `match()` and `fold()`.
+
+## match()
+
+Handle both `Ok` and `Err` cases with an object of handlers:
+
+```typescript
+import { ok, err, match, TaggedError } from "@alt-stack/result";
+
+class NotFoundError extends TaggedError {
+  readonly _tag = "NotFoundError";
+  constructor(public readonly id: string) {
+    super(`Resource ${id} not found`);
+  }
+}
+
+const result = ok({ id: "123", name: "Alice" });
+
+const message = match(result, {
+  ok: (user) => `Welcome, ${user.name}!`,
+  err: (error) => `Error: ${error.message}`,
+});
+// "Welcome, Alice!"
+```
+
+### Type Signature
+
+```typescript
+function match<A, E extends ResultError, B, C>(
+  result: Result<A, E>,
+  handlers: {
+    ok: (value: A) => B;
+    err: (error: E) => C;
+  }
+): B | C;
+```
+
+### Examples
+
+**Returning different types:**
+
+```typescript
+const response = match(getUserResult, {
+  ok: (user) => ({ status: 200, body: user }),
+  err: (error) => ({ status: 404, body: { error: error.message } }),
+});
+```
+
+**Side effects:**
+
+```typescript
+match(result, {
+  ok: (value) => {
+    console.log("Success:", value);
+    analytics.track("success");
+  },
+  err: (error) => {
+    console.error("Error:", error);
+    analytics.track("error", { type: error._tag });
+  },
+});
+```
+
+**Exhaustive error handling within match:**
+
+```typescript
+type UserError = NotFoundError | ValidationError | DatabaseError;
+
+const message = match(result as Result<User, UserError>, {
+  ok: (user) => `User: ${user.name}`,
+  err: (error) => {
+    switch (error._tag) {
+      case "NotFoundError":
+        return `User ${error.id} not found`;
+      case "ValidationError":
+        return `Invalid: ${error.field}`;
+      case "DatabaseError":
+        return `Database error: ${error.message}`;
+    }
+  },
+});
+```
+
+## fold()
+
+Reduce a Result to a single value with separate handlers:
+
+```typescript
+import { ok, err, fold } from "@alt-stack/result";
+
+const result = ok(42);
+
+const doubled = fold(
+  result,
+  (error) => 0,        // Error handler (first)
+  (value) => value * 2 // Success handler (second)
+);
+// 84
+```
+
+### Type Signature
+
+```typescript
+function fold<A, E extends ResultError, B>(
+  result: Result<A, E>,
+  onErr: (error: E) => B,
+  onOk: (value: A) => B
+): B;
+```
+
+### Behavior
+
+- Both handlers must return the same type
+- Error handler is the first argument (matches the conventional `Either` "left" position)
+- Success handler is the second argument
+
+### Examples
+
+**Converting to nullable:**
+
+```typescript
+const maybeUser = fold(
+  getUserResult,
+  () => null,
+  (user) => user
+);
+// User | null
+```
+
+**Computing derived values:**
+
+```typescript
+const status = fold(
+  operationResult,
+  (error) => ({ success: false, error: error.message }),
+  (value) => ({ success: true, data: value })
+);
+```
+
+**Metrics:**
+
+```typescript
+const metricValue = fold(
+  result,
+  (error) => {
+    metrics.increment("errors");
+    return 0;
+  },
+  (value) => {
+    metrics.increment("successes");
+    return value.count;
+  }
+);
+```
+
+## match vs fold
+
+Both functions handle success and error cases, but differ in syntax:
+
+**match** - Object with named handlers:
+
+```typescript
+match(result, {
+  ok: (value) => handleSuccess(value),
+  err: (error) => handleError(error),
+});
+```
+
+**fold** - Positional arguments (error first, then success):
+
+```typescript
+fold(
+  result,
+  (error) => handleError(error),
+  (value) => handleSuccess(value)
+);
+```
+
+### When to Use Each
+
+**Use `match` when:**
+- You want explicit, named cases for readability
+- The handlers are complex or multi-line
+- You're working with a team unfamiliar with functional patterns
+
+**Use `fold` when:**
+- You prefer the traditional Either/Result convention
+- You're doing quick transformations
+- You're chaining with other functional utilities
+
+## Comparison with Type Guards
+
+Type guards (`isOk`, `isErr`) and pattern matching serve different purposes:
+
+**Type guards** - Conditional flow with side effects:
+
+```typescript
+if (isOk(result)) {
+  doSomething(result.value);
+  doSomethingElse();
+  return result.value;
+}
+handleError(result.error);
+```
+
+**Pattern matching** - Expression-based transformations:
+
+```typescript
+const transformed = match(result, {
+  ok: (value) => transform(value),
+  err: (error) => defaultValue,
+});
+```
+
+## Real-World Examples
+
+**API Response:**
+
+```typescript
+function handleApiResult(result: Result<User, ApiError>): Response {
+  return match(result, {
+    ok: (user) =>
+      new Response(JSON.stringify(user), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    err: (error) =>
+      new Response(JSON.stringify({ error: error.message }), {
+        status: error._tag === "NotFoundError" ? 404 : 500,
+        headers: { "Content-Type": "application/json" },
+      }),
+  });
+}
+```
+
+**React Rendering:**
+
+```typescript
+function UserProfile({ userResult }: { userResult: Result<User, UserError> }) {
+  return match(userResult, {
+    ok: (user) => (
+      <div>
+        <h1>{user.name}</h1>
+        <p>{user.email}</p>
+      </div>
+    ),
+    err: (error) => (
+      <div className="error">
+        <p>Failed to load user: {error.message}</p>
+      </div>
+    ),
+  });
+}
+```
+
+**Logging:**
+
+```typescript
+fold(
+  operationResult,
+  (error) => {
+    logger.error("Operation failed", { error: error._tag, message: error.message });
+    return { logged: true, success: false };
+  },
+  (value) => {
+    logger.info("Operation succeeded", { value });
+    return { logged: true, success: true };
+  }
+);
+```
+
+---
+
+// File: result/transformations
+
+# Transformations
+
+Transform Result values with `map()`, `flatMap()`, `mapError()`, and `catchError()`.
+
+## map()
+
+Transform the success value without changing the error type:
+
+```typescript
+import { ok, err, map } from "@alt-stack/result";
+
+const result = ok({ id: "123", name: "Alice" });
+
+const nameResult = map(result, (user) => user.name);
+// Result<string, never>
+
+if (isOk(nameResult)) {
+  console.log(nameResult.value); // "Alice"
+}
+```
+
+### Type Signature
+
+```typescript
+function map<A, E extends ResultError, B>(
+  result: Result<A, E>,
+  fn: (value: A) => B
+): Result<B, E>;
+```
+
+### Behavior
+
+- If `Ok`, applies the function and returns a new `Ok` with the result
+- If `Err`, returns the same error unchanged
+
+```typescript
+// Ok case: function is applied
+map(ok(5), (x) => x * 2); // ok(10)
+
+// Err case: function is NOT applied
+map(err(new MyError()), (x) => x * 2); // err(MyError)
+```
+
+## flatMap()
+
+Chain operations that return Results (monadic bind):
+
+```typescript
+import { ok, err, flatMap, type Result, TaggedError } from "@alt-stack/result";
+
+class NotFoundError extends TaggedError {
+  readonly _tag = "NotFoundError";
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+class InactiveError extends TaggedError {
+  readonly _tag = "InactiveError";
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+function getUser(id: string): Result<User, NotFoundError> {
+  const user = db.find(id);
+  return user ? ok(user) : err(new NotFoundError(`User ${id} not found`));
+}
+
+function validateActive(user: User): Result<User, InactiveError> {
+  return user.active
+    ? ok(user)
+    : err(new InactiveError(`User ${user.id} is inactive`));
+}
+
+// Chain the operations
+const result = flatMap(getUser("123"), validateActive);
+// Result<User, NotFoundError | InactiveError>
+```
+
+### Type Signature
+
+```typescript
+function flatMap<A, E extends ResultError, B, E2 extends ResultError>(
+  result: Result<A, E>,
+  fn: (value: A) => Result<B, E2>
+): Result<B, E | E2>;
+```
+
+### Behavior
+
+- If `Ok`, applies the function and returns its result (which is itself a Result)
+- If `Err`, returns the same error unchanged
+- Error types are accumulated in a union
+
+```typescript
+// Ok case: function is applied, returns new Result
+flatMap(ok(5), (x) => (x > 0 ? ok(x * 2) : err(new NegativeError())));
+
+// Err case: function is NOT applied
+flatMap(err(new MyError()), (x) => ok(x * 2)); // err(MyError)
+```
+
+### Chaining Multiple Operations
+
+```typescript
+const result = flatMap(getUser("123"), (user) =>
+  flatMap(validateActive(user), (activeUser) =>
+    flatMap(getProfile(activeUser.profileId), (profile) =>
+      ok({ user: activeUser, profile })
+    )
+  )
+);
+// Result<{ user: User; profile: Profile }, NotFoundError | InactiveError | ProfileError>
+```
+
+## mapError()
+
+Transform the error value without changing the success type:
+
+```typescript
+import { err, mapError, TaggedError } from "@alt-stack/result";
+
+class InternalError extends TaggedError {
+  readonly _tag = "InternalError";
+  constructor(public readonly originalError: Error) {
+    super("An internal error occurred");
+  }
+}
+
+const result = err(new NotFoundError("123"));
+
+const mapped = mapError(result, (error) => new InternalError(error));
+// Result<never, InternalError>
+```
+
+### Type Signature
+
+```typescript
+function mapError<A, E extends ResultError, E2 extends ResultError>(
+  result: Result<A, E>,
+  fn: (error: E) => E2
+): Result<A, E2>;
+```
+
+### Behavior
+
+- If `Ok`, returns the same success unchanged
+- If `Err`, applies the function and returns a new `Err` with the result
+
+```typescript
+// Err case: function is applied
+mapError(err(new NotFoundError("x")), (e) => new WrappedError(e));
+
+// Ok case: function is NOT applied
+mapError(ok(5), (e) => new WrappedError(e)); // ok(5)
+```
+
+### Use Cases
+
+**Wrapping errors:**
+
+```typescript
+const result = mapError(
+  externalApiCall(),
+  (error) => new ApiError(`External API failed: ${error.message}`)
+);
+```
+
+**Adding context:**
+
+```typescript
+const result = mapError(getUser(id), (error) => ({
+  ...error,
+  context: { userId: id, timestamp: Date.now() },
+}));
+```
+
+## catchError()
+
+Recover from errors by providing a fallback:
+
+```typescript
+import { err, catchError, ok, TaggedError } from "@alt-stack/result";
+
+class NotFoundError extends TaggedError {
+  readonly _tag = "NotFoundError";
+  constructor(public readonly id: string) {
+    super(`Not found: ${id}`);
+  }
+}
+
+const result = err(new NotFoundError("123"));
+
+const recovered = catchError(result, (error) => {
+  if (error._tag === "NotFoundError") {
+    return ok({ id: error.id, name: "Default User", isDefault: true });
+  }
+  return err(error); // Re-throw other errors
+});
+```
+
+### Type Signature
+
+```typescript
+function catchError<A, E extends ResultError, B, E2 extends ResultError>(
+  result: Result<A, E>,
+  fn: (error: E) => Result<B, E2>
+): Result<A | B, E2>;
+```
+
+### Behavior
+
+- If `Ok`, returns the same success unchanged
+- If `Err`, applies the function which can return either `Ok` (recovery) or `Err` (different error)
+
+### Use Cases
+
+**Provide default values:**
+
+```typescript
+const userResult = catchError(getUser(id), () =>
+  ok({ id: "guest", name: "Guest User" })
+);
+```
+
+**Handle specific errors:**
+
+```typescript
+const result = catchError(fetchData(), (error) => {
+  switch (error._tag) {
+    case "NotFoundError":
+      return ok([]); // Return empty array for not found
+    case "NetworkError":
+      return ok(cachedData); // Use cache on network error
+    default:
+      return err(error); // Propagate other errors
+  }
+});
+```
+
+**Transform to different error:**
+
+```typescript
+const result = catchError(parseJson(input), (error) =>
+  err(new ValidationError(`Invalid JSON: ${error.message}`))
+);
+```
+
+## Combining Transformations
+
+Transformations can be combined for complex workflows:
+
+```typescript
+import { map, flatMap, mapError, catchError } from "@alt-stack/result";
+
+const result = flatMap(getUser(id), (user) =>
+  map(
+    catchError(
+      getProfile(user.profileId),
+      () => ok({ bio: "No bio available" }) // Default profile
+    ),
+    (profile) => ({ ...user, profile })
+  )
+);
+```
+
+## Comparison
+
+| Function | Input | Output | Use When |
+|----------|-------|--------|----------|
+| `map` | `A => B` | Same error type | Transforming success values |
+| `flatMap` | `A => Result<B, E2>` | Accumulated errors | Chaining Result-returning functions |
+| `mapError` | `E => E2` | Same success type | Transforming or wrapping errors |
+| `catchError` | `E => Result<B, E2>` | Success type union | Recovering from errors |
+
+---
+
+// File: result/type-guards
+
+# Type Guards
+
+Narrow Result types with `isOk()` and `isErr()`.
+
+## isOk()
+
+Type guard that narrows a Result to its `Ok` variant:
+
+```typescript
+import { ok, err, isOk } from "@alt-stack/result";
+
+const result = ok({ id: "123", name: "Alice" });
+
+if (isOk(result)) {
+  // TypeScript knows result is Ok<{ id: string; name: string }>
+  console.log(result.value.name); // "Alice"
+}
+```
+
+### Type Signature
+
+```typescript
+function isOk<A, E extends ResultError>(result: Result<A, E>): result is Ok<A>;
+```
+
+## isErr()
+
+Type guard that narrows a Result to its `Err` variant:
+
+```typescript
+import { err, isErr, TaggedError } from "@alt-stack/result";
+
+class NotFoundError extends TaggedError {
+  readonly _tag = "NotFoundError";
+  constructor(public readonly id: string) {
+    super(`Resource ${id} not found`);
+  }
+}
+
+const result = err(new NotFoundError("123"));
+
+if (isErr(result)) {
+  // TypeScript knows result is Err<NotFoundError>
+  console.log(result.error._tag); // "NotFoundError"
+  console.log(result.error.id); // "123"
+}
+```
+
+### Type Signature
+
+```typescript
+function isErr<A, E extends ResultError>(result: Result<A, E>): result is Err<E>;
+```
+
+## Basic Pattern
+
+The standard pattern for handling Results:
+
+```typescript
+import { isOk, isErr, type Result } from "@alt-stack/result";
+
+function handleResult(result: Result<User, NotFoundError>) {
+  if (isOk(result)) {
+    console.log("User:", result.value.name);
+    return;
+  }
+
+  // TypeScript knows this is the error case
+  console.log("Error:", result.error.message);
+}
+```
+
+Or using `isErr` first:
+
+```typescript
+function handleResult(result: Result<User, NotFoundError>) {
+  if (isErr(result)) {
+    console.log("Error:", result.error.message);
+    return;
+  }
+
+  // TypeScript knows this is the success case
+  console.log("User:", result.value.name);
+}
+```
+
+## Exhaustive Error Handling
+
+The `_tag` property enables exhaustive `switch` statements:
+
+```typescript
+import { isErr, type Result, TaggedError } from "@alt-stack/result";
+
+class NotFoundError extends TaggedError {
+  readonly _tag = "NotFoundError";
+  constructor(public readonly id: string) {
+    super(`Resource ${id} not found`);
+  }
+}
+
+class ValidationError extends TaggedError {
+  readonly _tag = "ValidationError";
+  constructor(public readonly field: string) {
+    super(`Invalid field: ${field}`);
+  }
+}
+
+class DatabaseError extends TaggedError {
+  readonly _tag = "DatabaseError";
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+type UserError = NotFoundError | ValidationError | DatabaseError;
+
+function handleUserResult(result: Result<User, UserError>) {
+  if (isErr(result)) {
+    switch (result.error._tag) {
+      case "NotFoundError":
+        // TypeScript narrows to NotFoundError
+        console.log(`User ${result.error.id} not found`);
+        break;
+      case "ValidationError":
+        // TypeScript narrows to ValidationError
+        console.log(`Invalid field: ${result.error.field}`);
+        break;
+      case "DatabaseError":
+        // TypeScript narrows to DatabaseError
+        console.log(`Database error: ${result.error.message}`);
+        break;
+    }
+    return;
+  }
+
+  console.log("User:", result.value.name);
+}
+```
+
+### Compile-Time Exhaustiveness
+
+Add a `default` case to ensure all errors are handled:
+
+```typescript
+if (isErr(result)) {
+  switch (result.error._tag) {
+    case "NotFoundError":
+      return "Not found";
+    case "ValidationError":
+      return "Invalid input";
+    case "DatabaseError":
+      return "Database error";
+    default:
+      // TypeScript error if any case is missing
+      const _exhaustive: never = result.error;
+      throw new Error(`Unhandled error: ${_exhaustive}`);
+  }
+}
+```
+
+If you add a new error type but forget to handle it, TypeScript will report an error at compile time.
+
+## Early Return Pattern
+
+A common pattern is to handle errors first with early returns:
+
+```typescript
+async function processUser(id: string): Promise<string> {
+  const userResult = await getUser(id);
+
+  if (isErr(userResult)) {
+    return `Error: ${userResult.error.message}`;
+  }
+
+  const user = userResult.value;
+
+  const profileResult = await getProfile(user.profileId);
+
+  if (isErr(profileResult)) {
+    return `Error: ${profileResult.error.message}`;
+  }
+
+  const profile = profileResult.value;
+
+  return `${user.name} - ${profile.bio}`;
+}
+```
+
+## Combining with Transformations
+
+Type guards work well with other Result utilities:
+
+```typescript
+import { isOk, map, flatMap } from "@alt-stack/result";
+
+const result = getUser("123");
+
+// Check first
+if (isOk(result)) {
+  const nameResult = map(result, (user) => user.name);
+  // Safe to use
+}
+
+// Or use transformations directly
+const nameResult = map(
+  result,
+  (user) => user.name
+);
+
+if (isOk(nameResult)) {
+  console.log(nameResult.value);
+}
+```
+
+## Type Inference
+
+The guards preserve full type information:
+
+```typescript
+type MyResult = Result<
+  { id: string; data: number[] },
+  NotFoundError | ValidationError
+>;
+
+function process(result: MyResult) {
+  if (isOk(result)) {
+    // result.value is { id: string; data: number[] }
+    const sum = result.value.data.reduce((a, b) => a + b, 0);
+  }
+
+  if (isErr(result)) {
+    // result.error is NotFoundError | ValidationError
+    // Can switch on _tag to narrow further
+  }
+}
+```
+
+---
+
+// File: result/type-inference
+
+# Type Inference
+
+Extract and narrow error types with `InferErrorTag`, `InferErrorTags`, `NarrowError`, `isResultError()`, and `assertResultError()`.
+
+## InferErrorTag
+
+Extract the `_tag` literal type from a single error class:
+
+```typescript
+import { type InferErrorTag, TaggedError } from "@alt-stack/result";
+
+class NotFoundError extends TaggedError {
+  readonly _tag = "NotFoundError";
+  constructor(public readonly id: string) {
+    super(`Not found: ${id}`);
+  }
+}
+
+type Tag = InferErrorTag<NotFoundError>;
+// "NotFoundError"
+```
+
+### Type Signature
+
+```typescript
+type InferErrorTag<E extends ResultError> = E["_tag"];
+```
+
+### Use Cases
+
+**Type-safe error codes:**
+
+```typescript
+function logError<E extends ResultError>(error: E) {
+  const tag: InferErrorTag<E> = error._tag;
+  logger.error(`Error [${tag}]: ${error.message}`);
+}
+```
+
+**Generic error handlers:**
+
+```typescript
+function createErrorHandler<E extends ResultError>() {
+  return (error: E): { code: InferErrorTag<E>; message: string } => ({
+    code: error._tag,
+    message: error.message,
+  });
+}
+```
+
+## InferErrorTags
+
+Extract all `_tag` values from a union of error types:
+
+```typescript
+import { type InferErrorTags, TaggedError } from "@alt-stack/result";
+
+class NotFoundError extends TaggedError {
+  readonly _tag = "NotFoundError";
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+class ValidationError extends TaggedError {
+  readonly _tag = "ValidationError";
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+class DatabaseError extends TaggedError {
+  readonly _tag = "DatabaseError";
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+type AllErrors = NotFoundError | ValidationError | DatabaseError;
+type AllTags = InferErrorTags<AllErrors>;
+// "NotFoundError" | "ValidationError" | "DatabaseError"
+```
+
+### Type Signature
+
+```typescript
+type InferErrorTags<E extends ResultError> = E extends ResultError
+  ? E["_tag"]
+  : never;
+```
+
+### Use Cases
+
+**Exhaustive type checking:**
+
+```typescript
+function handleAllErrors(tag: InferErrorTags<AllErrors>) {
+  switch (tag) {
+    case "NotFoundError":
+      return 404;
+    case "ValidationError":
+      return 400;
+    case "DatabaseError":
+      return 500;
+  }
+}
+```
+
+**Error code constants:**
+
+```typescript
+const ERROR_CODES: Record<InferErrorTags<AllErrors>, number> = {
+  NotFoundError: 404,
+  ValidationError: 400,
+  DatabaseError: 500,
+};
+```
+
+## NarrowError
+
+Narrow an error union to a specific error type by its `_tag`:
+
+```typescript
+import { type NarrowError, TaggedError } from "@alt-stack/result";
+
+type AllErrors = NotFoundError | ValidationError | DatabaseError;
+
+type OnlyNotFound = NarrowError<AllErrors, "NotFoundError">;
+// NotFoundError
+
+type OnlyValidation = NarrowError<AllErrors, "ValidationError">;
+// ValidationError
+```
+
+### Type Signature
+
+```typescript
+type NarrowError<E extends ResultError, Tag extends string> = Extract<
+  E,
+  { _tag: Tag }
+>;
+```
+
+### Use Cases
+
+**Specific error handlers:**
+
+```typescript
+function handleNotFound(error: NarrowError<AllErrors, "NotFoundError">) {
+  // error is typed as NotFoundError
+  console.log(`Resource ${error.id} not found`);
+}
+```
+
+**Conditional error handling:**
+
+```typescript
+function handleError<E extends AllErrors>(error: E) {
+  if (error._tag === "NotFoundError") {
+    // TypeScript narrows to NotFoundError
+    const notFound: NarrowError<E, "NotFoundError"> = error;
+    return { status: 404, id: notFound.id };
+  }
+  // Handle other errors...
+}
+```
+
+## isResultError()
+
+Runtime check if a value satisfies the `ResultError` type:
+
+```typescript
+import { isResultError, TaggedError } from "@alt-stack/result";
+
+class MyError extends TaggedError {
+  readonly _tag = "MyError";
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+const error = new MyError("Something went wrong");
+const plainError = new Error("Plain error");
+
+isResultError(error);      // true
+isResultError(plainError); // false (no _tag)
+isResultError("string");   // false (not an Error)
+isResultError(null);       // false
+```
+
+### Type Signature
+
+```typescript
+function isResultError(error: unknown): error is ResultError;
+```
+
+### Use Cases
+
+**Catching and wrapping:**
+
+```typescript
+try {
+  await riskyOperation();
+} catch (error) {
+  if (isResultError(error)) {
+    // error has _tag, safe to use with Result
+    return err(error);
+  }
+  // Wrap unknown errors
+  return err(new UnknownError(error));
+}
+```
+
+**Type narrowing in generic code:**
+
+```typescript
+function processError(error: unknown) {
+  if (isResultError(error)) {
+    // TypeScript knows error is ResultError
+    console.log(`Tagged error: ${error._tag}`);
+    return error;
+  }
+
+  if (error instanceof Error) {
+    return new WrappedError(error);
+  }
+
+  return new UnknownError(String(error));
+}
+```
+
+## assertResultError()
+
+Runtime assertion that throws if the value is not a `ResultError`:
+
+```typescript
+import { assertResultError, TaggedError } from "@alt-stack/result";
+
+class MyError extends TaggedError {
+  readonly _tag = "MyError";
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+const error = new MyError("test");
+assertResultError(error);
+// error is now typed as ResultError
+
+const plainError = new Error("plain");
+assertResultError(plainError);
+// Throws: "Expected a ResultError with a _tag property, got: Error"
+```
+
+### Type Signature
+
+```typescript
+function assertResultError(error: unknown): asserts error is ResultError;
+```
+
+### Use Cases
+
+**Validating error types:**
+
+```typescript
+function ensureResultError(error: unknown): ResultError {
+  assertResultError(error);
+  return error;
+}
+```
+
+**Test assertions:**
+
+```typescript
+test("should return a ResultError", () => {
+  const result = err(new NotFoundError("123"));
+  if (isErr(result)) {
+    assertResultError(result.error);
+    expect(result.error._tag).toBe("NotFoundError");
+  }
+});
+```
+
+**Runtime validation:**
+
+```typescript
+async function handleThrown(thrown: unknown): Promise<ResultError> {
+  try {
+    assertResultError(thrown);
+    return thrown;
+  } catch {
+    return new UnknownError(thrown);
+  }
+}
+```
+
+## Combining Type Utilities
+
+```typescript
+import {
+  type Result,
+  type InferErrorTags,
+  type NarrowError,
+  isErr,
+  TaggedError,
+} from "@alt-stack/result";
+
+class NotFoundError extends TaggedError {
+  readonly _tag = "NotFoundError";
+  constructor(public readonly resourceId: string) {
+    super(`Resource ${resourceId} not found`);
+  }
+}
+
+class PermissionError extends TaggedError {
+  readonly _tag = "PermissionError";
+  constructor(public readonly action: string) {
+    super(`Not allowed: ${action}`);
+  }
+}
+
+type ApiError = NotFoundError | PermissionError;
+
+// Get all possible error tags
+type ApiErrorTags = InferErrorTags<ApiError>;
+// "NotFoundError" | "PermissionError"
+
+// Create handlers for specific errors
+function handleApiError(error: ApiError): Response {
+  switch (error._tag) {
+    case "NotFoundError": {
+      const notFound = error as NarrowError<ApiError, "NotFoundError">;
+      return new Response(`Not found: ${notFound.resourceId}`, { status: 404 });
+    }
+    case "PermissionError": {
+      const permission = error as NarrowError<ApiError, "PermissionError">;
+      return new Response(`Forbidden: ${permission.action}`, { status: 403 });
+    }
+  }
+}
+
+// Use in result handling
+function handleResult(result: Result<Data, ApiError>): Response {
+  if (isErr(result)) {
+    return handleApiError(result.error);
+  }
+  return new Response(JSON.stringify(result.value), { status: 200 });
+}
+```
+
+## Summary
+
+| Type/Function | Purpose |
+|---------------|---------|
+| `InferErrorTag<E>` | Get single error's `_tag` literal type |
+| `InferErrorTags<E>` | Get union of all `_tag` values from error union |
+| `NarrowError<E, Tag>` | Extract specific error type from union by tag |
+| `isResultError(e)` | Runtime check if value is a `ResultError` |
+| `assertResultError(e)` | Runtime assertion (throws if not `ResultError`) |
+
+---
+
 // File: workers-warpstream/core-concepts/custom-context
 
 # Custom Context
@@ -6800,6 +9426,8 @@ interface WarpStreamContext {
 # Error Handling
 
 Handle job failures with the Result pattern.
+
+For comprehensive documentation on the Result type, see the [Result documentation](/result).
 
 ## Result Pattern
 
@@ -6876,6 +9504,10 @@ return ok();
 ## Retries
 
 Kafka consumer retries are handled at the Kafka level. Configure dead letter queues in your Kafka setup for failed messages.
+
+## See Also
+
+- [Result Documentation](/result) - Complete guide to the Result type
 
 ---
 

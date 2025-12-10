@@ -124,7 +124,7 @@ describe("POST /api/todos", () => {
     expect(res.status).toBe(401);
 
     const data = await res.json();
-    expect(data.error.code).toBe("UNAUTHORIZED");
+    expect(data.error.code).toBe("UnauthorizedError");
   });
 
   it("returns 400 for missing title", async () => {
@@ -178,7 +178,7 @@ describe("GET /api/todos/{id}", () => {
     expect(res.status).toBe(404);
 
     const data = await res.json();
-    expect(data.error.code).toBe("NOT_FOUND");
+    expect(data.error.code).toBe("NotFoundError");
     expect(data.error.message).toContain(NON_EXISTENT_UUID);
   });
 
@@ -230,7 +230,7 @@ describe("PUT /api/todos/{id}", () => {
     expect(res.status).toBe(403);
 
     const data = await res.json();
-    expect(data.error.code).toBe("FORBIDDEN");
+    expect(data.error.code).toBe("ForbiddenError");
   });
 
   it("returns 401 when not authenticated", async () => {
@@ -250,7 +250,7 @@ describe("PUT /api/todos/{id}", () => {
     expect(res.status).toBe(404);
 
     const data = await res.json();
-    expect(data.error.code).toBe("NOT_FOUND");
+    expect(data.error.code).toBe("NotFoundError");
   });
 });
 
@@ -309,7 +309,7 @@ describe("PATCH /api/todos/{id}/complete", () => {
     expect(res.status).toBe(404);
 
     const data = await res.json();
-    expect(data.error.code).toBe("NOT_FOUND");
+    expect(data.error.code).toBe("NotFoundError");
   });
 
   it("returns 400 for missing completed field", async () => {
@@ -356,7 +356,7 @@ describe("DELETE /api/todos/{id}", () => {
     expect(res.status).toBe(404);
 
     const data = await res.json();
-    expect(data.error.code).toBe("NOT_FOUND");
+    expect(data.error.code).toBe("NotFoundError");
   });
 });
 
@@ -390,7 +390,7 @@ describe("GET /api/users/me", () => {
     expect(res.status).toBe(401);
 
     const data = await res.json();
-    expect(data.error.code).toBe("UNAUTHORIZED");
+    expect(data.error.code).toBe("UnauthorizedError");
   });
 });
 
@@ -400,7 +400,7 @@ describe("GET /api/users/{id}", () => {
     expect(res.status).toBe(404);
 
     const data = await res.json();
-    expect(data.error.code).toBe("NOT_FOUND");
+    expect(data.error.code).toBe("NotFoundError");
   });
 
   it("returns 400 for invalid UUID format", async () => {
@@ -461,7 +461,7 @@ describe("GET /api/admin/users", () => {
     expect(res.status).toBe(403);
 
     const data = await res.json();
-    expect(data.error.code).toBe("FORBIDDEN");
+    expect(data.error.code).toBe("ForbiddenError");
   });
 });
 
@@ -483,7 +483,7 @@ describe("DELETE /api/admin/users/{id}", () => {
     expect(res.status).toBe(403);
 
     const data = await res.json();
-    expect(data.error.code).toBe("FORBIDDEN");
+    expect(data.error.code).toBe("ForbiddenError");
   });
 
   it("returns 404 for non-existent user when admin", async () => {
@@ -495,7 +495,7 @@ describe("DELETE /api/admin/users/{id}", () => {
     expect(res.status).toBe(404);
 
     const data = await res.json();
-    expect(data.error.code).toBe("NOT_FOUND");
+    expect(data.error.code).toBe("NotFoundError");
   });
 });
 
@@ -570,7 +570,7 @@ describe("Error Response Structure", () => {
 
     const data = await res.json();
     expect(data).toHaveProperty("error");
-    expect(data.error).toHaveProperty("code", "NOT_FOUND");
+    expect(data.error).toHaveProperty("code", "NotFoundError");
     expect(data.error).toHaveProperty("message");
     expect(typeof data.error.message).toBe("string");
   });
@@ -581,7 +581,7 @@ describe("Error Response Structure", () => {
 
     const data = await res.json();
     expect(data).toHaveProperty("error");
-    expect(data.error).toHaveProperty("code", "UNAUTHORIZED");
+    expect(data.error).toHaveProperty("code", "UnauthorizedError");
     expect(data.error).toHaveProperty("message");
   });
 
@@ -591,7 +591,7 @@ describe("Error Response Structure", () => {
 
     const data = await res.json();
     expect(data).toHaveProperty("error");
-    expect(data.error).toHaveProperty("code", "FORBIDDEN");
+    expect(data.error).toHaveProperty("code", "ForbiddenError");
     expect(data.error).toHaveProperty("message");
   });
 });
@@ -645,7 +645,7 @@ describe("V2 Routes - Result-based Business Logic", () => {
       expect(res.status).toBe(404);
 
       const data = await res.json();
-      expect(data.error.code).toBe("NOT_FOUND");
+      expect(data.error.code).toBe("NotFoundError");
     });
   });
 
@@ -672,7 +672,7 @@ describe("V2 Routes - Result-based Business Logic", () => {
       expect(res.status).toBe(404);
 
       const data = await res.json();
-      expect(data.error.code).toBe("NOT_FOUND");
+      expect(data.error.code).toBe("NotFoundError");
     });
 
     it("returns 403 from business logic for non-owner", async () => {
@@ -687,7 +687,7 @@ describe("V2 Routes - Result-based Business Logic", () => {
       expect(res.status).toBe(403);
 
       const data = await res.json();
-      expect(data.error.code).toBe("FORBIDDEN");
+      expect(data.error.code).toBe("ForbiddenError");
     });
   });
 

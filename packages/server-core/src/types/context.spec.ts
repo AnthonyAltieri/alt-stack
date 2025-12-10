@@ -151,26 +151,6 @@ describe("Context Types", () => {
       }>();
     });
 
-    it("should include error function when errors defined", () => {
-      type Ctx = TypedContext<
-        {},
-        {
-          404: z.ZodObject<{ code: z.ZodLiteral<"NOT_FOUND"> }>;
-        }
-      >;
-
-      expectTypeOf<Ctx["error"]>().toBeFunction();
-      expectTypeOf<Ctx["error"]>().parameters.toEqualTypeOf<
-        [{ code: "NOT_FOUND" }]
-      >();
-    });
-
-    it("should not include error function when errors undefined", () => {
-      type Ctx = TypedContext<{}, undefined>;
-
-      expectTypeOf<Ctx["error"]>().toEqualTypeOf<never>();
-    });
-
     it("should merge all context types correctly", () => {
       interface CustomContext {
         user: { id: string } | null;
@@ -191,7 +171,6 @@ describe("Context Types", () => {
         user: { id: string } | null;
         session: string;
         input: { params: { id: string }; query: undefined; body: undefined };
-        error: (error: { message: string }) => never;
       }>();
     });
   });

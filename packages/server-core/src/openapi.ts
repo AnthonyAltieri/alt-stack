@@ -349,7 +349,7 @@ function convertOutputToOpenAPIResponse(
 }
 
 function convertErrorsToOpenAPIResponses(
-  errors: Record<number, z.ZodTypeAny | string | string[]> | undefined,
+  errors: Record<number, z.ZodTypeAny> | undefined,
   operationId: string,
   schemaRegistry: SchemaRegistry,
 ): Record<string, OpenAPIResponse> {
@@ -430,7 +430,7 @@ function convertProcedureToOpenAPIOperation<
   procedure: Procedure<
     InputConfig,
     z.ZodTypeAny | undefined,
-    Record<number, z.ZodTypeAny | string | string[]> | undefined,
+    Record<number, z.ZodTypeAny> | undefined,
     TCustomContext
   >,
   schemaRegistry: SchemaRegistry,
@@ -502,7 +502,7 @@ function convertProceduresToOpenAPIPaths<
   procedures: Procedure<
     InputConfig,
     z.ZodTypeAny | undefined,
-    Record<number, z.ZodTypeAny | string | string[]> | undefined,
+    Record<number, z.ZodTypeAny> | undefined,
     TCustomContext
   >[],
   schemaRegistry: SchemaRegistry,
@@ -546,7 +546,7 @@ export function generateOpenAPISpec<
   const allProcedures: Procedure<
     InputConfig,
     z.ZodTypeAny | undefined,
-    Record<number, z.ZodTypeAny | string | string[]> | undefined,
+    Record<number, z.ZodTypeAny> | undefined,
     TCustomContext
   >[] = [];
 

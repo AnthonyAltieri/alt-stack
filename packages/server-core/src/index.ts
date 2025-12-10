@@ -68,4 +68,5 @@ export type {
   ResolvedTelemetryConfig,
   Span,
 } from "./telemetry.js";
+export { extractTagsFromSchema, findHttpStatusForError } from "./extract-tags.js";
 
