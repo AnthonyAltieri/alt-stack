@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import type { Result, ResultError } from "@alt-stack/result";
 import { ok as resultOk, err as resultErr, isOk, isErr } from "@alt-stack/result";
+import type { ValidateErrorConfig } from "./types/index.js";
 
 /**
  * Overwrites properties in TType with properties from TWith
@@ -268,10 +269,11 @@ export interface MiddlewareBuilderWithErrors<
   TErrors extends Record<number, z.ZodTypeAny> = {},
 > {
   /**
-   * Add more error schemas to this middleware
+   * Add more error schemas to this middleware.
+   * Each error schema must have a `_tag: z.literal("...")` field.
    */
   errors<$Errors extends Record<number, z.ZodTypeAny>>(
-    errors: $Errors,
+    errors: $Errors & ValidateErrorConfig<$Errors>,
   ): MiddlewareBuilderWithErrorsStaged<TContext, TContextOverrides, TErrors & $Errors>;
 
   /**
@@ -323,12 +325,12 @@ export type AnyMiddlewareBuilderWithErrors = MiddlewareBuilderWithErrors<any, an
  */
 export function createMiddlewareWithErrors<TContext>(): {
   errors<$Errors extends Record<number, z.ZodTypeAny>>(
-    errors: $Errors,
+    errors: $Errors & ValidateErrorConfig<$Errors>,
   ): MiddlewareBuilderWithErrorsStaged<TContext, object, $Errors>;
 } {
   return {
     errors<$Errors extends Record<number, z.ZodTypeAny>>(
-      errors: $Errors,
+      errors: $Errors & ValidateErrorConfig<$Errors>,
     ): MiddlewareBuilderWithErrorsStaged<TContext, object, $Errors> {
       return {
         fn<$ContextOverridesOut>(
@@ -361,7 +363,7 @@ function createMiddlewareBuilderWithErrorsImpl<
     _fn: fn,
 
     errors<$Errors extends Record<number, z.ZodTypeAny>>(
-      newErrors: $Errors,
+      newErrors: $Errors & ValidateErrorConfig<$Errors>,
     ): MiddlewareBuilderWithErrorsStaged<TContext, TContextOverrides, TErrors & $Errors> {
       const mergedErrors = { ...errors, ...newErrors } as TErrors & $Errors;
       return {

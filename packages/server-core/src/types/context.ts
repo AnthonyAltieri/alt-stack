@@ -80,6 +80,50 @@ export type ErrorUnion<T extends Record<number, z.ZodTypeAny>> =
   InferErrorSchemas<T>[keyof InferErrorSchemas<T>];
 
 /**
+ * Validates that a Zod schema has a `_tag` field with a literal type (not just `string`).
+ * Returns the schema type if valid, `never` if missing `_tag` or `_tag` is not a literal.
+ *
+ * @example
+ * // ✅ Valid - has _tag literal
+ * HasTagLiteral<z.object({ _tag: z.literal("NotFound"), message: z.string() }>>
+ *   => z.ZodObject<...>
+ *
+ * // ❌ Invalid - missing _tag
+ * HasTagLiteral<z.object({ message: z.string() }>>
+ *   => never
+ *
+ * // ❌ Invalid - _tag is string, not literal
+ * HasTagLiteral<z.object({ _tag: z.string(), message: z.string() }>>
+ *   => never
+ */
+export type HasTagLiteral<T extends z.ZodTypeAny> =
+  z.infer<T> extends { _tag: infer Tag }
+    ? Tag extends string
+      ? string extends Tag // Reject if Tag is just `string`, not a literal
+        ? never
+        : T
+      : never
+    : never;
+
+/**
+ * Validates all schemas in an error config have `_tag: z.literal("...")`.
+ * Maps each status code's schema through HasTagLiteral validation.
+ *
+ * Used with intersection type to enforce _tag literals at compile time:
+ * ```typescript
+ * errors<TErrors extends Record<number, z.ZodTypeAny>>(
+ *   errors: TErrors & ValidateErrorConfig<TErrors>,
+ * )
+ * ```
+ *
+ * When a schema is missing `_tag` literal, that property becomes `never`,
+ * causing a type mismatch and compile error.
+ */
+export type ValidateErrorConfig<T extends Record<number, z.ZodTypeAny>> = {
+  [K in keyof T]: T[K] extends z.ZodTypeAny ? HasTagLiteral<T[K]> : never;
+};
+
+/**
  * Infer the Result type for a handler based on errors and output schemas.
  * When no output schema is defined, allows any value including Response objects.
  *

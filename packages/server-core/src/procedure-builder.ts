@@ -8,6 +8,7 @@ import type {
   PendingProcedure,
   StringInputObjectSchema,
   HandlerResult,
+  ValidateErrorConfig,
 } from "./types/index.js";
 import type {
   MiddlewareFunction,
@@ -322,7 +323,7 @@ export class BaseProcedureBuilder<
   }
 
   errors<TErrors extends Record<number, ErrorConfigValue>>(
-    errors: TErrors,
+    errors: TErrors & ValidateErrorConfig<TErrors>,
   ): BaseProcedureBuilder<
     TBaseInput,
     TBaseOutput,

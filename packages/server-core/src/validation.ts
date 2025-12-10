@@ -1,6 +1,20 @@
 import { z } from "zod";
 import type { InputConfig } from "./types/index.js";
-import { ValidationError } from "./errors.js";
+
+/**
+ * Internal error for validation failures.
+ * This is an internal implementation detail and not exported for consumers.
+ * Consumers should define their own error classes using TaggedError.
+ */
+class InternalValidationError extends Error {
+  constructor(
+    message: string,
+    public readonly details?: unknown,
+  ) {
+    super(message);
+    this.name = "ValidationError";
+  }
+}
 
 export interface ParseResult<T> {
   success: boolean;
@@ -106,7 +120,7 @@ export async function validateInput<T extends InputConfig>(
 
   // Throw with all accumulated errors if any validation failed
   if (validationErrors.length > 0) {
-    throw new ValidationError(
+    throw new InternalValidationError(
       "Validation failed",
       {
         errors: validationErrors,
