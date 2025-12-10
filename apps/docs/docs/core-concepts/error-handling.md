@@ -178,7 +178,6 @@ When input validation fails, a `400` response is returned:
 // Schema shape
 z.object({
   _tag: z.literal("ValidationError"),
-  code: z.literal("VALIDATION_ERROR"),
   message: z.string(),
   details: z.array(z.string()),
 })
@@ -186,7 +185,6 @@ z.object({
 // Example response
 {
   "_tag": "ValidationError",
-  "code": "VALIDATION_ERROR",
   "message": "Validation failed for body",
   "details": ["body.email: Invalid email"]
 }
@@ -200,7 +198,6 @@ When an unhandled error occurs, a `500` response is returned:
 // Schema shape
 z.object({
   _tag: z.literal("InternalServerError"),
-  code: z.literal("INTERNAL_SERVER_ERROR"),
   message: z.string(),
   details: z.array(z.string()),
 })
@@ -208,7 +205,6 @@ z.object({
 // Example response
 {
   "_tag": "InternalServerError",
-  "code": "INTERNAL_SERVER_ERROR",
   "message": "Something went wrong",
   "details": []
 }
