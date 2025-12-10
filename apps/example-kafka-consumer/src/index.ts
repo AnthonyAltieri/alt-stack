@@ -1,19 +1,23 @@
-import { init, kafkaRouter, createConsumer, ok, err, type BaseKafkaContext } from "@alt-stack/kafka-core";
-import { TaggedError } from "@alt-stack/result";
+import { init, kafkaRouter, createConsumer, ok, err, TaggedError, type BaseKafkaContext } from "@alt-stack/kafka-core";
 import { Kafka } from "kafkajs";
 import { z } from "zod";
 import { env } from "./env.js";
 
 // ============================================================================
-// Error Classes (using TaggedError for less boilerplate)
+// Error Classes
 // ============================================================================
 
 class InvalidUserError extends TaggedError {
-  readonly _tag = "InvalidUserError";
-  constructor(message: string) {
+  readonly _tag = "InvalidUserError" as const;
+  constructor(public readonly message: string) {
     super(message);
   }
 }
+
+const InvalidUserErrorSchema = z.object({
+  _tag: z.literal("InvalidUserError"),
+  message: z.string(),
+});
 
 // ============================================================================
 // Type Definitions

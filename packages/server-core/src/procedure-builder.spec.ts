@@ -1,6 +1,7 @@
 import { describe, it, expectTypeOf, vi } from "vitest";
 import { z } from "zod";
 import { BaseProcedureBuilder } from "./procedure-builder.js";
+import { ok } from "@alt-stack/result";
 
 describe("ProcedureBuilder", () => {
   describe("BaseProcedureBuilder.use", () => {
@@ -349,7 +350,7 @@ describe("ProcedureBuilder", () => {
 
       const readyProcedure = protectedBuilder
         .output(z.object({ id: z.string() }))
-        .get(({ ctx }) => ({
+        .get(({ ctx }) => ok({
           id: ctx.user.id,
         }));
 

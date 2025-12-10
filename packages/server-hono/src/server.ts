@@ -21,6 +21,8 @@ import {
   isErr,
   ok as resultOk,
   err as resultErr,
+  extractTagsFromSchema,
+  findHttpStatusForError,
 } from "@alt-stack/server-core";
 import type { MiddlewareResult, MiddlewareResultSuccess } from "@alt-stack/server-core";
 
@@ -53,23 +55,6 @@ function normalizePath(prefix: string, path: string): string {
   return `${normalizedPrefix}${cleanPath}`;
 }
 
-/**
- * Find HTTP status code for an error by matching its _tag against declared error tags.
- * Error tags can be a single string or array of strings per status code.
- */
-function findHttpStatusForError(
-  tag: string,
-  errorTags: Record<number, string | string[]> | undefined,
-): number {
-  if (!errorTags) return 500;
-  for (const [status, expectedTags] of Object.entries(errorTags)) {
-    const tags = Array.isArray(expectedTags) ? expectedTags : [expectedTags];
-    if (tags.includes(tag)) {
-      return Number(status);
-    }
-  }
-  return 500;
-}
 
 /**
  * Serialize a ResultError for JSON response.
@@ -165,7 +150,7 @@ export function createServer<
   const procedures: Procedure<
     InputConfig,
     z.ZodTypeAny | undefined,
-    Record<number, z.ZodTypeAny | string | string[]> | undefined,
+    Record<number, z.ZodTypeAny> | undefined,
     TCustomContext
   >[] = [];
 
@@ -227,7 +212,7 @@ export function createServer<
           : ({} as TCustomContext);
         type ProcedureContext = TypedContext<
           InputConfig,
-          Record<number, z.ZodTypeAny | string | string[]> | undefined,
+          Record<number, z.ZodTypeAny> | undefined,
           TCustomContext
         >;
 

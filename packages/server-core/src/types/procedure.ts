@@ -21,7 +21,7 @@ export interface ProcedureConfig<
   TPath extends string,
   TInput extends InputConfig,
   TOutput extends z.ZodTypeAny | undefined,
-  TErrors extends Record<number, z.ZodTypeAny | string | string[]> | undefined,
+  TErrors extends Record<number, z.ZodTypeAny> | undefined,
 > {
   input: ExtractPathParams<TPath> extends never
     ? TInput
@@ -39,7 +39,7 @@ export interface ProcedureConfig<
 export interface Procedure<
   TInput extends InputConfig,
   TOutput extends z.ZodTypeAny | undefined,
-  TErrors extends Record<number, z.ZodTypeAny | string | string[]> | undefined,
+  TErrors extends Record<number, z.ZodTypeAny> | undefined,
   TCustomContext extends object = Record<string, never>,
 > {
   method: string;
@@ -58,7 +58,7 @@ export interface Procedure<
 export interface ReadyProcedure<
   TInput extends InputConfig,
   TOutput extends z.ZodTypeAny | undefined,
-  TErrors extends Record<number, z.ZodTypeAny | string | string[]> | undefined,
+  TErrors extends Record<number, z.ZodTypeAny> | undefined,
   TCustomContext extends object = Record<string, never>,
 > {
   method: string;
@@ -79,7 +79,7 @@ export interface ReadyProcedure<
 export interface PendingProcedure<
   TInput extends InputConfig,
   TOutput extends z.ZodTypeAny | undefined,
-  TErrors extends Record<number, z.ZodTypeAny | string | string[]> | undefined,
+  TErrors extends Record<number, z.ZodTypeAny> | undefined,
   TCustomContext extends object = Record<string, never>,
 > {
   config: {

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import { Router, router, createRouter, mergeRouters } from "./router.js";
+import { ok } from "@alt-stack/result";
 
 describe("Router", () => {
   describe("Router class", () => {
@@ -14,7 +15,7 @@ describe("Router", () => {
       const childRouter = router({
         "/item": baseRouter.procedure
           .output(z.object({ id: z.string() }))
-          .get(() => ({ id: "1" })),
+          .get(() => ok({ id: "1" })),
       });
 
       const parentRouter = new Router({
@@ -29,11 +30,11 @@ describe("Router", () => {
     it("should merge multiple routers for same prefix", () => {
       const baseRouter = new Router();
       const router1 = router({
-        "/a": baseRouter.procedure.output(z.object({ a: z.string() })).get(() => ({ a: "1" })),
+        "/a": baseRouter.procedure.output(z.object({ a: z.string() })).get(() => ok({ a: "1" })),
       });
 
       const router2 = router({
-        "/b": baseRouter.procedure.output(z.object({ b: z.string() })).get(() => ({ b: "2" })),
+        "/b": baseRouter.procedure.output(z.object({ b: z.string() })).get(() => ok({ b: "2" })),
       });
 
       const parentRouter = new Router({
@@ -61,7 +62,7 @@ describe("Router", () => {
       const r = router<AppContext>({
         "/hello": baseRouter.procedure
           .output(z.object({ message: z.string() }))
-          .get(() => ({ message: "Hello" })),
+          .get(() => ok({ message: "Hello" })),
       });
 
       expect(r.getProcedures()).toHaveLength(1);
@@ -80,11 +81,11 @@ describe("Router", () => {
           get: baseRouter.procedure
             .input({ params: z.object({ id: z.string() }) })
             .output(z.object({ id: z.string() }))
-            .handler(({ input }) => ({ id: input.params.id })),
+            .handler(({ input }) => ok({ id: input.params.id })),
           delete: baseRouter.procedure
             .input({ params: z.object({ id: z.string() }) })
             .output(z.object({ success: z.boolean() }))
-            .handler(() => ({ success: true })),
+            .handler(() => ok({ success: true })),
         },
       });
 
@@ -96,7 +97,7 @@ describe("Router", () => {
     it("should merge nested Router from config", () => {
       const baseRouter = new Router();
       const childRouter = router({
-        "/nested": baseRouter.procedure.output(z.object({ nested: z.boolean() })).get(() => ({ nested: true })),
+        "/nested": baseRouter.procedure.output(z.object({ nested: z.boolean() })).get(() => ok({ nested: true })),
       });
 
       const r = router({
@@ -117,7 +118,7 @@ describe("Router", () => {
     it("should create router with nested routers config", () => {
       const baseRouter = new Router();
       const child = router({
-        "/value": baseRouter.procedure.output(z.object({ value: z.number() })).get(() => ({ value: 42 })),
+        "/value": baseRouter.procedure.output(z.object({ value: z.number() })).get(() => ok({ value: 42 })),
       });
 
       const r = createRouter({
@@ -133,11 +134,11 @@ describe("Router", () => {
     it("should merge multiple routers", () => {
       const baseRouter = new Router();
       const router1 = router({
-        "/r1": baseRouter.procedure.output(z.object({ from: z.literal("router1") })).get(() => ({ from: "router1" as const })),
+        "/r1": baseRouter.procedure.output(z.object({ from: z.literal("router1") })).get(() => ok({ from: "router1" as const })),
       });
 
       const router2 = router({
-        "/r2": baseRouter.procedure.output(z.object({ from: z.literal("router2") })).get(() => ({ from: "router2" as const })),
+        "/r2": baseRouter.procedure.output(z.object({ from: z.literal("router2") })).get(() => ok({ from: "router2" as const })),
       });
 
       const merged = mergeRouters(router1, router2);
@@ -150,7 +151,7 @@ describe("Router", () => {
     it("should handle paths without leading slash", () => {
       const baseRouter = new Router();
       const r = router({
-        "no-slash": baseRouter.procedure.output(z.object({ ok: z.boolean() })).get(() => ({ ok: true })),
+        "no-slash": baseRouter.procedure.output(z.object({ ok: z.boolean() })).get(() => ok({ ok: true })),
       });
 
       expect(r.getProcedures()[0]?.path).toBe("/no-slash");
@@ -159,7 +160,7 @@ describe("Router", () => {
     it("should handle prefix without leading slash", () => {
       const baseRouter = new Router();
       const child = router({
-        "/route": baseRouter.procedure.output(z.object({ ok: z.boolean() })).get(() => ({ ok: true })),
+        "/route": baseRouter.procedure.output(z.object({ ok: z.boolean() })).get(() => ok({ ok: true })),
       });
 
       const parent = new Router({
@@ -172,7 +173,7 @@ describe("Router", () => {
     it("should handle prefix with trailing slash", () => {
       const baseRouter = new Router();
       const child = router({
-        "/route": baseRouter.procedure.output(z.object({ ok: z.boolean() })).get(() => ({ ok: true })),
+        "/route": baseRouter.procedure.output(z.object({ ok: z.boolean() })).get(() => ok({ ok: true })),
       });
 
       const parent = new Router({
