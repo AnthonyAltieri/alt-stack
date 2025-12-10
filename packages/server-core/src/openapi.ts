@@ -110,6 +110,14 @@ function extractPathParams(path: string): string[] {
   return params;
 }
 
+function toPascalCase(str: string): string {
+  // Split on hyphens and underscores, then capitalize each part
+  return str
+    .split(/[-_]/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join("");
+}
+
 function generateOperationId(method: string, path: string): string {
   const pathParts = path
     .split("/")
@@ -120,7 +128,7 @@ function generateOperationId(method: string, path: string): string {
       }
       return p;
     })
-    .map((p) => p.charAt(0).toUpperCase() + p.slice(1));
+    .map((p) => toPascalCase(p));
   const methodLower = method.toLowerCase();
   return `${methodLower}${pathParts.join("")}`;
 }
