@@ -522,5 +522,223 @@ describe("openApiToZodTsCode with routes", () => {
       expect(result).toContain("'/users/{id}':");
     });
   });
+
+  describe("schema deduplication", () => {
+    it("should deduplicate identical error responses across endpoints", () => {
+      const unauthorizedError = {
+        type: "object",
+        properties: {
+          error: {
+            type: "object",
+            properties: {
+              code: { type: "string", enum: ["UNAUTHORIZED"] },
+              message: { type: "string" },
+            },
+            required: ["code", "message"],
+          },
+        },
+        required: ["error"],
+      };
+
+      const openapi = {
+        components: { schemas: {} },
+        paths: {
+          "/users": {
+            get: {
+              responses: {
+                "200": {
+                  content: {
+                    "application/json": {
+                      schema: { type: "object", properties: {} },
+                    },
+                  },
+                },
+                "401": {
+                  content: {
+                    "application/json": { schema: unauthorizedError },
+                  },
+                },
+              },
+            },
+            post: {
+              responses: {
+                "200": {
+                  content: {
+                    "application/json": {
+                      schema: { type: "object", properties: {} },
+                    },
+                  },
+                },
+                "401": {
+                  content: {
+                    "application/json": { schema: unauthorizedError },
+                  },
+                },
+              },
+            },
+          },
+          "/items": {
+            get: {
+              responses: {
+                "200": {
+                  content: {
+                    "application/json": {
+                      schema: { type: "object", properties: {} },
+                    },
+                  },
+                },
+                "401": {
+                  content: {
+                    "application/json": { schema: unauthorizedError },
+                  },
+                },
+              },
+            },
+          },
+        },
+      };
+
+      const result = openApiToZodTsCode(openapi, undefined, {
+        includeRoutes: true,
+      });
+
+      // Should generate a common error schema
+      expect(result).toContain("// Common Error Schemas (deduplicated)");
+      expect(result).toContain("UnauthorizedErrorSchema");
+
+      // Route-specific schemas should reference the common schema
+      expect(result).toContain(
+        "export const GetUsers401ErrorResponse = UnauthorizedErrorSchema;",
+      );
+      expect(result).toContain(
+        "export const PostUsers401ErrorResponse = UnauthorizedErrorSchema;",
+      );
+      expect(result).toContain(
+        "export const GetItems401ErrorResponse = UnauthorizedErrorSchema;",
+      );
+
+      // Response object should reference the canonical schema
+      expect(result).toContain("'401': UnauthorizedErrorSchema");
+    });
+
+    it("should deduplicate identical success responses across endpoints", () => {
+      const userSchema = {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          name: { type: "string" },
+        },
+        required: ["id", "name"],
+      };
+
+      const openapi = {
+        components: { schemas: {} },
+        paths: {
+          "/users/{id}": {
+            get: {
+              parameters: [
+                {
+                  name: "id",
+                  in: "path",
+                  required: true,
+                  schema: { type: "string" },
+                },
+              ],
+              responses: {
+                "200": {
+                  content: {
+                    "application/json": { schema: userSchema },
+                  },
+                },
+              },
+            },
+            put: {
+              parameters: [
+                {
+                  name: "id",
+                  in: "path",
+                  required: true,
+                  schema: { type: "string" },
+                },
+              ],
+              responses: {
+                "200": {
+                  content: {
+                    "application/json": { schema: userSchema },
+                  },
+                },
+              },
+            },
+          },
+        },
+      };
+
+      const result = openApiToZodTsCode(openapi, undefined, {
+        includeRoutes: true,
+      });
+
+      // The first occurrence becomes the canonical schema
+      expect(result).toContain("export const GetUsersId200Response =");
+
+      // The second should be an alias to the first
+      expect(result).toContain(
+        "export const PutUsersId200Response = GetUsersId200Response;",
+      );
+    });
+
+    it("should not deduplicate different schemas", () => {
+      const openapi = {
+        components: { schemas: {} },
+        paths: {
+          "/users": {
+            get: {
+              responses: {
+                "200": {
+                  content: {
+                    "application/json": {
+                      schema: {
+                        type: "object",
+                        properties: { users: { type: "array" } },
+                      },
+                    },
+                  },
+                },
+                "401": {
+                  content: {
+                    "application/json": {
+                      schema: {
+                        type: "object",
+                        properties: {
+                          error: {
+                            type: "object",
+                            properties: {
+                              code: { type: "string", enum: ["UNAUTHORIZED"] },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      };
+
+      const result = openApiToZodTsCode(openapi, undefined, {
+        includeRoutes: true,
+      });
+
+      // Both should be separate schemas since they're different
+      expect(result).toContain("export const GetUsers200Response =");
+      expect(result).toContain("export const GetUsers401ErrorResponse =");
+
+      // They should not reference each other
+      expect(result).not.toContain(
+        "GetUsers401ErrorResponse = GetUsers200Response",
+      );
+    });
+  });
 });
 
