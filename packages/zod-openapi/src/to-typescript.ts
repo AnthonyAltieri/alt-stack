@@ -1,4 +1,12 @@
 import { topologicalSortSchemas } from "./dependencies";
+import {
+  createSchemaRegistry,
+  findCommonSchemas,
+  getSchemaFingerprint,
+  preRegisterSchema,
+  registerSchema,
+  type SchemaRegistry,
+} from "./schema-dedup";
 import { convertSchemaToZodString } from "./to-zod";
 import type { AnySchema } from "./types/types";
 import {
@@ -39,12 +47,24 @@ function generateRouteSchemaName(
   return parts.join("");
 }
 
+/**
+ * Result of route schema generation including declarations and name mappings.
+ */
+interface RouteSchemaResult {
+  /** Schema declarations to be emitted */
+  declarations: string[];
+  /** Maps route-specific schema name to its canonical name (for deduplication) */
+  schemaNameToCanonical: Map<string, string>;
+}
+
 function generateRouteSchemas(
   routes: RouteInfo[],
   convertSchema: (schema: AnySchema) => string,
-): string[] {
-  const lines: string[] = [];
-  const schemaNames = new Set<string>();
+  registry: SchemaRegistry,
+): RouteSchemaResult {
+  const declarations: string[] = [];
+  const schemaNameToCanonical = new Map<string, string>();
+  const generatedNames = new Set<string>();
 
   for (const route of routes) {
     const names = generateRouteSchemaNames(route);
@@ -52,27 +72,62 @@ function generateRouteSchemas(
     const queryParams = route.parameters.filter((p) => p.in === "query");
     const headerParams = route.parameters.filter((p) => p.in === "header");
 
+    // Generate params schema with deduplication
     if (names.paramsSchemaName && pathParams.length > 0) {
-      if (!schemaNames.has(names.paramsSchemaName)) {
-        schemaNames.add(names.paramsSchemaName);
+      const paramsSchema: AnySchema = {
+        type: "object",
+        properties: Object.fromEntries(
+          pathParams.map((p) => [p.name, p.schema]),
+        ),
+        required: pathParams.filter((p) => p.required).map((p) => p.name),
+      };
+
+      const { isNew, canonicalName } = registerSchema(
+        registry,
+        names.paramsSchemaName,
+        paramsSchema,
+      );
+      schemaNameToCanonical.set(names.paramsSchemaName, canonicalName);
+
+      if (isNew && !generatedNames.has(names.paramsSchemaName)) {
+        generatedNames.add(names.paramsSchemaName);
         const properties: string[] = [];
-        const required: string[] = [];
         for (const param of pathParams) {
           const zodExpr = convertSchema(param.schema);
           properties.push(`${quotePropertyName(param.name)}: ${zodExpr}`);
-          if (param.required) {
-            required.push(param.name);
-          }
         }
-        lines.push(
+        declarations.push(
           `export const ${names.paramsSchemaName} = z.object({ ${properties.join(", ")} });`,
         );
+      } else if (!isNew && names.paramsSchemaName !== canonicalName) {
+        if (!generatedNames.has(names.paramsSchemaName)) {
+          generatedNames.add(names.paramsSchemaName);
+          declarations.push(
+            `export const ${names.paramsSchemaName} = ${canonicalName};`,
+          );
+        }
       }
     }
 
+    // Generate query schema with deduplication
     if (names.querySchemaName && queryParams.length > 0) {
-      if (!schemaNames.has(names.querySchemaName)) {
-        schemaNames.add(names.querySchemaName);
+      const querySchema: AnySchema = {
+        type: "object",
+        properties: Object.fromEntries(
+          queryParams.map((p) => [p.name, p.schema]),
+        ),
+        required: queryParams.filter((p) => p.required).map((p) => p.name),
+      };
+
+      const { isNew, canonicalName } = registerSchema(
+        registry,
+        names.querySchemaName,
+        querySchema,
+      );
+      schemaNameToCanonical.set(names.querySchemaName, canonicalName);
+
+      if (isNew && !generatedNames.has(names.querySchemaName)) {
+        generatedNames.add(names.querySchemaName);
         const properties: string[] = [];
         for (const param of queryParams) {
           let zodExpr = convertSchema(param.schema);
@@ -81,15 +136,38 @@ function generateRouteSchemas(
           }
           properties.push(`${quotePropertyName(param.name)}: ${zodExpr}`);
         }
-        lines.push(
+        declarations.push(
           `export const ${names.querySchemaName} = z.object({ ${properties.join(", ")} });`,
         );
+      } else if (!isNew && names.querySchemaName !== canonicalName) {
+        if (!generatedNames.has(names.querySchemaName)) {
+          generatedNames.add(names.querySchemaName);
+          declarations.push(
+            `export const ${names.querySchemaName} = ${canonicalName};`,
+          );
+        }
       }
     }
 
+    // Generate headers schema with deduplication
     if (names.headersSchemaName && headerParams.length > 0) {
-      if (!schemaNames.has(names.headersSchemaName)) {
-        schemaNames.add(names.headersSchemaName);
+      const headersSchema: AnySchema = {
+        type: "object",
+        properties: Object.fromEntries(
+          headerParams.map((p) => [p.name, p.schema]),
+        ),
+        required: headerParams.filter((p) => p.required).map((p) => p.name),
+      };
+
+      const { isNew, canonicalName } = registerSchema(
+        registry,
+        names.headersSchemaName,
+        headersSchema,
+      );
+      schemaNameToCanonical.set(names.headersSchemaName, canonicalName);
+
+      if (isNew && !generatedNames.has(names.headersSchemaName)) {
+        generatedNames.add(names.headersSchemaName);
         const properties: string[] = [];
         for (const param of headerParams) {
           let zodExpr = convertSchema(param.schema);
@@ -98,21 +176,43 @@ function generateRouteSchemas(
           }
           properties.push(`${quotePropertyName(param.name)}: ${zodExpr}`);
         }
-        lines.push(
+        declarations.push(
           `export const ${names.headersSchemaName} = z.object({ ${properties.join(", ")} });`,
         );
+      } else if (!isNew && names.headersSchemaName !== canonicalName) {
+        if (!generatedNames.has(names.headersSchemaName)) {
+          generatedNames.add(names.headersSchemaName);
+          declarations.push(
+            `export const ${names.headersSchemaName} = ${canonicalName};`,
+          );
+        }
       }
     }
 
+    // Generate body schema with deduplication
     if (names.bodySchemaName && route.requestBody) {
-      if (!schemaNames.has(names.bodySchemaName)) {
-        schemaNames.add(names.bodySchemaName);
+      const { isNew, canonicalName } = registerSchema(
+        registry,
+        names.bodySchemaName,
+        route.requestBody,
+      );
+      schemaNameToCanonical.set(names.bodySchemaName, canonicalName);
+
+      if (isNew && !generatedNames.has(names.bodySchemaName)) {
+        generatedNames.add(names.bodySchemaName);
         const zodExpr = convertSchema(route.requestBody);
-        lines.push(`export const ${names.bodySchemaName} = ${zodExpr};`);
+        declarations.push(`export const ${names.bodySchemaName} = ${zodExpr};`);
+      } else if (!isNew && names.bodySchemaName !== canonicalName) {
+        if (!generatedNames.has(names.bodySchemaName)) {
+          generatedNames.add(names.bodySchemaName);
+          declarations.push(
+            `export const ${names.bodySchemaName} = ${canonicalName};`,
+          );
+        }
       }
     }
 
-    // Generate schemas for ALL status codes, not just success
+    // Generate schemas for ALL status codes with deduplication
     for (const [statusCode, responseSchema] of Object.entries(
       route.responses,
     )) {
@@ -128,24 +228,49 @@ function generateRouteSchemas(
         suffix,
       );
 
-      if (!schemaNames.has(responseSchemaName)) {
-        schemaNames.add(responseSchemaName);
+      const { isNew, canonicalName } = registerSchema(
+        registry,
+        responseSchemaName,
+        responseSchema,
+      );
+      schemaNameToCanonical.set(responseSchemaName, canonicalName);
+
+      if (isNew && !generatedNames.has(responseSchemaName)) {
+        generatedNames.add(responseSchemaName);
         const zodExpr = convertSchema(responseSchema);
-        lines.push(`export const ${responseSchemaName} = ${zodExpr};`);
+        declarations.push(`export const ${responseSchemaName} = ${zodExpr};`);
+      } else if (!isNew && responseSchemaName !== canonicalName) {
+        if (!generatedNames.has(responseSchemaName)) {
+          generatedNames.add(responseSchemaName);
+          declarations.push(
+            `export const ${responseSchemaName} = ${canonicalName};`,
+          );
+        }
       }
     }
   }
 
-  return lines;
+  return { declarations, schemaNameToCanonical };
 }
 
-function generateRequestResponseObjects(routes: RouteInfo[]): string[] {
+function generateRequestResponseObjects(
+  routes: RouteInfo[],
+  schemaNameToCanonical: Map<string, string>,
+): string[] {
   const lines: string[] = [];
   const requestPaths: Record<string, Record<string, string[]>> = {};
   const responsePaths: Record<
     string,
     Record<string, Record<string, string>>
   > = {};
+
+  /**
+   * Resolves a schema name to its canonical name if it exists,
+   * otherwise returns the original name.
+   */
+  const resolveSchemaName = (name: string): string => {
+    return schemaNameToCanonical.get(name) ?? name;
+  };
 
   for (const route of routes) {
     const names = generateRouteSchemaNames(route);
@@ -163,16 +288,20 @@ function generateRequestResponseObjects(routes: RouteInfo[]): string[] {
 
     const requestParts: string[] = [];
     if (names.paramsSchemaName && pathParams.length > 0) {
-      requestParts.push(`params: ${names.paramsSchemaName}`);
+      requestParts.push(
+        `params: ${resolveSchemaName(names.paramsSchemaName)}`,
+      );
     }
     if (names.querySchemaName && queryParams.length > 0) {
-      requestParts.push(`query: ${names.querySchemaName}`);
+      requestParts.push(`query: ${resolveSchemaName(names.querySchemaName)}`);
     }
     if (names.headersSchemaName && headerParams.length > 0) {
-      requestParts.push(`headers: ${names.headersSchemaName}`);
+      requestParts.push(
+        `headers: ${resolveSchemaName(names.headersSchemaName)}`,
+      );
     }
     if (names.bodySchemaName && route.requestBody) {
-      requestParts.push(`body: ${names.bodySchemaName}`);
+      requestParts.push(`body: ${resolveSchemaName(names.bodySchemaName)}`);
     }
 
     if (requestParts.length > 0) {
@@ -202,7 +331,9 @@ function generateRequestResponseObjects(routes: RouteInfo[]): string[] {
         route.method,
         suffix,
       );
-      responseMethodObj[route.method]![statusCode] = responseSchemaName;
+      // Use canonical name for the Response object
+      responseMethodObj[route.method]![statusCode] =
+        resolveSchemaName(responseSchemaName);
     }
   }
 
@@ -246,6 +377,37 @@ function generateRequestResponseObjects(routes: RouteInfo[]): string[] {
   return lines;
 }
 
+/**
+ * Collects all response schemas from routes for common schema detection.
+ */
+function collectRouteSchemas(
+  routes: RouteInfo[],
+): Array<{ name: string; schema: AnySchema }> {
+  const collected: Array<{ name: string; schema: AnySchema }> = [];
+
+  for (const route of routes) {
+    for (const [statusCode, responseSchema] of Object.entries(
+      route.responses,
+    )) {
+      if (!responseSchema) continue;
+
+      const isSuccess = statusCode.startsWith("2");
+      const suffix = isSuccess
+        ? `${statusCode}Response`
+        : `${statusCode}ErrorResponse`;
+      const responseSchemaName = generateRouteSchemaName(
+        route.path,
+        route.method,
+        suffix,
+      );
+
+      collected.push({ name: responseSchemaName, schema: responseSchema });
+    }
+  }
+
+  return collected;
+}
+
 export const openApiToZodTsCode = (
   openapi: Record<string, unknown>,
   customImportLines?: string[],
@@ -267,6 +429,9 @@ export const openApiToZodTsCode = (
   lines.push(...(customImportLines ?? []));
   lines.push("");
 
+  // Create registry for schema deduplication
+  const registry = createSchemaRegistry();
+
   const sortedSchemaNames = topologicalSortSchemas(schemas);
 
   for (const name of sortedSchemaNames) {
@@ -278,20 +443,49 @@ export const openApiToZodTsCode = (
       lines.push(`export const ${schemaName} = ${zodExpr};`);
       lines.push(`export type ${typeName} = z.infer<typeof ${schemaName}>;`);
       lines.push("");
+
+      // Register component schemas so they can be referenced by route schemas
+      const fingerprint = getSchemaFingerprint(schema);
+      preRegisterSchema(registry, schemaName, fingerprint);
     }
   }
 
   if (options?.includeRoutes) {
     const routes = parseOpenApiPaths(openapi);
     if (routes.length > 0) {
-      const routeSchemas = generateRouteSchemas(
+      // Find common schemas that appear multiple times (for error responses, etc.)
+      const routeSchemaList = collectRouteSchemas(routes);
+      const commonSchemas = findCommonSchemas(routeSchemaList, 2);
+
+      // Generate common schemas first (e.g., UnauthorizedErrorSchema, NotFoundErrorSchema)
+      if (commonSchemas.length > 0) {
+        lines.push("// Common Error Schemas (deduplicated)");
+        for (const common of commonSchemas) {
+          const zodExpr = convertSchemaToZodString(common.schema);
+          lines.push(`export const ${common.name} = ${zodExpr};`);
+          // Pre-register so route schemas reference this instead of duplicating
+          preRegisterSchema(registry, common.name, common.fingerprint);
+        }
+        lines.push("");
+      }
+
+      // Generate route schemas with deduplication
+      const { declarations, schemaNameToCanonical } = generateRouteSchemas(
         routes,
         convertSchemaToZodString,
+        registry,
       );
-      if (routeSchemas.length > 0) {
-        lines.push(...routeSchemas);
+
+      if (declarations.length > 0) {
+        lines.push("// Route Schemas");
+        lines.push(...declarations);
         lines.push("");
-        const requestResponseObjs = generateRequestResponseObjects(routes);
+
+        // Generate Request/Response objects using canonical names
+        const requestResponseObjs = generateRequestResponseObjects(
+          routes,
+          schemaNameToCanonical,
+        );
         lines.push(...requestResponseObjs);
       }
     }
