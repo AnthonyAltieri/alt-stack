@@ -166,19 +166,102 @@ procedure
   });
 ```
 
-## Validation Errors
+## Default Error Schemas
 
-Input validation errors are automatic. When validation fails, a `400` response is returned:
+The `init()` function provides default error schemas for 400 (validation) and 500 (server) errors. These are automatically included in every procedure's error configuration.
 
-```json
+### Default 400 Error (Validation)
+
+When input validation fails, a `400` response is returned:
+
+```typescript
+// Schema shape
+z.object({
+  _tag: z.literal("ValidationError"),
+  message: z.string(),
+  details: z.array(z.string()),
+})
+
+// Example response
 {
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Validation failed",
-    "details": [...]
-  }
+  "_tag": "ValidationError",
+  "message": "Validation failed for body",
+  "details": ["body.email: Invalid email"]
 }
 ```
+
+### Default 500 Error (Server)
+
+When an unhandled error occurs, a `500` response is returned:
+
+```typescript
+// Schema shape
+z.object({
+  _tag: z.literal("InternalServerError"),
+  message: z.string(),
+  details: z.array(z.string()),
+})
+
+// Example response
+{
+  "_tag": "InternalServerError",
+  "message": "Something went wrong",
+  "details": []
+}
+```
+
+### Customizing Default Errors
+
+Override the default error handlers in `init()`:
+
+```typescript
+import { init } from "@alt-stack/server-hono";
+import { z } from "zod";
+
+const CustomValidationErrorSchema = z.object({
+  _tag: z.literal("CustomValidationError"),
+  errors: z.array(z.object({
+    field: z.string(),
+    message: z.string(),
+  })),
+});
+
+const CustomServerErrorSchema = z.object({
+  _tag: z.literal("CustomServerError"),
+  message: z.string(),
+  requestId: z.string(),
+});
+
+const factory = init({
+  default400Error: (errors) => {
+    const fieldErrors = errors.flatMap(([zodError, variant]) =>
+      zodError.issues.map((issue) => ({
+        field: `${variant}.${issue.path.join(".")}`,
+        message: issue.message,
+      }))
+    );
+    return [
+      CustomValidationErrorSchema,
+      {
+        _tag: "CustomValidationError" as const,
+        errors: fieldErrors,
+      },
+    ];
+  },
+  default500Error: (error) => {
+    return [
+      CustomServerErrorSchema,
+      {
+        _tag: "CustomServerError" as const,
+        message: error instanceof Error ? error.message : "Unknown error",
+        requestId: crypto.randomUUID(),
+      },
+    ];
+  },
+});
+```
+
+Custom error schemas **must** include `_tag: z.literal("...")` to satisfy type validation.
 
 ## Middleware Errors
 

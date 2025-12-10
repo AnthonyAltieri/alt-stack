@@ -4,14 +4,15 @@ import { z } from "zod";
 import type { ZodError } from "zod";
 
 // Default error schemas - exported for type inference
+// IMPORTANT: These must have _tag: z.literal("...") for HasTagLiteral validation to pass
 export const default400ErrorSchema = z.object({
-  code: z.literal("VALIDATION_ERROR"),
+  _tag: z.literal("ValidationError"),
   message: z.string(),
   details: z.array(z.string()),
 });
 
 export const default500ErrorSchema = z.object({
-  code: z.literal("INTERNAL_SERVER_ERROR"),
+  _tag: z.literal("InternalServerError"),
   message: z.string(),
   details: z.array(z.string()),
 });
@@ -96,7 +97,7 @@ function createDefault400Error(
   }
 
   return {
-    code: "VALIDATION_ERROR" as const,
+    _tag: "ValidationError" as const,
     message: `Validation failed for ${errors.map(([_, v]) => v).join(", ")}`,
     details: allDetails,
   };
@@ -110,7 +111,7 @@ function createDefault500Error(error: unknown): z.infer<typeof default500ErrorSc
     details.push(error.stack);
   }
   return {
-    code: "INTERNAL_SERVER_ERROR" as const,
+    _tag: "InternalServerError" as const,
     message,
     details,
   };
