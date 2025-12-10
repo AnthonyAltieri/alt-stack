@@ -1,3 +1,11 @@
+import {
+  createSchemaRegistry,
+  findCommonSchemas,
+  getSchemaFingerprint,
+  preRegisterSchema,
+  registerSchema,
+  type SchemaRegistry,
+} from "./schema-dedup.js";
 import { convertSchemaToZodString } from "./to-zod.js";
 import type { AnySchema, AsyncAPISpec, TopicInfo } from "./types.js";
 
@@ -78,6 +86,7 @@ function generateSchemaName(topic: string, suffix: string): string {
 
 function generateComponentSchemas(
   schemas: Record<string, AnySchema>,
+  registry: SchemaRegistry,
 ): string[] {
   const lines: string[] = [];
 
@@ -87,48 +96,110 @@ function generateComponentSchemas(
     lines.push(`export const ${schemaName} = ${zodExpr};`);
     lines.push(`export type ${name} = z.infer<typeof ${schemaName}>;`);
     lines.push("");
+
+    // Register component schemas so they can be referenced by topic schemas
+    const fingerprint = getSchemaFingerprint(schema);
+    preRegisterSchema(registry, schemaName, fingerprint);
   }
 
   return lines;
 }
 
-function generateTopicSchemas(topics: TopicInfo[]): string[] {
-  const lines: string[] = [];
+/**
+ * Result of topic schema generation including declarations and name mappings.
+ */
+interface TopicSchemaResult {
+  /** Schema declarations to be emitted */
+  declarations: string[];
+  /** Maps topic schema name to its canonical name (for deduplication) */
+  schemaNameToCanonical: Map<string, string>;
+}
+
+function generateTopicSchemas(
+  topics: TopicInfo[],
+  registry: SchemaRegistry,
+): TopicSchemaResult {
+  const declarations: string[] = [];
+  const schemaNameToCanonical = new Map<string, string>();
   const generatedSchemas = new Set<string>();
 
   for (const topicInfo of topics) {
     const schemaName = generateSchemaName(topicInfo.topic, "MessageSchema");
 
-    if (generatedSchemas.has(schemaName)) continue;
-    generatedSchemas.add(schemaName);
-
     if (topicInfo.payloadSchema) {
-      const zodExpr = convertSchemaToZodString(topicInfo.payloadSchema);
-      lines.push(`export const ${schemaName} = ${zodExpr};`);
-    } else {
-      lines.push(`export const ${schemaName} = z.unknown();`);
-    }
+      const { isNew, canonicalName } = registerSchema(
+        registry,
+        schemaName,
+        topicInfo.payloadSchema,
+      );
+      schemaNameToCanonical.set(schemaName, canonicalName);
 
-    const typeName = schemaName.replace("Schema", "");
-    lines.push(`export type ${typeName} = z.infer<typeof ${schemaName}>;`);
-    lines.push("");
+      if (isNew && !generatedSchemas.has(schemaName)) {
+        generatedSchemas.add(schemaName);
+        const zodExpr = convertSchemaToZodString(topicInfo.payloadSchema);
+        declarations.push(`export const ${schemaName} = ${zodExpr};`);
+
+        const typeName = schemaName.replace("Schema", "");
+        declarations.push(
+          `export type ${typeName} = z.infer<typeof ${schemaName}>;`,
+        );
+        declarations.push("");
+      } else if (!isNew && schemaName !== canonicalName) {
+        if (!generatedSchemas.has(schemaName)) {
+          generatedSchemas.add(schemaName);
+          declarations.push(`export const ${schemaName} = ${canonicalName};`);
+
+          const typeName = schemaName.replace("Schema", "");
+          declarations.push(
+            `export type ${typeName} = z.infer<typeof ${schemaName}>;`,
+          );
+          declarations.push("");
+        }
+      }
+    } else {
+      if (!generatedSchemas.has(schemaName)) {
+        generatedSchemas.add(schemaName);
+        schemaNameToCanonical.set(schemaName, schemaName);
+        declarations.push(`export const ${schemaName} = z.unknown();`);
+
+        const typeName = schemaName.replace("Schema", "");
+        declarations.push(
+          `export type ${typeName} = z.infer<typeof ${schemaName}>;`,
+        );
+        declarations.push("");
+      }
+    }
   }
 
-  return lines;
+  return { declarations, schemaNameToCanonical };
 }
 
-function generateTopicsObject(topics: TopicInfo[]): string[] {
+function generateTopicsObject(
+  topics: TopicInfo[],
+  schemaNameToCanonical: Map<string, string>,
+): string[] {
   const lines: string[] = [];
   const topicEntries: string[] = [];
 
   const seenTopics = new Set<string>();
+
+  /**
+   * Resolves a schema name to its canonical name if it exists,
+   * otherwise returns the original name.
+   */
+  const resolveSchemaName = (name: string): string => {
+    return schemaNameToCanonical.get(name) ?? name;
+  };
 
   for (const topicInfo of topics) {
     if (seenTopics.has(topicInfo.topic)) continue;
     seenTopics.add(topicInfo.topic);
 
     const schemaName = generateSchemaName(topicInfo.topic, "MessageSchema");
-    topicEntries.push(`  '${topicInfo.topic}': ${schemaName}`);
+    // Use canonical name for the Topics object
+    topicEntries.push(
+      `  '${topicInfo.topic}': ${resolveSchemaName(schemaName)}`,
+    );
   }
 
   lines.push("export const Topics = {");
@@ -147,6 +218,24 @@ function generateTopicsObject(topics: TopicInfo[]): string[] {
 // Main Export
 // ============================================================================
 
+/**
+ * Collects all topic schemas for common schema detection.
+ */
+function collectTopicSchemas(
+  topics: TopicInfo[],
+): Array<{ name: string; schema: AnySchema }> {
+  const collected: Array<{ name: string; schema: AnySchema }> = [];
+
+  for (const topicInfo of topics) {
+    if (topicInfo.payloadSchema) {
+      const schemaName = generateSchemaName(topicInfo.topic, "MessageSchema");
+      collected.push({ name: schemaName, schema: topicInfo.payloadSchema });
+    }
+  }
+
+  return collected;
+}
+
 export function asyncApiToZodTsCode(
   asyncapi: AsyncAPISpec,
   customImportLines?: string[],
@@ -164,21 +253,52 @@ export function asyncApiToZodTsCode(
   }
   lines.push("");
 
+  // Create registry for schema deduplication
+  const registry = createSchemaRegistry();
+
   // Generate component schemas first
   const componentSchemas = asyncapi.components?.schemas ?? {};
   if (Object.keys(componentSchemas).length > 0) {
     lines.push("// Component Schemas");
-    lines.push(...generateComponentSchemas(componentSchemas));
+    lines.push(...generateComponentSchemas(componentSchemas, registry));
   }
 
   // Parse and generate topic schemas
   const topics = parseAsyncAPIChannels(asyncapi);
   if (topics.length > 0) {
-    lines.push("// Topic Message Schemas");
-    lines.push(...generateTopicSchemas(topics));
+    // Find common schemas that appear multiple times
+    const topicSchemaList = collectTopicSchemas(topics);
+    const commonSchemas = findCommonSchemas(topicSchemaList, 2);
+
+    // Generate common schemas first if any
+    if (commonSchemas.length > 0) {
+      lines.push("// Common Message Schemas (deduplicated)");
+      for (const common of commonSchemas) {
+        const zodExpr = convertSchemaToZodString(common.schema);
+        lines.push(`export const ${common.name} = ${zodExpr};`);
+
+        const typeName = common.name.replace("Schema", "");
+        lines.push(`export type ${typeName} = z.infer<typeof ${common.name}>;`);
+        lines.push("");
+
+        // Pre-register so topic schemas reference this instead of duplicating
+        preRegisterSchema(registry, common.name, common.fingerprint);
+      }
+    }
+
+    // Generate topic schemas with deduplication
+    const { declarations, schemaNameToCanonical } = generateTopicSchemas(
+      topics,
+      registry,
+    );
+
+    if (declarations.length > 0) {
+      lines.push("// Topic Message Schemas");
+      lines.push(...declarations);
+    }
 
     lines.push("// Topics Object");
-    lines.push(...generateTopicsObject(topics));
+    lines.push(...generateTopicsObject(topics, schemaNameToCanonical));
   }
 
   return lines.join("\n");
