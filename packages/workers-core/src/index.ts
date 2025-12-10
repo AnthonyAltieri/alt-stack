@@ -17,7 +17,7 @@ export {
   tryCatchAsync,
 } from "@alt-stack/result";
 export type { Result, Ok, Err, ResultError, InferErrorTag, InferErrorTags, NarrowError } from "@alt-stack/result";
-export { isResultError, assertResultError, ResultAggregateError } from "@alt-stack/result";
+export { isResultError, assertResultError, ResultAggregateError, TaggedError } from "@alt-stack/result";
 
 // Router exports
 export {
