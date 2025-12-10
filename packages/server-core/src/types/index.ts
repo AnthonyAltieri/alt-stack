@@ -9,6 +9,8 @@ export type {
   TypedContext,
   StringInputObjectSchema,
   HandlerResult,
+  HasTagLiteral,
+  ValidateErrorConfig,
 } from "./context.js";
 
 // Re-export all types from procedure.ts

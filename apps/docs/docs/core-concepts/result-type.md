@@ -9,14 +9,42 @@ For comprehensive documentation on the Result type, see the [Result documentatio
 The Result type makes errors explicit in your type signatures. Instead of throwing exceptions, handlers return `Result` types that are either `Ok` (success) or `Err` (failure).
 
 ```typescript
-import { ok, err } from "@alt-stack/server-hono";
-// Or import directly: import { ok, err } from "@alt-stack/result";
+import { ok, err, TaggedError } from "@alt-stack/server-hono";
+
+class NotFoundError extends TaggedError {
+  readonly _tag = "NotFoundError";
+  constructor(public readonly resourceId: string) {
+    super(`Resource ${resourceId} not found`);
+  }
+}
 
 // Success: wrap value in ok()
 return ok({ id: "123", name: "John" });
 
-// Error: wrap error in err() with _httpCode for status
-return err({ _httpCode: 404, data: { error: { code: "NOT_FOUND", message: "User not found" } } });
+// Error: wrap error in err()
+return err(new NotFoundError("123"));
+```
+
+## Defining Error Classes
+
+Define your error classes using `TaggedError`:
+
+```typescript
+import { TaggedError } from "@alt-stack/result";
+
+class NotFoundError extends TaggedError {
+  readonly _tag = "NotFoundError";
+  constructor(public readonly resourceId: string) {
+    super(`Resource ${resourceId} not found`);
+  }
+}
+
+class ForbiddenError extends TaggedError {
+  readonly _tag = "ForbiddenError";
+  constructor(public readonly message: string = "Access denied") {
+    super(message);
+  }
+}
 ```
 
 ## Basic Usage
@@ -36,73 +64,95 @@ const handler = procedure
 
 ### Returning Errors
 
-Use `err()` to return typed errors. Include `_httpCode` to set the HTTP status code:
+Use `err()` to return typed errors:
 
 ```typescript
+class NotFoundError extends TaggedError {
+  readonly _tag = "NotFoundError";
+  constructor(public readonly resourceId: string) {
+    super(`Resource ${resourceId} not found`);
+  }
+}
+
 const handler = procedure
   .output(UserSchema)
   .errors({
     404: z.object({
-      error: z.object({
-        code: z.literal("NOT_FOUND"),
-        message: z.string(),
-      }),
+      _tag: z.literal("NotFoundError"),
+      resourceId: z.string(),
     }),
   })
   .get(({ input }) => {
     const user = findUser(input.params.id);
 
     if (!user) {
-      return err({
-        _httpCode: 404 as const,
-        data: {
-          error: {
-            code: "NOT_FOUND" as const,
-            message: `User ${input.params.id} not found`,
-          },
-        },
-      });
+      return err(new NotFoundError(input.params.id));
     }
 
     return ok(user);
   });
 ```
 
-## Error Structure
+## Error Schema Requirements
 
-Server errors have two fields:
-- `_httpCode`: HTTP status code (e.g., 404, 500)
-- `data`: The error payload matching your error schema
+Error schemas **must** include a `_tag` field with a `z.literal()` value:
 
 ```typescript
-return err({
-  _httpCode: 400 as const,
-  data: {
-    error: {
-      code: "VALIDATION_ERROR" as const,
-      message: "Invalid input",
-    },
-  },
-});
+// ✅ Valid - has _tag literal
+.errors({
+  404: z.object({
+    _tag: z.literal("NotFoundError"),
+    resourceId: z.string(),
+  }),
+})
+
+// ❌ Invalid - missing _tag (compile error)
+.errors({
+  404: z.object({
+    message: z.string(),
+  }),
+})
+
+// ❌ Invalid - _tag is string, not literal (compile error)
+.errors({
+  404: z.object({
+    _tag: z.string(),
+    message: z.string(),
+  }),
+})
 ```
 
 ## Type Inference
 
-Error types are inferred from your `.errors()` definitions. TypeScript ensures you can only return errors that match defined schemas:
+Error types are inferred from your `.errors()` definitions. TypeScript ensures you can only return errors that match declared schemas:
 
 ```typescript
+class NotFoundError extends TaggedError {
+  readonly _tag = "NotFoundError";
+  constructor(public readonly resourceId: string) {
+    super(`Not found: ${resourceId}`);
+  }
+}
+
+class ConflictError extends TaggedError {
+  readonly _tag = "ConflictError";
+  constructor(public readonly message: string) {
+    super(message);
+  }
+}
+
 procedure
   .errors({
-    404: z.object({ error: z.object({ code: z.literal("NOT_FOUND"), message: z.string() }) }),
-    409: z.object({ error: z.object({ code: z.literal("CONFLICT"), message: z.string() }) }),
+    404: z.object({ _tag: z.literal("NotFoundError"), resourceId: z.string() }),
+    409: z.object({ _tag: z.literal("ConflictError"), message: z.string() }),
   })
   .get(({ input }) => {
     // TypeScript knows errors must match 404 or 409 schemas
     if (!exists) {
-      return err({ _httpCode: 404 as const, data: { error: { code: "NOT_FOUND" as const, message: "Not found" } } });
+      return err(new NotFoundError(input.params.id)); // ✅ Compiles
     }
     if (conflict) {
-      return err({ _httpCode: 409 as const, data: { error: { code: "CONFLICT" as const, message: "Already exists" } } });
+      return err(new ConflictError("Already exists")); // ✅ Compiles
     }
     return ok(result);
   });
@@ -133,7 +183,7 @@ import { match } from "@alt-stack/server-hono";
 
 const message = match(result, {
   ok: (value) => `Success: ${value.name}`,
-  err: (error) => `Error: ${error.data.error.message}`,
+  err: (error) => `Error: ${error.message}`,
 });
 ```
 
@@ -147,7 +197,7 @@ const mapped = map(result, (user) => user.name);
 
 // Chain operations
 const chained = flatMap(result, (user) => {
-  if (!user.active) return err({ _httpCode: 403 as const, data: { message: "Inactive" } });
+  if (!user.active) return err(new ForbiddenError("Inactive user"));
   return ok(user.profile);
 });
 
@@ -172,16 +222,23 @@ const valueOrDefault = unwrapOr(result, defaultUser);
 ```typescript
 import { tryCatch, tryCatchAsync } from "@alt-stack/server-hono";
 
+class ParseError extends TaggedError {
+  readonly _tag = "ParseError";
+  constructor(public readonly message: string) {
+    super(message);
+  }
+}
+
 // Wrap sync function
 const result = tryCatch(
   () => JSON.parse(input),
-  (e) => ({ _httpCode: 400 as const, data: { message: "Invalid JSON" } })
+  (e) => new ParseError("Invalid JSON")
 );
 
 // Wrap async function
 const asyncResult = await tryCatchAsync(
   () => fetchUser(id),
-  (e) => ({ _httpCode: 500 as const, data: { error: { code: "FETCH_ERROR", message: String(e) } } })
+  (e) => new FetchError(String(e))
 );
 ```
 
@@ -190,26 +247,23 @@ const asyncResult = await tryCatchAsync(
 Middleware can return `err()` just like handlers. Define errors with `.errors()` before `.use()`:
 
 ```typescript
+class UnauthorizedError extends TaggedError {
+  readonly _tag = "UnauthorizedError";
+  constructor(public readonly message: string = "Authentication required") {
+    super(message);
+  }
+}
+
 const protectedProcedure = procedure
   .errors({
     401: z.object({
-      error: z.object({
-        code: z.literal("UNAUTHORIZED"),
-        message: z.string(),
-      }),
+      _tag: z.literal("UnauthorizedError"),
+      message: z.string(),
     }),
   })
   .use(async ({ ctx, next }) => {
     if (!ctx.user) {
-      return err({
-        _httpCode: 401 as const,
-        data: {
-          error: {
-            code: "UNAUTHORIZED" as const,
-            message: "Authentication required",
-          },
-        },
-      });
+      return err(new UnauthorizedError());
     }
     return next({ ctx: { user: ctx.user } });
   });

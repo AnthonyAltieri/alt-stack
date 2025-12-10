@@ -7,8 +7,6 @@ import type { Procedure, ReadyProcedure } from "@alt-stack/server-core";
 import type { Router } from "@alt-stack/server-core";
 import {
   validateInput,
-  ServerError,
-  ValidationError,
   middlewareMarker,
   middlewareOk,
   resolveTelemetryConfig,
@@ -451,18 +449,20 @@ export function createServer<
         return c.json(response);
       } catch (error) {
         endSpanWithError(span, error);
-        if (error instanceof ValidationError) {
+        // Check for validation errors (thrown by internal validateInput)
+        if (error instanceof Error && error.name === "ValidationError") {
+          const validationError = error as Error & { details?: unknown };
           span?.setAttribute("http.response.status_code", 400);
           span?.end();
           // Use default 400 error handler if available
           if (
             options?.defaultErrorHandlers &&
-            error.details &&
-            typeof error.details === "object" &&
-            "errors" in error.details &&
-            Array.isArray(error.details.errors)
+            validationError.details &&
+            typeof validationError.details === "object" &&
+            "errors" in validationError.details &&
+            Array.isArray((validationError.details as { errors?: unknown }).errors)
           ) {
-            const errors = error.details.errors as Array<
+            const errors = (validationError.details as { errors: unknown[] }).errors as Array<
               [ZodError, "body" | "param" | "query", unknown]
             >;
             const [_schema, instance] =
@@ -474,21 +474,16 @@ export function createServer<
             {
               error: {
                 code: "VALIDATION_ERROR",
-                message: error.message,
-                details: error.details
-                  ? Array.isArray(error.details)
-                    ? error.details
-                    : [String(error.details)]
+                message: validationError.message,
+                details: validationError.details
+                  ? Array.isArray(validationError.details)
+                    ? validationError.details
+                    : [String(validationError.details)]
                   : [],
               },
             },
             400,
           );
-        }
-        if (error instanceof ServerError) {
-          span?.setAttribute("http.response.status_code", error.statusCode);
-          span?.end();
-          return c.json(error.toJSON(), error.statusCode as any);
         }
         span?.setAttribute("http.response.status_code", 500);
         span?.end();

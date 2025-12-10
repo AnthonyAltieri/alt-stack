@@ -4,7 +4,7 @@ A lightweight, type-safe server framework built on [Hono](https://hono.dev/) wit
 
 ## Documentation
 
-📚 **Full documentation is available at:** [Server Framework Docs](./../../apps/docs/)
+Full documentation is available at: [Server Framework Docs](./../../apps/docs/)
 
 ## Installation
 
@@ -90,31 +90,63 @@ export default app;
 
 ## Error Handling
 
-Use `ok()` and `err()` from the Result pattern for type-safe error handling:
+Define your own error classes using `TaggedError` and use `ok()` / `err()` from the Result pattern:
 
 ```typescript
-import { ok, err } from "@alt-stack/server-hono";
+import { ok, err, TaggedError } from "@alt-stack/server-hono";
+import { z } from "zod";
+
+// Define your error class
+class NotFoundError extends TaggedError {
+  readonly _tag = "NotFoundError";
+  constructor(public readonly resourceId: string) {
+    super(`Resource ${resourceId} not found`);
+  }
+}
 
 const userRouter = router({
   "/users/{id}": factory.procedure
     .input({ params: z.object({ id: z.string() }) })
     .output(z.object({ id: z.string(), name: z.string() }))
     .errors({
+      // Error schemas must have _tag: z.literal("...")
       404: z.object({
-        error: z.object({ code: z.literal("NOT_FOUND"), message: z.string() }),
+        _tag: z.literal("NotFoundError"),
+        resourceId: z.string(),
       }),
     })
     .get(({ input }) => {
       const user = findUser(input.params.id);
       if (!user) {
-        return err({
-          _httpCode: 404 as const,
-          data: { error: { code: "NOT_FOUND" as const, message: "User not found" } },
-        });
+        return err(new NotFoundError(input.params.id));
       }
       return ok(user);
     }),
 });
+```
+
+### Error Schema Requirements
+
+Error schemas **must** include a `_tag` field with a `z.literal()` value:
+
+```typescript
+// ✅ Valid
+.errors({
+  404: z.object({
+    _tag: z.literal("NotFoundError"),
+    resourceId: z.string(),
+  }),
+})
+
+// ❌ Invalid - compile error (missing _tag)
+.errors({
+  404: z.object({ message: z.string() }),
+})
+
+// ❌ Invalid - compile error (_tag is string, not literal)
+.errors({
+  404: z.object({ _tag: z.string(), message: z.string() }),
+})
 ```
 
 See [`@alt-stack/result`](../result/README.md) for full Result type documentation.
@@ -158,12 +190,12 @@ Since HTTP path parameters and query strings are always strings, `input.params` 
 
 | Schema | Allowed in params/query? |
 |--------|--------------------------|
-| `z.string()` | ✅ |
-| `z.enum(["a", "b"])` | ✅ |
-| `z.coerce.number()` | ✅ |
-| `z.string().transform(...)` | ✅ |
-| `z.number()` | ❌ compile error |
-| `z.boolean()` | ❌ compile error |
+| `z.string()` | Yes |
+| `z.enum(["a", "b"])` | Yes |
+| `z.coerce.number()` | Yes |
+| `z.string().transform(...)` | Yes |
+| `z.number()` | No (compile error) |
+| `z.boolean()` | No (compile error) |
 
 ```typescript
 // ✅ Valid
@@ -203,4 +235,3 @@ Handler code remains the same - `ctx.hono` is still available.
 ## License
 
 MIT
-

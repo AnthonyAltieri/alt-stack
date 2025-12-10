@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import { parseSchema, mergeInputs, validateInput } from "./validation.js";
-import { ValidationError } from "./errors.js";
 
 describe("Validation", () => {
   describe("parseSchema", () => {
@@ -161,34 +160,34 @@ describe("Validation", () => {
       expect(result.body).toEqual({ name: "Updated" });
     });
 
-    it("should throw ValidationError for invalid params", async () => {
+    it("should throw error for invalid params", async () => {
       const config = {
         params: z.object({ id: z.string().uuid() }),
       };
 
       await expect(
         validateInput(config, { id: "not-a-uuid" }, {}, undefined),
-      ).rejects.toThrow(ValidationError);
+      ).rejects.toThrow("Validation failed");
     });
 
-    it("should throw ValidationError for invalid query", async () => {
+    it("should throw error for invalid query", async () => {
       const config = {
         query: z.object({ page: z.coerce.number().min(1) }),
       };
 
       await expect(
         validateInput(config, {}, { page: "0" }, undefined),
-      ).rejects.toThrow(ValidationError);
+      ).rejects.toThrow("Validation failed");
     });
 
-    it("should throw ValidationError for invalid body", async () => {
+    it("should throw error for invalid body", async () => {
       const config = {
         body: z.object({ email: z.string().email() }),
       };
 
       await expect(
         validateInput(config, {}, {}, { email: "not-an-email" }),
-      ).rejects.toThrow(ValidationError);
+      ).rejects.toThrow("Validation failed");
     });
 
     it("should accumulate multiple validation errors", async () => {
@@ -207,9 +206,9 @@ describe("Validation", () => {
         );
         expect.fail("Should have thrown");
       } catch (error) {
-        expect(error).toBeInstanceOf(ValidationError);
-        const validationError = error as ValidationError;
-        const details = validationError.details as { errors?: unknown[] } | undefined;
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).name).toBe("ValidationError");
+        const details = (error as any).details as { errors?: unknown[] } | undefined;
         expect(details?.errors).toHaveLength(3);
       }
     });

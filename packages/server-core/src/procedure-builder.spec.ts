@@ -2,6 +2,7 @@ import { describe, it, expectTypeOf, vi } from "vitest";
 import { z } from "zod";
 import { BaseProcedureBuilder } from "./procedure-builder.js";
 import { ok } from "@alt-stack/result";
+import type { HasTagLiteral, ValidateErrorConfig } from "./types/index.js";
 
 describe("ProcedureBuilder", () => {
   describe("BaseProcedureBuilder.use", () => {
@@ -171,12 +172,12 @@ describe("ProcedureBuilder", () => {
   });
 
   describe("BaseProcedureBuilder.errors", () => {
-    it("should set error config", () => {
+    it("should set error config with _tag literal", () => {
       const builder = new BaseProcedureBuilder();
 
       const withErrors = builder.errors({
         404: z.object({
-          code: z.literal("NOT_FOUND"),
+          _tag: z.literal("NotFoundError"),
           message: z.string(),
         }),
       });
@@ -194,10 +195,72 @@ describe("ProcedureBuilder", () => {
 
       expectTypeOf<Errors>().toMatchTypeOf<{
         404: z.ZodObject<{
-          code: z.ZodLiteral<"NOT_FOUND">;
+          _tag: z.ZodLiteral<"NotFoundError">;
           message: z.ZodString;
         }>;
       }>();
+    });
+
+    it("should reject schemas without _tag field (HasTagLiteral returns never)", () => {
+      // Schema without _tag should resolve to never
+      type SchemaWithoutTag = z.ZodObject<{ message: z.ZodString }>;
+      expectTypeOf<HasTagLiteral<SchemaWithoutTag>>().toEqualTypeOf<never>();
+    });
+
+    it("should reject schemas with non-literal _tag (HasTagLiteral returns never)", () => {
+      // Schema with _tag: z.string() (not literal) should resolve to never
+      type SchemaWithStringTag = z.ZodObject<{
+        _tag: z.ZodString;
+        message: z.ZodString;
+      }>;
+      expectTypeOf<HasTagLiteral<SchemaWithStringTag>>().toEqualTypeOf<never>();
+    });
+
+    it("should accept schemas with _tag literal (HasTagLiteral returns the schema)", () => {
+      // Schema with _tag: z.literal("...") should return the schema type
+      type SchemaWithLiteralTag = z.ZodObject<{
+        _tag: z.ZodLiteral<"NotFoundError">;
+        message: z.ZodString;
+      }>;
+      expectTypeOf<HasTagLiteral<SchemaWithLiteralTag>>().toEqualTypeOf<SchemaWithLiteralTag>();
+    });
+
+    it("should validate entire error config with ValidateErrorConfig", () => {
+      // Valid config - all schemas have _tag literals
+      type ValidConfig = {
+        404: z.ZodObject<{ _tag: z.ZodLiteral<"NotFoundError">; message: z.ZodString }>;
+        401: z.ZodObject<{ _tag: z.ZodLiteral<"UnauthorizedError">; message: z.ZodString }>;
+      };
+      type ValidatedConfig = ValidateErrorConfig<ValidConfig>;
+
+      // Should preserve the original types
+      expectTypeOf<ValidatedConfig[404]>().toEqualTypeOf<ValidConfig[404]>();
+      expectTypeOf<ValidatedConfig[401]>().toEqualTypeOf<ValidConfig[401]>();
+    });
+
+    it("should return never for invalid schemas in ValidateErrorConfig", () => {
+      // Invalid config - schema without _tag
+      type InvalidConfig = {
+        404: z.ZodObject<{ message: z.ZodString }>;
+      };
+      type ValidatedConfig = ValidateErrorConfig<InvalidConfig>;
+
+      // Should be never because the schema is invalid
+      expectTypeOf<ValidatedConfig[404]>().toEqualTypeOf<never>();
+    });
+
+    it("should return never for mixed valid/invalid schemas", () => {
+      // Mixed config - one valid, one invalid
+      type MixedConfig = {
+        404: z.ZodObject<{ _tag: z.ZodLiteral<"NotFoundError">; message: z.ZodString }>;
+        500: z.ZodObject<{ message: z.ZodString }>; // Invalid - no _tag
+      };
+      type ValidatedConfig = ValidateErrorConfig<MixedConfig>;
+
+      // Valid schema should pass through
+      expectTypeOf<ValidatedConfig[404]>().toEqualTypeOf<MixedConfig[404]>();
+      // Invalid schema should be never
+      expectTypeOf<ValidatedConfig[500]>().toEqualTypeOf<never>();
     });
   });
 
@@ -283,10 +346,8 @@ describe("ProcedureBuilder", () => {
       const protectedProcedure = factory.procedure
         .errors({
           401: z.object({
-            error: z.object({
-              code: z.literal("UNAUTHORIZED"),
-              message: z.string(),
-            }),
+            _tag: z.literal("UnauthorizedError"),
+            message: z.string(),
           }),
         })
         .use(async (opts) => {
@@ -393,10 +454,8 @@ describe("ProcedureBuilder", () => {
       const protectedProcedure = factory.procedure
         .errors({
           401: z.object({
-            error: z.object({
-              code: z.literal("UNAUTHORIZED"),
-              message: z.string(),
-            }),
+            _tag: z.literal("UnauthorizedError"),
+            message: z.string(),
           }),
         })
         .use(async (opts) => {
