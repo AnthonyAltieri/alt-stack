@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from "bun:test";
 import { z } from "zod";
 import { createServer } from "./server.ts";
-import { Router, router, ok } from "@alt-stack/server-core";
+import { Router, router, ok, type BunBaseContext } from "./index.ts";
 
 describe("createServer", () => {
   let server: ReturnType<typeof createServer> | null = null;
@@ -112,7 +112,7 @@ describe("createServer", () => {
 
   describe("custom context", () => {
     it("should provide custom context to handlers", async () => {
-      interface AppContext {
+      interface AppContext extends BunBaseContext {
         requestId: string;
       }
 
@@ -137,17 +137,15 @@ describe("createServer", () => {
       expect(await res.json()).toEqual({ requestId: "test-123" });
     });
 
-    it("should provide bun context to handlers", async () => {
+    it("should provide bun context to handlers (properly typed)", async () => {
       const baseRouter = new Router();
       const testRouter = router({
         "/bun-ctx": baseRouter.procedure
-          .output(z.object({ hasRequest: z.boolean() }))
+          .output(z.object({ url: z.string() }))
           .get(({ ctx }) =>
             ok({
-              // Access bun context (added at runtime by createServer)
-              hasRequest:
-                (ctx as unknown as { bun: { req: Request } }).bun.req instanceof
-                Request,
+              // ctx.bun is properly typed - no casting needed!
+              url: ctx.bun.req.url,
             }),
           ),
       });
@@ -157,13 +155,13 @@ describe("createServer", () => {
 
       expect(res.status).toBe(200);
       const data = await res.json();
-      expect(data.hasRequest).toBe(true);
+      expect(data.url).toContain("/api/bun-ctx");
     });
   });
 
   describe("middleware", () => {
     it("should execute procedure-level middleware", async () => {
-      interface AppContext {
+      interface AppContext extends BunBaseContext {
         user: { id: string } | null;
       }
 
@@ -190,7 +188,7 @@ describe("createServer", () => {
     });
 
     it("should allow middleware to throw for early exit", async () => {
-      interface AppContext {
+      interface AppContext extends BunBaseContext {
         user: { id: string } | null;
       }
 

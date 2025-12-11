@@ -27,7 +27,7 @@ import type {
   MiddlewareResultSuccess,
 } from "@alt-stack/server-core";
 import { BunRouter } from "./router.ts";
-import type { BunServer } from "./types.ts";
+import type { BunServer, BunBaseContext } from "./types.ts";
 
 function normalizePrefix(prefix: string): string {
   const normalized = prefix.startsWith("/") ? prefix : `/${prefix}`;
@@ -79,14 +79,14 @@ function jsonResponse(data: unknown, status: number = 200): Response {
 }
 
 export function createServer<
-  TCustomContext extends object = Record<string, never>,
+  TContext extends BunBaseContext = BunBaseContext,
 >(
-  config: Record<string, Router<TCustomContext> | Router<TCustomContext>[]>,
+  config: Record<string, Router<TContext> | Router<TContext>[]>,
   options?: {
     createContext?: (
       req: Request,
       server: BunServer,
-    ) => Promise<TCustomContext> | TCustomContext;
+    ) => Promise<Omit<TContext, "bun" | "span">> | Omit<TContext, "bun" | "span">;
     defaultErrorHandlers?: {
       default400Error: (
         errors: Array<
@@ -117,7 +117,7 @@ export function createServer<
     InputConfig,
     z.ZodTypeAny | undefined,
     Record<number, z.ZodTypeAny> | undefined,
-    TCustomContext
+    TContext
   >[] = [];
 
   for (const [prefix, routerOrRouters] of Object.entries(config)) {
@@ -177,12 +177,12 @@ export function createServer<
 
           const customContext = options?.createContext
             ? await options.createContext(req, server)
-            : ({} as TCustomContext);
+            : ({} as Omit<TContext, "bun" | "span">);
 
           type ProcedureContext = TypedContext<
             InputConfig,
             Record<number, z.ZodTypeAny> | undefined,
-            TCustomContext
+            TContext
           >;
 
           const ctx: ProcedureContext = {

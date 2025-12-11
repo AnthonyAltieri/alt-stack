@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import { createServer } from "./server.js";
-import { Router, router, ok } from "@alt-stack/server-core";
+import { Router, router, ok, type HonoBaseContext } from "./index.js";
 
 describe("createServer", () => {
   describe("basic routing", () => {
@@ -89,7 +89,7 @@ describe("createServer", () => {
 
   describe("custom context", () => {
     it("should provide custom context to handlers", async () => {
-      interface AppContext {
+      interface AppContext extends HonoBaseContext {
         requestId: string;
       }
 
@@ -135,7 +135,7 @@ describe("createServer", () => {
 
   describe("middleware", () => {
     it("should execute procedure-level middleware", async () => {
-      interface AppContext {
+      interface AppContext extends HonoBaseContext {
         user: { id: string } | null;
       }
 
@@ -162,7 +162,7 @@ describe("createServer", () => {
     });
 
     it("should allow middleware to throw for early exit", async () => {
-      interface AppContext {
+      interface AppContext extends HonoBaseContext {
         user: { id: string } | null;
       }
 

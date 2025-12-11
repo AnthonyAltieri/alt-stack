@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import request from "supertest";
 import { createServer } from "./server.js";
-import { Router, router, ok } from "@alt-stack/server-core";
+import { Router, router, ok, type ExpressBaseContext } from "./index.js";
 
 describe("createServer", () => {
   describe("basic routing", () => {
@@ -142,7 +142,7 @@ describe("createServer", () => {
 
   describe("custom context", () => {
     it("should provide custom context to handlers", async () => {
-      interface AppContext {
+      interface AppContext extends ExpressBaseContext {
         requestId: string;
       }
 
@@ -166,14 +166,14 @@ describe("createServer", () => {
       expect(res.body).toEqual({ requestId: "test-123" });
     });
 
-    it("should provide express context to handlers", async () => {
+    it("should provide express context to handlers (properly typed)", async () => {
       const baseRouter = new Router();
       const testRouter = router({
         "/express-ctx": baseRouter.procedure
           .output(z.object({ method: z.string() }))
           .get(({ ctx }) => ok({
-            // Access express context (added at runtime by createServer)
-            method: (ctx as unknown as { express: { req: { method: string } } }).express.req.method,
+            // ctx.express is properly typed - no casting needed!
+            method: ctx.express.req.method,
           })),
       });
 
@@ -187,7 +187,7 @@ describe("createServer", () => {
 
   describe("middleware", () => {
     it("should execute procedure-level middleware", async () => {
-      interface AppContext {
+      interface AppContext extends ExpressBaseContext {
         user: { id: string } | null;
       }
 
