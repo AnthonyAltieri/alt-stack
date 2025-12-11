@@ -1,4 +1,4 @@
-import { Router, mergeRouters } from "./router.js";
+import { Router, mergeRouters, router, type RouterConfigValue } from "./router.js";
 import { BaseProcedureBuilder } from "./procedure-builder.js";
 import { z } from "zod";
 import type { ZodError } from "zod";
@@ -49,8 +49,12 @@ export interface InitResult<
   TCustomContext extends object = Record<string, never>,
   TInitOptions extends InitOptions<TCustomContext> | undefined = undefined,
 > {
-  router: (
-    config?: Record<string, Router<TCustomContext> | Router<TCustomContext>[]>,
+  router: <
+    TConfig extends {
+      [K in string]: RouterConfigValue<TCustomContext, K>;
+    },
+  >(
+    config: TConfig,
   ) => Router<TCustomContext>;
   mergeRouters: (...routers: Router<TCustomContext>[]) => Router<TCustomContext>;
   procedure: BaseProcedureBuilder<
@@ -164,9 +168,13 @@ export function init<TCustomContext extends object = Record<string, never>>(
   };
 
   return {
-    router: (
-      config?: Record<string, Router<TCustomContext> | Router<TCustomContext>[]>,
-    ) => new Router<TCustomContext>(config),
+    router: <
+      TConfig extends {
+        [K in string]: RouterConfigValue<TCustomContext, K>;
+      },
+    >(
+      config: TConfig,
+    ) => router<TCustomContext, TConfig>(config),
     mergeRouters: (...routers: Router<TCustomContext>[]) => mergeRouters(...routers),
     procedure: new BaseProcedureBuilder<
       { params?: never; query?: never; body?: never },

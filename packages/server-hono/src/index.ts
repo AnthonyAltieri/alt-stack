@@ -100,6 +100,7 @@ export type {
   Procedure,
   ReadyProcedure,
   PendingProcedure,
+  RouterConfigValue,
 } from "@alt-stack/server-core";
 
 // Pre-typed Router with Hono context baked in
