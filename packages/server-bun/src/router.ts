@@ -1,4 +1,4 @@
-import type { BunServer } from "./types.js";
+import type { BunServer } from "./types.ts";
 
 /**
  * Route definition for internal routing

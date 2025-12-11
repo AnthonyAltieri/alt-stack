@@ -26,8 +26,8 @@ import type {
   MiddlewareResult,
   MiddlewareResultSuccess,
 } from "@alt-stack/server-core";
-import { BunRouter } from "./router.js";
-import type { BunServer } from "./types.js";
+import { BunRouter } from "./router.ts";
+import type { BunServer } from "./types.ts";
 
 function normalizePrefix(prefix: string): string {
   const normalized = prefix.startsWith("/") ? prefix : `/${prefix}`;

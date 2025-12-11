@@ -2,19 +2,17 @@
   "name": "@alt-stack/server-bun",
   "version": "0.4.3",
   "description": "Type-safe server framework built on Bun with Zod validation",
-  "main": "./dist/index.js",
-  "module": "./dist/index.mjs",
-  "types": "./dist/index.d.ts",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.js"
+      "bun": "./src/index.ts",
+      "default": "./src/index.ts"
     }
   },
   "scripts": {
-    "build": "tsup",
-    "test": "vitest",
+    "test": "bun test",
     "check-types": "tsc --noEmit"
   },
   "keywords": [],
@@ -29,9 +27,7 @@
   "devDependencies": {
     "bun-types": "^1.2.5",
     "oxlint": "^1.24.0",
-    "tsup": "^8.0.0",
     "typescript": "^5.9.2",
-    "vitest": "^4.0.3",
     "zod": "^4.0.0"
   }
 }

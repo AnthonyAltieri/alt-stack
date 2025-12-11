@@ -1,28 +1,24 @@
-import { describe, it, expectTypeOf } from "vitest";
+import { describe, it, expect } from "bun:test";
 import type { BaseContext } from "@alt-stack/server-core";
-import type { BunBaseContext, BunServer } from "./types.js";
+import type { BunBaseContext, BunServer } from "./types.ts";
 
 describe("Bun Types", () => {
   describe("BunBaseContext", () => {
     it("should extend BaseContext", () => {
+      // Type-level test: BunBaseContext should be assignable to BaseContext
       const ctx: BunBaseContext = {
-        bun: { req: {} as Request, server: {} as BunServer },
+        bun: { req: new Request("http://localhost"), server: {} as BunServer },
       };
-      expectTypeOf(ctx).toMatchTypeOf<BaseContext>();
+      const _baseCtx: BaseContext = ctx;
+      expect(ctx.bun).toBeDefined();
     });
 
     it("should have bun property with req and server", () => {
-      expectTypeOf<BunBaseContext>().toHaveProperty("bun");
-      expectTypeOf<BunBaseContext["bun"]["req"]>().toMatchTypeOf<Request>();
-      expectTypeOf<BunBaseContext["bun"]["server"]>().toMatchTypeOf<BunServer>();
-    });
-
-    it("should be assignable to BaseContext", () => {
-      const bunCtx: BunBaseContext = {
-        bun: { req: {} as Request, server: {} as BunServer },
+      const ctx: BunBaseContext = {
+        bun: { req: new Request("http://localhost"), server: {} as BunServer },
       };
-      const baseCtx: BaseContext = bunCtx;
-      expectTypeOf(baseCtx).toMatchTypeOf<BaseContext>();
+      expect(ctx.bun.req).toBeInstanceOf(Request);
+      expect(ctx.bun.server).toBeDefined();
     });
 
     it("should allow custom properties alongside bun", () => {
@@ -32,14 +28,13 @@ describe("Bun Types", () => {
       }
 
       const ctx: AppContext = {
-        bun: { req: {} as Request, server: {} as BunServer },
+        bun: { req: new Request("http://localhost"), server: {} as BunServer },
         user: { id: "123" },
         requestId: "req-456",
       };
 
-      expectTypeOf(ctx).toMatchTypeOf<BunBaseContext>();
-      expectTypeOf(ctx.user).toEqualTypeOf<{ id: string } | null>();
-      expectTypeOf(ctx.requestId).toEqualTypeOf<string>();
+      expect(ctx.user?.id).toBe("123");
+      expect(ctx.requestId).toBe("req-456");
     });
   });
 });

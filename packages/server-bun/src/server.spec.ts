@@ -1,6 +1,6 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach } from "bun:test";
 import { z } from "zod";
-import { createServer } from "./server.js";
+import { createServer } from "./server.ts";
 import { Router, router, ok } from "@alt-stack/server-core";
 
 describe("createServer", () => {
