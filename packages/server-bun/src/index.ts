@@ -4,7 +4,7 @@ import {
   createRouter as baseCreateRouter,
   mergeRouters as baseMergeRouters,
 } from "@alt-stack/server-core";
-import type { HonoBaseContext } from "./types.js";
+import type { BunBaseContext } from "./types.ts";
 
 // Re-export everything from server-core except Router and router utilities (which we override)
 export {
@@ -100,44 +100,43 @@ export type {
   Procedure,
   ReadyProcedure,
   PendingProcedure,
-  RouterConfigValue,
 } from "@alt-stack/server-core";
 
-// Pre-typed Router with Hono context baked in
+// Pre-typed Router with Bun context baked in
 export class Router<
-  TCustomContext extends HonoBaseContext = HonoBaseContext,
+  TCustomContext extends BunBaseContext = BunBaseContext,
 > extends BaseRouter<TCustomContext> {}
 
 /**
- * Pre-typed router function with Hono context as default.
- * Routes defined with this function will have `ctx.hono` properly typed.
+ * Pre-typed router function with Bun context as default.
+ * Routes defined with this function will have `ctx.bun` properly typed.
  */
-export function router<TCustomContext extends HonoBaseContext = HonoBaseContext>(
+export function router<TCustomContext extends BunBaseContext = BunBaseContext>(
   config: Parameters<typeof baseRouter<TCustomContext>>[0],
 ): Router<TCustomContext> {
   return baseRouter<TCustomContext>(config) as Router<TCustomContext>;
 }
 
 /**
- * Pre-typed createRouter function with Hono context as default.
+ * Pre-typed createRouter function with Bun context as default.
  */
-export function createRouter<TCustomContext extends HonoBaseContext = HonoBaseContext>(
+export function createRouter<TCustomContext extends BunBaseContext = BunBaseContext>(
   config?: Record<string, Router<TCustomContext> | Router<TCustomContext>[]>,
 ): Router<TCustomContext> {
   return baseCreateRouter<TCustomContext>(config) as Router<TCustomContext>;
 }
 
 /**
- * Pre-typed mergeRouters function with Hono context as default.
+ * Pre-typed mergeRouters function with Bun context as default.
  */
-export function mergeRouters<TCustomContext extends HonoBaseContext = HonoBaseContext>(
+export function mergeRouters<TCustomContext extends BunBaseContext = BunBaseContext>(
   ...routers: Router<TCustomContext>[]
 ): Router<TCustomContext> {
   return baseMergeRouters<TCustomContext>(...routers) as Router<TCustomContext>;
 }
 
-// Export Hono-specific functionality
-export { createServer } from "./server.js";
-export { createDocsRouter } from "./docs.js";
-export type { CreateDocsRouterOptions } from "./docs.js";
-export type { HonoBaseContext } from "./types.js";
+// Export Bun-specific functionality
+export { createServer } from "./server.ts";
+export { createDocsRouter } from "./docs.ts";
+export type { CreateDocsRouterOptions } from "./docs.ts";
+export type { BunBaseContext, BunServer } from "./types.ts";

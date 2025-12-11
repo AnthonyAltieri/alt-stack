@@ -72,10 +72,12 @@ function serializeError(error: Error & { _tag: string }): object {
   };
 }
 
-export function createServer<TCustomContext extends object = Record<string, never>>(
-  config: Record<string, Router<TCustomContext> | Router<TCustomContext>[]>,
+import type { ExpressBaseContext } from "./types.js";
+
+export function createServer<TContext extends ExpressBaseContext = ExpressBaseContext>(
+  config: Record<string, Router<TContext> | Router<TContext>[]>,
   options?: {
-    createContext?: (req: Request, res: Response) => Promise<TCustomContext> | TCustomContext;
+    createContext?: (req: Request, res: Response) => Promise<Omit<TContext, "express" | "span">> | Omit<TContext, "express" | "span">;
     defaultErrorHandlers?: {
       default400Error: (
         errors: Array<[error: ZodError, variant: "body" | "param" | "query", value: unknown]>,
@@ -104,7 +106,7 @@ export function createServer<TCustomContext extends object = Record<string, neve
     InputConfig,
     z.ZodTypeAny | undefined,
     Record<number, z.ZodTypeAny> | undefined,
-    TCustomContext
+    TContext
   >[] = [];
 
   for (const [prefix, routerOrRouters] of Object.entries(config)) {
@@ -150,12 +152,12 @@ export function createServer<TCustomContext extends object = Record<string, neve
 
         const customContext = options?.createContext
           ? await options.createContext(req, res)
-          : ({} as TCustomContext);
+          : ({} as Omit<TContext, "express" | "span">);
 
         type ProcedureContext = TypedContext<
           InputConfig,
           Record<number, z.ZodTypeAny> | undefined,
-          TCustomContext
+          TContext
         >;
 
         const ctx: ProcedureContext = {

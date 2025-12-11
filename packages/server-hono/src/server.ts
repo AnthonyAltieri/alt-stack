@@ -76,12 +76,14 @@ function serializeError(error: Error & { _tag: string }): object {
   };
 }
 
+import type { HonoBaseContext } from "./types.js";
+
 export function createServer<
-  TCustomContext extends object = Record<string, never>,
+  TContext extends HonoBaseContext = HonoBaseContext,
 >(
-  config: Record<string, Router<TCustomContext> | Router<TCustomContext>[]>,
+  config: Record<string, Router<TContext> | Router<TContext>[]>,
   options?: {
-    createContext?: (c: Context) => Promise<TCustomContext> | TCustomContext;
+    createContext?: (c: Context) => Promise<Omit<TContext, "hono" | "span">> | Omit<TContext, "hono" | "span">;
     middleware?: {
       [path: string]: {
         methods: string[];
@@ -149,7 +151,7 @@ export function createServer<
     InputConfig,
     z.ZodTypeAny | undefined,
     Record<number, z.ZodTypeAny> | undefined,
-    TCustomContext
+    TContext
   >[] = [];
 
   for (const [prefix, routerOrRouters] of Object.entries(config)) {
@@ -207,11 +209,11 @@ export function createServer<
 
         const customContext = options?.createContext
           ? await options.createContext(c)
-          : ({} as TCustomContext);
+          : ({} as Omit<TContext, "hono" | "span">);
         type ProcedureContext = TypedContext<
           InputConfig,
           Record<number, z.ZodTypeAny> | undefined,
-          TCustomContext
+          TContext
         >;
 
         const ctx: ProcedureContext = {

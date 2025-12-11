@@ -192,7 +192,7 @@ type RouteMethods<
 // Type helper to extract ReadyProcedure from a router config value
 // Use more flexible types that accept any Procedure subtype
 // Accept procedures with narrowed context types (e.g., AuthenticatedContext extends AppContext)
-type RouterConfigValue<
+export type RouterConfigValue<
   TCustomContext extends object,
   TPath extends string,
 > =

@@ -1,11 +1,20 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "bun:test";
 import { z } from "zod";
-import { createServer } from "./server.js";
-import { Router, router, ok, type HonoBaseContext } from "./index.js";
+import { createServer } from "./server.ts";
+import { Router, router, ok, type BunBaseContext } from "./index.ts";
 
 describe("createServer", () => {
+  let server: ReturnType<typeof createServer> | null = null;
+
+  afterEach(() => {
+    server?.stop();
+    server = null;
+  });
+
+  const getBaseUrl = () => `http://localhost:${server!.port}`;
+
   describe("basic routing", () => {
-    it("should create a Hono app with GET route", async () => {
+    it("should create a Bun server with GET route", async () => {
       const baseRouter = new Router();
       const testRouter = router({
         "/hello": baseRouter.procedure
@@ -13,32 +22,32 @@ describe("createServer", () => {
           .get(() => ok({ message: "Hello, World!" })),
       });
 
-      const app = createServer({ "/api": testRouter });
-      const res = await app.fetch(new Request("http://localhost/api/hello"));
+      server = createServer({ "/api": testRouter }, { port: 0 });
+      const res = await fetch(`${getBaseUrl()}/api/hello`);
 
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ message: "Hello, World!" });
     });
 
-    it("should create a Hono app with POST route", async () => {
+    it("should create a Bun server with POST route", async () => {
       const baseRouter = new Router();
       const testRouter = router({
         "/greet": baseRouter.procedure
           .input({ body: z.object({ name: z.string() }) })
           .output(z.object({ greeting: z.string() }))
-          .post(({ input }) => ok({
-            greeting: `Hello, ${input.body.name}!`,
-          })),
+          .post(({ input }) =>
+            ok({
+              greeting: `Hello, ${input.body.name}!`,
+            }),
+          ),
       });
 
-      const app = createServer({ "/api": testRouter });
-      const res = await app.fetch(
-        new Request("http://localhost/api/greet", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: "Alice" }),
-        }),
-      );
+      server = createServer({ "/api": testRouter }, { port: 0 });
+      const res = await fetch(`${getBaseUrl()}/api/greet`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Alice" }),
+      });
 
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ greeting: "Hello, Alice!" });
@@ -53,8 +62,8 @@ describe("createServer", () => {
           .get(({ input }) => ok({ id: input.params.id })),
       });
 
-      const app = createServer({ "/api": testRouter });
-      const res = await app.fetch(new Request("http://localhost/api/items/123"));
+      server = createServer({ "/api": testRouter }, { port: 0 });
+      const res = await fetch(`${getBaseUrl()}/api/items/123`);
 
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ id: "123" });
@@ -71,25 +80,39 @@ describe("createServer", () => {
             }),
           })
           .output(z.object({ page: z.number(), limit: z.number() }))
-          .get(({ input }) => ok({
-            page: input.query.page,
-            limit: input.query.limit,
-          })),
+          .get(({ input }) =>
+            ok({
+              page: input.query.page,
+              limit: input.query.limit,
+            }),
+          ),
       });
 
-      const app = createServer({ "/api": testRouter });
-      const res = await app.fetch(
-        new Request("http://localhost/api/list?page=2&limit=20"),
-      );
+      server = createServer({ "/api": testRouter }, { port: 0 });
+      const res = await fetch(`${getBaseUrl()}/api/list?page=2&limit=20`);
 
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ page: 2, limit: 20 });
+    });
+
+    it("should return 404 for unknown routes", async () => {
+      const baseRouter = new Router();
+      const testRouter = router({
+        "/hello": baseRouter.procedure
+          .output(z.object({ message: z.string() }))
+          .get(() => ok({ message: "Hello" })),
+      });
+
+      server = createServer({ "/api": testRouter }, { port: 0 });
+      const res = await fetch(`${getBaseUrl()}/api/unknown`);
+
+      expect(res.status).toBe(404);
     });
   });
 
   describe("custom context", () => {
     it("should provide custom context to handlers", async () => {
-      interface AppContext extends HonoBaseContext {
+      interface AppContext extends BunBaseContext {
         requestId: string;
       }
 
@@ -100,42 +123,45 @@ describe("createServer", () => {
           .get(({ ctx }) => ok({ requestId: ctx.requestId })),
       });
 
-      const app = createServer<AppContext>(
+      server = createServer<AppContext>(
         { "/api": testRouter },
         {
+          port: 0,
           createContext: () => ({ requestId: "test-123" }),
         },
       );
 
-      const res = await app.fetch(new Request("http://localhost/api/context"));
+      const res = await fetch(`${getBaseUrl()}/api/context`);
 
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ requestId: "test-123" });
     });
 
-    it("should provide hono context to handlers", async () => {
+    it("should provide bun context to handlers (properly typed)", async () => {
       const baseRouter = new Router();
       const testRouter = router({
-        "/hono-ctx": baseRouter.procedure
+        "/bun-ctx": baseRouter.procedure
           .output(z.object({ url: z.string() }))
-          .get(({ ctx }) => ok({
-            // Access hono context (added at runtime by createServer)
-            url: (ctx as unknown as { hono: { req: { url: string } } }).hono.req.url,
-          })),
+          .get(({ ctx }) =>
+            ok({
+              // ctx.bun is properly typed - no casting needed!
+              url: ctx.bun.req.url,
+            }),
+          ),
       });
 
-      const app = createServer({ "/api": testRouter });
-      const res = await app.fetch(new Request("http://localhost/api/hono-ctx"));
+      server = createServer({ "/api": testRouter }, { port: 0 });
+      const res = await fetch(`${getBaseUrl()}/api/bun-ctx`);
 
       expect(res.status).toBe(200);
       const data = await res.json();
-      expect(data.url).toContain("/api/hono-ctx");
+      expect(data.url).toContain("/api/bun-ctx");
     });
   });
 
   describe("middleware", () => {
     it("should execute procedure-level middleware", async () => {
-      interface AppContext extends HonoBaseContext {
+      interface AppContext extends BunBaseContext {
         user: { id: string } | null;
       }
 
@@ -150,19 +176,19 @@ describe("createServer", () => {
           .get(({ ctx }) => ok({ userId: ctx.user!.id })),
       });
 
-      const app = createServer<AppContext>(
+      server = createServer<AppContext>(
         { "/api": testRouter },
-        { createContext: () => ({ user: null }) },
+        { port: 0, createContext: () => ({ user: null }) },
       );
 
-      const res = await app.fetch(new Request("http://localhost/api/protected"));
+      const res = await fetch(`${getBaseUrl()}/api/protected`);
 
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ userId: "user-1" });
     });
 
     it("should allow middleware to throw for early exit", async () => {
-      interface AppContext extends HonoBaseContext {
+      interface AppContext extends BunBaseContext {
         user: { id: string } | null;
       }
 
@@ -180,12 +206,12 @@ describe("createServer", () => {
           .get(() => ok({ data: "secret" })),
       });
 
-      const app = createServer<AppContext>(
+      server = createServer<AppContext>(
         { "/api": testRouter },
-        { createContext: () => ({ user: null }) },
+        { port: 0, createContext: () => ({ user: null }) },
       );
 
-      const res = await app.fetch(new Request("http://localhost/api/protected"));
+      const res = await fetch(`${getBaseUrl()}/api/protected`);
 
       expect(res.status).toBe(500);
     });
@@ -201,14 +227,12 @@ describe("createServer", () => {
           .post(({ input }) => ok({ email: input.body.email })),
       });
 
-      const app = createServer({ "/api": testRouter });
-      const res = await app.fetch(
-        new Request("http://localhost/api/validate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: "invalid" }),
-        }),
-      );
+      server = createServer({ "/api": testRouter }, { port: 0 });
+      const res = await fetch(`${getBaseUrl()}/api/validate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "invalid" }),
+      });
 
       expect(res.status).toBe(400);
     });
@@ -222,10 +246,8 @@ describe("createServer", () => {
           .get(({ input }) => ok({ id: input.params.id })),
       });
 
-      const app = createServer({ "/api": testRouter });
-      const res = await app.fetch(
-        new Request("http://localhost/api/items/not-a-uuid"),
-      );
+      server = createServer({ "/api": testRouter }, { port: 0 });
+      const res = await fetch(`${getBaseUrl()}/api/items/not-a-uuid`);
 
       expect(res.status).toBe(400);
     });
@@ -242,8 +264,8 @@ describe("createServer", () => {
           }),
       });
 
-      const app = createServer({ "/api": testRouter });
-      const res = await app.fetch(new Request("http://localhost/api/crash"));
+      server = createServer({ "/api": testRouter }, { port: 0 });
+      const res = await fetch(`${getBaseUrl()}/api/crash`);
 
       expect(res.status).toBe(500);
       const data = await res.json();
@@ -260,8 +282,8 @@ describe("createServer", () => {
           .get(() => ok({ msg: "hi" })),
       });
 
-      const app = createServer({ "/api": r });
-      const res = await app.fetch(new Request("http://localhost/api/hello"));
+      server = createServer({ "/api": r }, { port: 0 });
+      const res = await fetch(`${getBaseUrl()}/api/hello`);
 
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ msg: "hi" });
@@ -274,25 +296,27 @@ describe("createServer", () => {
           get: baseRouter.procedure
             .input({ params: z.object({ id: z.string() }) })
             .output(z.object({ id: z.string(), action: z.literal("get") }))
-            .handler(({ input }) => ok({ id: input.params.id, action: "get" as const })),
+            .handler(({ input }) =>
+              ok({ id: input.params.id, action: "get" as const }),
+            ),
           delete: baseRouter.procedure
             .input({ params: z.object({ id: z.string() }) })
             .output(z.object({ id: z.string(), action: z.literal("delete") }))
-            .handler(({ input }) => ok({ id: input.params.id, action: "delete" as const })),
+            .handler(({ input }) =>
+              ok({ id: input.params.id, action: "delete" as const }),
+            ),
         },
       });
 
-      const app = createServer({ "/api": r });
+      server = createServer({ "/api": r }, { port: 0 });
 
-      const getRes = await app.fetch(
-        new Request("http://localhost/api/resource/123"),
-      );
+      const getRes = await fetch(`${getBaseUrl()}/api/resource/123`);
       expect(getRes.status).toBe(200);
       expect(await getRes.json()).toEqual({ id: "123", action: "get" });
 
-      const deleteRes = await app.fetch(
-        new Request("http://localhost/api/resource/456", { method: "DELETE" }),
-      );
+      const deleteRes = await fetch(`${getBaseUrl()}/api/resource/456`, {
+        method: "DELETE",
+      });
       expect(deleteRes.status).toBe(200);
       expect(await deleteRes.json()).toEqual({ id: "456", action: "delete" });
     });
@@ -313,15 +337,18 @@ describe("createServer", () => {
           .get(() => ok([{ title: "Hello" }])),
       });
 
-      const app = createServer({
-        "/api": [usersRouter, postsRouter],
-      });
+      server = createServer(
+        {
+          "/api": [usersRouter, postsRouter],
+        },
+        { port: 0 },
+      );
 
-      const usersRes = await app.fetch(new Request("http://localhost/api/users"));
+      const usersRes = await fetch(`${getBaseUrl()}/api/users`);
       expect(usersRes.status).toBe(200);
       expect(await usersRes.json()).toEqual([{ id: "1" }, { id: "2" }]);
 
-      const postsRes = await app.fetch(new Request("http://localhost/api/posts"));
+      const postsRes = await fetch(`${getBaseUrl()}/api/posts`);
       expect(postsRes.status).toBe(200);
       expect(await postsRes.json()).toEqual([{ title: "Hello" }]);
     });
@@ -340,16 +367,19 @@ describe("createServer", () => {
           .get(() => ok({ version: "v2" as const })),
       });
 
-      const app = createServer({
-        "/api/v1": v1Router,
-        "/api/v2": v2Router,
-      });
+      server = createServer(
+        {
+          "/api/v1": v1Router,
+          "/api/v2": v2Router,
+        },
+        { port: 0 },
+      );
 
-      const v1Res = await app.fetch(new Request("http://localhost/api/v1/version"));
+      const v1Res = await fetch(`${getBaseUrl()}/api/v1/version`);
       expect(v1Res.status).toBe(200);
       expect(await v1Res.json()).toEqual({ version: "v1" });
 
-      const v2Res = await app.fetch(new Request("http://localhost/api/v2/version"));
+      const v2Res = await fetch(`${getBaseUrl()}/api/v2/version`);
       expect(v2Res.status).toBe(200);
       expect(await v2Res.json()).toEqual({ version: "v2" });
     });
