@@ -53,6 +53,62 @@ describe("createServer", () => {
       expect(await res.json()).toEqual({ greeting: "Hello, Alice!" });
     });
 
+    it("should handle PUT requests", async () => {
+      const baseRouter = new Router();
+      const testRouter = router({
+        "/items/{id}": baseRouter.procedure
+          .input({
+            params: z.object({ id: z.string() }),
+            body: z.object({ name: z.string() }),
+          })
+          .output(z.object({ id: z.string(), name: z.string() }))
+          .put(({ input }) =>
+            ok({
+              id: input.params.id,
+              name: input.body.name,
+            }),
+          ),
+      });
+
+      server = createServer({ "/api": testRouter }, { port: 0 });
+      const res = await fetch(`${getBaseUrl()}/api/items/456`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Updated" }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ id: "456", name: "Updated" });
+    });
+
+    it("should handle PATCH requests", async () => {
+      const baseRouter = new Router();
+      const testRouter = router({
+        "/items/{id}": baseRouter.procedure
+          .input({
+            params: z.object({ id: z.string() }),
+            body: z.object({ completed: z.boolean() }),
+          })
+          .output(z.object({ id: z.string(), completed: z.boolean() }))
+          .patch(({ input }) =>
+            ok({
+              id: input.params.id,
+              completed: input.body.completed,
+            }),
+          ),
+      });
+
+      server = createServer({ "/api": testRouter }, { port: 0 });
+      const res = await fetch(`${getBaseUrl()}/api/items/789`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ completed: true }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ id: "789", completed: true });
+    });
+
     it("should handle path parameters", async () => {
       const baseRouter = new Router();
       const testRouter = router({
@@ -248,6 +304,21 @@ describe("createServer", () => {
 
       server = createServer({ "/api": testRouter }, { port: 0 });
       const res = await fetch(`${getBaseUrl()}/api/items/not-a-uuid`);
+
+      expect(res.status).toBe(400);
+    });
+
+    it("should return 400 for invalid query", async () => {
+      const baseRouter = new Router();
+      const testRouter = router({
+        "/list": baseRouter.procedure
+          .input({ query: z.object({ page: z.coerce.number().min(1) }) })
+          .output(z.object({ page: z.number() }))
+          .get(({ input }) => ok({ page: input.query.page })),
+      });
+
+      server = createServer({ "/api": testRouter }, { port: 0 });
+      const res = await fetch(`${getBaseUrl()}/api/list?page=0`);
 
       expect(res.status).toBe(400);
     });
