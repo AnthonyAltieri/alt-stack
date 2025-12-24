@@ -1,4 +1,4 @@
-import { createWorker, init, workerRouter } from "@alt-stack/workers-warpstream";
+import { createWorker, init, workerRouter, ok } from "@alt-stack/workers-warpstream";
 import { z } from "zod";
 
 // ============================================================================
@@ -21,6 +21,7 @@ export const jobRouter = workerRouter({
       console.log(`[Notification] ${input.type} for user ${input.userId}`);
       console.log(`  Task: ${input.taskTitle} (${input.taskId})`);
       // In production: send email, push notification, etc.
+      return ok({ success: true });
     }),
 
   "generate-report": procedure
@@ -36,6 +37,7 @@ export const jobRouter = workerRouter({
       console.log(`  Completed at: ${input.completedAt}`);
       console.log(`  User: ${input.userId}`);
       // In production: generate PDF, store in S3, etc.
+      return ok({ success: true });
     }),
 });
 

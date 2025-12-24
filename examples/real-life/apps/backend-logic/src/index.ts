@@ -1,4 +1,4 @@
-import { createDocsRouter, createServer, init, router } from "@alt-stack/server-hono";
+import { createDocsRouter, createServer, init, router, ok, err, TaggedError } from "@alt-stack/server-hono";
 import { createWarpStreamClient } from "@alt-stack/workers-client-warpstream";
 import { serve } from "@hono/node-server";
 import type { Context } from "hono";
@@ -24,6 +24,46 @@ const TaskSchema = z.object({
 interface AppContext {
   userId: string | null;
 }
+
+// ============================================================================
+// Error Classes
+// ============================================================================
+
+class UnauthorizedError extends TaggedError {
+  readonly _tag = "UnauthorizedError" as const;
+  constructor(public readonly message: string = "Authentication required") {
+    super(message);
+  }
+}
+
+const UnauthorizedErrorSchema = z.object({
+  _tag: z.literal("UnauthorizedError"),
+  message: z.string(),
+});
+
+class NotFoundError extends TaggedError {
+  readonly _tag = "NotFoundError" as const;
+  constructor(public readonly message: string = "Resource not found") {
+    super(message);
+  }
+}
+
+const NotFoundErrorSchema = z.object({
+  _tag: z.literal("NotFoundError"),
+  message: z.string(),
+});
+
+class ForbiddenError extends TaggedError {
+  readonly _tag = "ForbiddenError" as const;
+  constructor(public readonly message: string = "Access denied") {
+    super(message);
+  }
+}
+
+const ForbiddenErrorSchema = z.object({
+  _tag: z.literal("ForbiddenError"),
+  message: z.string(),
+});
 
 // ============================================================================
 // In-Memory Store
@@ -91,11 +131,11 @@ const factory = init<AppContext>();
 
 const protectedProc = factory.procedure
   .errors({
-    401: z.object({ error: z.object({ code: z.literal("UNAUTHORIZED"), message: z.string() }) }),
+    401: UnauthorizedErrorSchema,
   })
   .use(async ({ ctx, next }) => {
     if (!ctx.userId) {
-      throw ctx.error({ error: { code: "UNAUTHORIZED", message: "Authentication required" } });
+      return err(new UnauthorizedError("Authentication required"));
     }
     return next({ ctx: { userId: ctx.userId } });
   });
@@ -103,11 +143,11 @@ const protectedProc = factory.procedure
 const taskRouter = router<AppContext>({
   "/": {
     get: factory.procedure.output(z.array(TaskSchema)).handler(() => {
-      return Array.from(tasks.values()).map((t) => ({
+      return ok(Array.from(tasks.values()).map((t) => ({
         ...t,
         createdAt: t.createdAt.toISOString(),
         updatedAt: t.updatedAt.toISOString(),
-      }));
+      })));
     }),
 
     post: protectedProc
@@ -143,11 +183,11 @@ const taskRouter = router<AppContext>({
           });
         }
 
-        return {
+        return ok({
           ...task,
           createdAt: task.createdAt.toISOString(),
           updatedAt: task.updatedAt.toISOString(),
-        };
+        });
       }),
   },
 
@@ -156,18 +196,18 @@ const taskRouter = router<AppContext>({
       .input({ params: z.object({ id: z.string().uuid() }) })
       .output(TaskSchema)
       .errors({
-        404: z.object({ error: z.object({ code: z.literal("NOT_FOUND"), message: z.string() }) }),
+        404: NotFoundErrorSchema,
       })
-      .handler(({ input, ctx }) => {
+      .handler(({ input }) => {
         const task = tasks.get(input.params.id);
         if (!task) {
-          throw ctx.error({ error: { code: "NOT_FOUND", message: "Task not found" } });
+          return err(new NotFoundError("Task not found"));
         }
-        return {
+        return ok({
           ...task,
           createdAt: task.createdAt.toISOString(),
           updatedAt: task.updatedAt.toISOString(),
-        };
+        });
       }),
 
     put: protectedProc
@@ -181,16 +221,16 @@ const taskRouter = router<AppContext>({
       })
       .output(TaskSchema)
       .errors({
-        404: z.object({ error: z.object({ code: z.literal("NOT_FOUND"), message: z.string() }) }),
-        403: z.object({ error: z.object({ code: z.literal("FORBIDDEN"), message: z.string() }) }),
+        404: NotFoundErrorSchema,
+        403: ForbiddenErrorSchema,
       })
       .handler(async ({ input, ctx }) => {
         const task = tasks.get(input.params.id);
         if (!task) {
-          throw ctx.error({ error: { code: "NOT_FOUND", message: "Task not found" } });
+          return err(new NotFoundError("Task not found"));
         }
         if (task.userId !== ctx.userId) {
-          throw ctx.error({ error: { code: "FORBIDDEN", message: "Not your task" } });
+          return err(new ForbiddenError("Not your task"));
         }
 
         const wasCompleted = task.status === "completed";
@@ -213,30 +253,30 @@ const taskRouter = router<AppContext>({
           }
         }
 
-        return {
+        return ok({
           ...task,
           createdAt: task.createdAt.toISOString(),
           updatedAt: task.updatedAt.toISOString(),
-        };
+        });
       }),
 
     delete: protectedProc
       .input({ params: z.object({ id: z.string().uuid() }) })
       .output(z.object({ success: z.boolean() }))
       .errors({
-        404: z.object({ error: z.object({ code: z.literal("NOT_FOUND"), message: z.string() }) }),
-        403: z.object({ error: z.object({ code: z.literal("FORBIDDEN"), message: z.string() }) }),
+        404: NotFoundErrorSchema,
+        403: ForbiddenErrorSchema,
       })
       .handler(({ input, ctx }) => {
         const task = tasks.get(input.params.id);
         if (!task) {
-          throw ctx.error({ error: { code: "NOT_FOUND", message: "Task not found" } });
+          return err(new NotFoundError("Task not found"));
         }
         if (task.userId !== ctx.userId) {
-          throw ctx.error({ error: { code: "FORBIDDEN", message: "Not your task" } });
+          return err(new ForbiddenError("Not your task"));
         }
         tasks.delete(input.params.id);
-        return { success: true };
+        return ok({ success: true });
       }),
   },
 });
