@@ -3,6 +3,9 @@ import {
   createServer,
   init,
   router,
+  ok,
+  err,
+  TaggedError,
   type HonoBaseContext,
 } from "@alt-stack/server-hono";
 import { serve } from "@hono/node-server";
@@ -23,6 +26,46 @@ const SessionSchema = z.object({
   token: z.string(),
   userId: z.string(),
   expiresAt: z.string().datetime(),
+});
+
+// ============================================================================
+// Error Classes
+// ============================================================================
+
+class EmailExistsError extends TaggedError {
+  readonly _tag = "EmailExistsError" as const;
+  constructor(public readonly message: string = "Email already registered") {
+    super(message);
+  }
+}
+
+const EmailExistsErrorSchema = z.object({
+  _tag: z.literal("EmailExistsError"),
+  message: z.string(),
+});
+
+class InvalidCredentialsError extends TaggedError {
+  readonly _tag = "InvalidCredentialsError" as const;
+  constructor(public readonly message: string = "Invalid email or password") {
+    super(message);
+  }
+}
+
+const InvalidCredentialsErrorSchema = z.object({
+  _tag: z.literal("InvalidCredentialsError"),
+  message: z.string(),
+});
+
+class UnauthorizedError extends TaggedError {
+  readonly _tag = "UnauthorizedError" as const;
+  constructor(public readonly message: string = "Authentication required") {
+    super(message);
+  }
+}
+
+const UnauthorizedErrorSchema = z.object({
+  _tag: z.literal("UnauthorizedError"),
+  message: z.string(),
 });
 
 // ============================================================================
@@ -61,12 +104,12 @@ const authRouter = router<HonoBaseContext>({
     })
     .output(z.object({ user: UserSchema, session: SessionSchema }))
     .errors({
-      409: z.object({ error: z.object({ code: z.literal("EMAIL_EXISTS"), message: z.string() }) }),
+      409: EmailExistsErrorSchema,
     })
-    .post(({ input, ctx }) => {
+    .post(({ input }) => {
       const existing = Array.from(users.values()).find((u) => u.email === input.body.email);
       if (existing) {
-        throw ctx.error({ error: { code: "EMAIL_EXISTS", message: "Email already registered" } });
+        return err(new EmailExistsError("Email already registered"));
       }
 
       const id = crypto.randomUUID();
@@ -82,10 +125,10 @@ const authRouter = router<HonoBaseContext>({
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
       sessions.set(token, { userId: id, expiresAt });
 
-      return {
+      return ok({
         user: { id, email: user.email, name: user.name },
         session: { token, userId: id, expiresAt: expiresAt.toISOString() },
-      };
+      });
     }),
 
   "/login": publicProc
@@ -97,39 +140,35 @@ const authRouter = router<HonoBaseContext>({
     })
     .output(z.object({ user: UserSchema, session: SessionSchema }))
     .errors({
-      401: z.object({
-        error: z.object({ code: z.literal("INVALID_CREDENTIALS"), message: z.string() }),
-      }),
+      401: InvalidCredentialsErrorSchema,
     })
-    .post(({ input, ctx }) => {
+    .post(({ input }) => {
       const user = Array.from(users.values()).find((u) => u.email === input.body.email);
       if (!user || !verifyPassword(input.body.password, user.passwordHash)) {
-        throw ctx.error({
-          error: { code: "INVALID_CREDENTIALS", message: "Invalid email or password" },
-        });
+        return err(new InvalidCredentialsError("Invalid email or password"));
       }
 
       const token = crypto.randomUUID();
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
       sessions.set(token, { userId: user.id, expiresAt });
 
-      return {
+      return ok({
         user: { id: user.id, email: user.email, name: user.name },
         session: { token, userId: user.id, expiresAt: expiresAt.toISOString() },
-      };
+      });
     }),
 
   "/logout": publicProc.output(z.object({ success: z.boolean() })).post(({ ctx }) => {
     const auth = ctx.hono.req.header("Authorization") ?? "";
     const token = auth.replace("Bearer ", "");
     sessions.delete(token);
-    return { success: true };
+    return ok({ success: true });
   }),
 
   "/me": publicProc
     .output(UserSchema)
     .errors({
-      401: z.object({ error: z.object({ code: z.literal("UNAUTHORIZED"), message: z.string() }) }),
+      401: UnauthorizedErrorSchema,
     })
     .get(({ ctx }) => {
       const auth = ctx.hono.req.header("Authorization") ?? "";
@@ -137,15 +176,15 @@ const authRouter = router<HonoBaseContext>({
       const session = sessions.get(token);
       if (!session || session.expiresAt < new Date()) {
         sessions.delete(token);
-        throw ctx.error({ error: { code: "UNAUTHORIZED", message: "Invalid or expired session" } });
+        return err(new UnauthorizedError("Invalid or expired session"));
       }
 
       const user = users.get(session.userId);
       if (!user) {
-        throw ctx.error({ error: { code: "UNAUTHORIZED", message: "User not found" } });
+        return err(new UnauthorizedError("User not found"));
       }
 
-      return { id: user.id, email: user.email, name: user.name };
+      return ok({ id: user.id, email: user.email, name: user.name });
     }),
 
   // Internal endpoint for other services to validate tokens
@@ -156,9 +195,9 @@ const authRouter = router<HonoBaseContext>({
       const token = auth.replace("Bearer ", "");
       const session = sessions.get(token);
       if (!session || session.expiresAt < new Date()) {
-        return { valid: false };
+        return ok({ valid: false });
       }
-      return { valid: true, userId: session.userId };
+      return ok({ valid: true, userId: session.userId });
     }),
 });
 
