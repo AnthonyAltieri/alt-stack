@@ -79,13 +79,27 @@ async function validateToken(token: string): Promise<string | null> {
 
 ### 3. Protected Procedures with Middleware
 
-Create reusable authenticated procedures:
+Create reusable authenticated procedures using the Result pattern:
 
 ```typescript
+import { err, TaggedError } from "@alt-stack/server-hono";
+
+class UnauthorizedError extends TaggedError {
+  readonly _tag = "UnauthorizedError" as const;
+  constructor(public readonly message: string = "Authentication required") {
+    super(message);
+  }
+}
+
+const UnauthorizedErrorSchema = z.object({
+  _tag: z.literal("UnauthorizedError"),
+  message: z.string(),
+});
+
 const protectedProc = factory.procedure
-  .errors({ 401: z.object({ error: z.object({ code: z.literal("UNAUTHORIZED") }) }) })
+  .errors({ 401: UnauthorizedErrorSchema })
   .use(async ({ ctx, next }) => {
-    if (!ctx.userId) throw ctx.error({ error: { code: "UNAUTHORIZED", ... } });
+    if (!ctx.userId) return err(new UnauthorizedError());
     return next({ ctx: { userId: ctx.userId } }); // narrow type
   });
 ```

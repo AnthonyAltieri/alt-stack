@@ -4,15 +4,28 @@ Follow the tRPC authorization pattern for type-safe protected routes. The middle
 
 ## Reusable Procedures Pattern (Recommended)
 
-The recommended way to create protected routes is using reusable procedures:
+The recommended way to create protected routes is using reusable procedures with the Result pattern:
 
 ```typescript
-import { router, publicProcedure, init, createServer } from "@alt-stack/server-hono";
+import { router, publicProcedure, init, createServer, ok, err, TaggedError } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 interface AppContext {
   user: { id: string; name: string } | null;
 }
+
+// Error class
+class UnauthorizedError extends TaggedError {
+  readonly _tag = "UnauthorizedError" as const;
+  constructor(public readonly message: string = "Authentication required") {
+    super(message);
+  }
+}
+
+const UnauthorizedErrorSchema = z.object({
+  _tag: z.literal("UnauthorizedError"),
+  message: z.string(),
+});
 
 const factory = init<AppContext>();
 
@@ -20,22 +33,12 @@ const factory = init<AppContext>();
 const publicProc = publicProcedure;
 const protectedProcedure = factory.procedure
   .errors({
-    401: z.object({
-      error: z.object({
-        code: z.literal("UNAUTHORIZED"),
-        message: z.string(),
-      }),
-    }),
+    401: UnauthorizedErrorSchema,
   })
   .use(async function isAuthed(opts) {
     const { ctx, next } = opts;
     if (!ctx.user) {
-      throw ctx.error({
-        error: {
-          code: "UNAUTHORIZED" as const,
-          message: "Authentication required",
-        },
-      });
+      return err(new UnauthorizedError("Authentication required"));
     }
     return next({
       ctx: {
@@ -46,7 +49,7 @@ const protectedProcedure = factory.procedure
 
 // Use procedures to create routes
 export const appRouter = router({
-  hello: publicProc.get(() => "hello world"),
+  hello: publicProc.get(() => ok("hello world")),
 
   secret: protectedProcedure
     .input({})
@@ -55,7 +58,7 @@ export const appRouter = router({
         secret: z.string(),
       })
     )
-    .get(() => ({
+    .get(() => ok({
       secret: "sauce",
     })),
 });
@@ -70,12 +73,24 @@ See the [Reusable Procedures guide](/core-concepts/reusable-procedures) for more
 The middleware can narrow the context type by passing an updated context to `next()`:
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server-hono";
+import { router, publicProcedure, init, ok, err, TaggedError } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 interface AppContext {
   user: { id: string; email: string; name: string } | null;
 }
+
+class UnauthorizedError extends TaggedError {
+  readonly _tag = "UnauthorizedError" as const;
+  constructor(public readonly message: string = "Authentication required") {
+    super(message);
+  }
+}
+
+const UnauthorizedErrorSchema = z.object({
+  _tag: z.literal("UnauthorizedError"),
+  message: z.string(),
+});
 
 const factory = init<AppContext>();
 
@@ -90,23 +105,13 @@ export const protectedRouter = router({
       })
     )
     .errors({
-      401: z.object({
-        error: z.object({
-          code: z.literal("UNAUTHORIZED"),
-          message: z.string(),
-        }),
-      }),
+      401: UnauthorizedErrorSchema,
     })
     .use(async function isAuthed(opts) {
       const { ctx, next } = opts;
       // `ctx.user` is nullable
       if (!ctx.user) {
-        throw ctx.error({
-          error: {
-            code: "UNAUTHORIZED" as const,
-            message: "Authentication required",
-          },
-        });
+        return err(new UnauthorizedError("Authentication required"));
       }
       // ✅ Pass updated context where user is non-null (tRPC pattern)
       // This allows the context to have user as non-null for subsequent handlers
@@ -119,11 +124,11 @@ export const protectedRouter = router({
     .get((opts) => {
       // ✅ opts.ctx.user is now guaranteed to be non-null after the middleware
       const { ctx } = opts;
-      return {
+      return ok({
         id: ctx.user!.id,
         email: ctx.user!.email,
         name: ctx.user!.name,
-      };
+      });
     }),
 });
 ```
@@ -133,26 +138,40 @@ export const protectedRouter = router({
 You can mix public and protected routes in the same router:
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server-hono";
+import { router, publicProcedure, init, ok, err, TaggedError } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 interface AppContext {
   user: { id: string; email: string } | null;
 }
 
+class UnauthorizedError extends TaggedError {
+  readonly _tag = "UnauthorizedError" as const;
+  constructor(public readonly message: string = "Authentication required") {
+    super(message);
+  }
+}
+
+const UnauthorizedErrorSchema = z.object({
+  _tag: z.literal("UnauthorizedError"),
+  message: z.string(),
+});
+
 const factory = init<AppContext>();
 
 const publicProc = publicProcedure;
-const protectedProcedure = factory.procedure.use(async (opts) => {
-  const { ctx, next } = opts;
-  if (!ctx.user) {
-    return new Response("Unauthorized", { status: 401 });
-  }
-  return next({ ctx: { user: ctx.user } });
-});
+const protectedProcedure = factory.procedure
+  .errors({ 401: UnauthorizedErrorSchema })
+  .use(async (opts) => {
+    const { ctx, next } = opts;
+    if (!ctx.user) {
+      return err(new UnauthorizedError());
+    }
+    return next({ ctx: { user: ctx.user } });
+  });
 
 export const appRouter = router({
-  public: publicProc.get(() => ({ message: "Public content" })),
+  public: publicProc.get(() => ok({ message: "Public content" })),
 
   private: protectedProcedure
     .input({})
@@ -164,10 +183,10 @@ export const appRouter = router({
     )
     .get((opts) => {
       const { ctx } = opts;
-      return {
+      return ok({
         id: ctx.user!.id,
         email: ctx.user!.email,
-      };
+      });
     }),
 });
 ```
@@ -177,27 +196,53 @@ export const appRouter = router({
 You can validate user roles, permissions, or other attributes:
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server-hono";
+import { router, publicProcedure, init, ok, err, TaggedError } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 interface AppContext {
   user: { id: string; role: string; permissions: string[] } | null;
 }
 
+class UnauthorizedError extends TaggedError {
+  readonly _tag = "UnauthorizedError" as const;
+  constructor(public readonly message: string = "Authentication required") {
+    super(message);
+  }
+}
+
+class ForbiddenError extends TaggedError {
+  readonly _tag = "ForbiddenError" as const;
+  constructor(public readonly message: string = "Access denied") {
+    super(message);
+  }
+}
+
+const UnauthorizedErrorSchema = z.object({
+  _tag: z.literal("UnauthorizedError"),
+  message: z.string(),
+});
+
+const ForbiddenErrorSchema = z.object({
+  _tag: z.literal("ForbiddenError"),
+  message: z.string(),
+});
+
 const factory = init<AppContext>();
 
 // Middleware that requires specific role
 const requireRole = (role: "admin" | "user" | "moderator") => {
-  return factory.procedure.use(async (opts) => {
-    const { ctx, next } = opts;
-    if (!ctx.user) {
-      return new Response("Unauthorized", { status: 401 });
-    }
-    if (ctx.user.role !== role) {
-      return new Response("Forbidden", { status: 403 });
-    }
-    return next({ ctx: { user: ctx.user } });
-  });
+  return factory.procedure
+    .errors({ 401: UnauthorizedErrorSchema, 403: ForbiddenErrorSchema })
+    .use(async (opts) => {
+      const { ctx, next } = opts;
+      if (!ctx.user) {
+        return err(new UnauthorizedError());
+      }
+      if (ctx.user.role !== role) {
+        return err(new ForbiddenError(`Requires ${role} role`));
+      }
+      return next({ ctx: { user: ctx.user } });
+    });
 };
 
 const adminProcedure = requireRole("admin");
@@ -208,7 +253,7 @@ export const adminRouter = router({
     .input({})
     .output(z.array(z.object({ id: z.string(), name: z.string() })))
     .get(() => {
-      return getAllUsers();
+      return ok(getAllUsers());
     }),
 });
 
@@ -218,7 +263,7 @@ export const moderatorRouter = router({
       body: z.object({ action: z.string() }),
     })
     .post(() => {
-      return { success: true };
+      return ok({ success: true });
     }),
 });
 ```
@@ -228,7 +273,7 @@ export const moderatorRouter = router({
 For better type safety, use Zod's type inference to create authenticated context types:
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server-hono";
+import { router, publicProcedure, init, ok, err, TaggedError } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 // Your validated user schema
@@ -246,20 +291,34 @@ interface AppContext {
   user: User | null;
 }
 
+class UnauthorizedError extends TaggedError {
+  readonly _tag = "UnauthorizedError" as const;
+  constructor(public readonly message: string = "Authentication required") {
+    super(message);
+  }
+}
+
+const UnauthorizedErrorSchema = z.object({
+  _tag: z.literal("UnauthorizedError"),
+  message: z.string(),
+});
+
 const factory = init<AppContext>();
 
-const protectedProcedure = factory.procedure.use(async (opts) => {
-  const { ctx, next } = opts;
-  if (!ctx.user) {
-    return new Response("Unauthorized", { status: 401 });
-  }
+const protectedProcedure = factory.procedure
+  .errors({ 401: UnauthorizedErrorSchema })
+  .use(async (opts) => {
+    const { ctx, next } = opts;
+    if (!ctx.user) {
+      return err(new UnauthorizedError());
+    }
 
-  // Optionally re-validate to ensure type safety
-  const validatedUser = UserSchema.parse(ctx.user);
+    // Optionally re-validate to ensure type safety
+    const validatedUser = UserSchema.parse(ctx.user);
 
-  // Return context with validated user
-  return next({ ctx: { user: validatedUser } });
-});
+    // Return context with validated user
+    return next({ ctx: { user: validatedUser } });
+  });
 
 export const appRouter = router({
   profile: protectedProcedure
@@ -268,7 +327,7 @@ export const appRouter = router({
     .get((opts) => {
       // opts.ctx.user is validated and typed
       const { ctx } = opts;
-      return ctx.user!;
+      return ok(ctx.user!);
     }),
 });
 ```

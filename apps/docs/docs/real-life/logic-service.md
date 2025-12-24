@@ -41,19 +41,58 @@ async function createContext(c: Context): Promise<AppContext> {
 ## Protected Procedures
 
 ```typescript
+import { ok, err, TaggedError } from "@alt-stack/server-hono";
+
 interface AppContext {
   userId: string | null;
 }
+
+// Error classes
+class UnauthorizedError extends TaggedError {
+  readonly _tag = "UnauthorizedError" as const;
+  constructor(public readonly message: string = "Authentication required") {
+    super(message);
+  }
+}
+
+const UnauthorizedErrorSchema = z.object({
+  _tag: z.literal("UnauthorizedError"),
+  message: z.string(),
+});
+
+class NotFoundError extends TaggedError {
+  readonly _tag = "NotFoundError" as const;
+  constructor(public readonly message: string = "Resource not found") {
+    super(message);
+  }
+}
+
+const NotFoundErrorSchema = z.object({
+  _tag: z.literal("NotFoundError"),
+  message: z.string(),
+});
+
+class ForbiddenError extends TaggedError {
+  readonly _tag = "ForbiddenError" as const;
+  constructor(public readonly message: string = "Access denied") {
+    super(message);
+  }
+}
+
+const ForbiddenErrorSchema = z.object({
+  _tag: z.literal("ForbiddenError"),
+  message: z.string(),
+});
 
 const factory = init<AppContext>();
 
 const protectedProc = factory.procedure
   .errors({
-    401: z.object({ error: z.object({ code: z.literal("UNAUTHORIZED"), message: z.string() }) }),
+    401: UnauthorizedErrorSchema,
   })
   .use(async ({ ctx, next }) => {
     if (!ctx.userId) {
-      throw ctx.error({ error: { code: "UNAUTHORIZED", message: "Authentication required" } });
+      return err(new UnauthorizedError("Authentication required"));
     }
     return next({ ctx: { userId: ctx.userId } });
   });
@@ -97,7 +136,7 @@ const taskRouter = router<AppContext>({
   "/": {
     get: factory.procedure
       .output(z.array(TaskSchema))
-      .handler(() => Array.from(tasks.values())),
+      .handler(() => ok(Array.from(tasks.values()))),
 
     post: protectedProc
       .input({
@@ -110,7 +149,7 @@ const taskRouter = router<AppContext>({
       .handler(async ({ input, ctx }) => {
         const task = createTask(input.body, ctx.userId);
         await workerClient.trigger("send-notification", { ... });
-        return task;
+        return ok(task);
       }),
   },
 
@@ -118,11 +157,11 @@ const taskRouter = router<AppContext>({
     get: factory.procedure
       .input({ params: z.object({ id: z.string().uuid() }) })
       .output(TaskSchema)
-      .errors({ 404: NotFoundError })
-      .handler(({ input, ctx }) => {
+      .errors({ 404: NotFoundErrorSchema })
+      .handler(({ input }) => {
         const task = tasks.get(input.params.id);
-        if (!task) throw ctx.error({ error: { code: "NOT_FOUND", message: "Task not found" } });
-        return task;
+        if (!task) return err(new NotFoundError("Task not found"));
+        return ok(task);
       }),
 
     put: protectedProc
@@ -135,19 +174,25 @@ const taskRouter = router<AppContext>({
         }),
       })
       .output(TaskSchema)
-      .errors({ 404: NotFoundError, 403: ForbiddenError })
+      .errors({ 404: NotFoundErrorSchema, 403: ForbiddenErrorSchema })
       .handler(async ({ input, ctx }) => {
-        // Update task, trigger report if completed
-        // ...
+        const task = tasks.get(input.params.id);
+        if (!task) return err(new NotFoundError("Task not found"));
+        if (task.userId !== ctx.userId) return err(new ForbiddenError("Not your task"));
+        // Update task, trigger report if completed...
+        return ok(updatedTask);
       }),
 
     delete: protectedProc
       .input({ params: z.object({ id: z.string().uuid() }) })
       .output(z.object({ success: z.boolean() }))
-      .errors({ 404: NotFoundError, 403: ForbiddenError })
+      .errors({ 404: NotFoundErrorSchema, 403: ForbiddenErrorSchema })
       .handler(({ input, ctx }) => {
-        // Delete task
-        // ...
+        const task = tasks.get(input.params.id);
+        if (!task) return err(new NotFoundError("Task not found"));
+        if (task.userId !== ctx.userId) return err(new ForbiddenError("Not your task"));
+        tasks.delete(input.params.id);
+        return ok({ success: true });
       }),
   },
 });

@@ -90,7 +90,7 @@ export const Response = {
   "/api/signup": {
     POST: {
       "200": z.object({ user: UserSchema, session: SessionSchema }),
-      "409": z.object({ error: z.object({ code: z.literal("EMAIL_EXISTS"), message: z.string() }) }),
+      "409": z.object({ _tag: z.literal("EmailExistsError"), message: z.string() }),
     },
   },
   // ...
