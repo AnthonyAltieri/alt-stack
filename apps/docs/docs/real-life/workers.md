@@ -5,7 +5,7 @@ Background job processing using WarpStream (Kafka-compatible).
 ## Job Definitions
 
 ```typescript title="apps/workers/src/index.ts"
-import { createWorker, init, workerRouter } from "@alt-stack/workers-warpstream";
+import { createWorker, init, workerRouter, ok } from "@alt-stack/workers-warpstream";
 import { z } from "zod";
 
 const { procedure } = init();
@@ -23,6 +23,7 @@ export const jobRouter = workerRouter({
     .task(async ({ input }) => {
       console.log(`[Notification] ${input.type} for user ${input.userId}`);
       // Send email, push notification, etc.
+      return ok({ success: true });
     }),
 
   "generate-report": procedure
@@ -36,6 +37,7 @@ export const jobRouter = workerRouter({
     .task(async ({ input }) => {
       console.log(`[Report] Generating report for task ${input.taskId}`);
       // Generate PDF, store in S3, etc.
+      return ok({ success: true });
     }),
 });
 ```

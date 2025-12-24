@@ -15,7 +15,7 @@ The authentication service handles user registration, login, and session managem
 ## Implementation
 
 ```typescript title="apps/backend-auth/src/index.ts"
-import { createDocsRouter, createServer, init, router, type HonoBaseContext } from "@alt-stack/server-hono";
+import { createDocsRouter, createServer, init, router, ok, err, TaggedError, type HonoBaseContext } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 const UserSchema = z.object({
@@ -28,6 +28,31 @@ const SessionSchema = z.object({
   token: z.string(),
   userId: z.string(),
   expiresAt: z.string().datetime(),
+});
+
+// Error classes
+class EmailExistsError extends TaggedError {
+  readonly _tag = "EmailExistsError" as const;
+  constructor(public readonly message: string = "Email already registered") {
+    super(message);
+  }
+}
+
+const EmailExistsErrorSchema = z.object({
+  _tag: z.literal("EmailExistsError"),
+  message: z.string(),
+});
+
+class InvalidCredentialsError extends TaggedError {
+  readonly _tag = "InvalidCredentialsError" as const;
+  constructor(public readonly message: string = "Invalid email or password") {
+    super(message);
+  }
+}
+
+const InvalidCredentialsErrorSchema = z.object({
+  _tag: z.literal("InvalidCredentialsError"),
+  message: z.string(),
 });
 
 const factory = init<HonoBaseContext>();
@@ -44,11 +69,15 @@ const authRouter = router<HonoBaseContext>({
     })
     .output(z.object({ user: UserSchema, session: SessionSchema }))
     .errors({
-      409: z.object({ error: z.object({ code: z.literal("EMAIL_EXISTS"), message: z.string() }) }),
+      409: EmailExistsErrorSchema,
     })
-    .post(({ input, ctx }) => {
-      // Check if email exists, create user, create session
-      // ...
+    .post(({ input }) => {
+      const existing = users.find(u => u.email === input.body.email);
+      if (existing) {
+        return err(new EmailExistsError("Email already registered"));
+      }
+      // Create user and session...
+      return ok({ user: { id, email, name }, session: { token, userId, expiresAt } });
     }),
 
   "/login": publicProc
@@ -60,11 +89,15 @@ const authRouter = router<HonoBaseContext>({
     })
     .output(z.object({ user: UserSchema, session: SessionSchema }))
     .errors({
-      401: z.object({ error: z.object({ code: z.literal("INVALID_CREDENTIALS"), message: z.string() }) }),
+      401: InvalidCredentialsErrorSchema,
     })
-    .post(({ input, ctx }) => {
-      // Verify credentials, create session
-      // ...
+    .post(({ input }) => {
+      const user = users.find(u => u.email === input.body.email);
+      if (!user || !verifyPassword(input.body.password, user.passwordHash)) {
+        return err(new InvalidCredentialsError("Invalid email or password"));
+      }
+      // Create session...
+      return ok({ user: { id, email, name }, session: { token, userId, expiresAt } });
     }),
 
   // Internal endpoint for other services to validate tokens
@@ -75,9 +108,9 @@ const authRouter = router<HonoBaseContext>({
       const token = auth.replace("Bearer ", "");
       const session = sessions.get(token);
       if (!session || session.expiresAt < new Date()) {
-        return { valid: false };
+        return ok({ valid: false });
       }
-      return { valid: true, userId: session.userId };
+      return ok({ valid: true, userId: session.userId });
     }),
 });
 ```
