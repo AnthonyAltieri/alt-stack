@@ -1,5 +1,5 @@
 import type { Context } from "@trigger.dev/sdk/v3";
-import type { BaseWorkerContext } from "@alt-stack/workers-core";
+import type { BaseWorkerContext, WorkerTelemetryOption } from "@alt-stack/workers-core";
 
 /**
  * Extended context that includes Trigger.dev specific context.
@@ -23,6 +23,12 @@ export interface CreateWorkerOptions<TCustomContext extends object = Record<stri
    * Error handler for job failures.
    */
   onError?: (error: Error, ctx: TriggerContext) => void | Promise<void>;
+
+  /**
+   * Enable OpenTelemetry tracing for jobs.
+   * Set to true for default config, or provide a config object.
+   */
+  telemetry?: WorkerTelemetryOption;
 }
 
 /**

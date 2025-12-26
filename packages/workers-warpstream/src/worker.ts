@@ -6,8 +6,20 @@ import type {
   InputConfig,
   TypedWorkerContext,
   WorkerProcedure,
+  ResolvedWorkerTelemetryConfig,
 } from "@alt-stack/workers-core";
-import { validateInput, ProcessingError, middlewareMarker } from "@alt-stack/workers-core";
+import {
+  validateInput,
+  ProcessingError,
+  middlewareMarker,
+  resolveWorkerTelemetryConfig,
+  shouldIgnoreJob,
+  initWorkerTelemetry,
+  createJobSpan,
+  setSpanOk,
+  endSpanWithError,
+  setJobStatus,
+} from "@alt-stack/workers-core";
 import type { MiddlewareResult } from "@alt-stack/workers-core";
 import type {
   CreateWorkerOptions,
@@ -75,6 +87,14 @@ export async function createWorker<TCustomContext extends object = Record<string
   const routing = options.routing ?? DEFAULT_ROUTING;
   const procedures = router.getProcedures();
 
+  // Resolve telemetry configuration
+  const telemetryConfig = resolveWorkerTelemetryConfig(options.telemetry);
+
+  // Initialize telemetry if enabled
+  if (telemetryConfig.enabled) {
+    await initWorkerTelemetry();
+  }
+
   const consumer = kafka.consumer({
     ...options.consumerConfig,
     groupId: options.groupId,
@@ -91,27 +111,55 @@ export async function createWorker<TCustomContext extends object = Record<string
 
   await consumer.run({
     eachMessage: async ({ topic, partition, message }) => {
+      const jobId = `${topic}-${partition}-${message.offset}`;
+      let jobName = ""; // Will be set after routing
+
+      // Extract job info first to get the job name for span creation
+      let payload: unknown;
+      try {
+        const jobInfo = extractJobInfo(message, topic, routing);
+        jobName = jobInfo.jobName;
+        payload = jobInfo.payload;
+      } catch (error) {
+        // Can't extract job info, re-throw
+        throw error;
+      }
+
+      // Create span if telemetry enabled and job not ignored
+      const shouldTrace = telemetryConfig.enabled && !shouldIgnoreJob(jobName, telemetryConfig);
+      const span = shouldTrace
+        ? createJobSpan(jobName, jobId, 1, telemetryConfig)
+        : undefined;
+
       const baseCtx: WarpStreamContext = {
-        jobId: `${topic}-${partition}-${message.offset}`,
-        jobName: "", // Will be set after routing
+        jobId,
+        jobName,
         attempt: 1,
         topic,
         partition,
         offset: message.offset,
         message,
+        span,
       };
 
       try {
-        const { jobName, payload } = extractJobInfo(message, topic, routing);
-        baseCtx.jobName = jobName;
-
         const procedure = procedureMap.get(jobName);
         if (!procedure) {
           throw new ProcessingError(`Unknown job: ${jobName}`, { jobName });
         }
 
-        await executeProcedure(procedure, payload, baseCtx, options);
+        await executeProcedure(procedure, payload, baseCtx, options, telemetryConfig);
+
+        // Mark span as successful
+        setJobStatus(span, "success");
+        setSpanOk(span);
+        span?.end();
       } catch (error) {
+        // Mark span as failed
+        setJobStatus(span, "error");
+        endSpanWithError(span, error);
+        span?.end();
+
         if (options.onError) {
           await options.onError(error instanceof Error ? error : new Error(String(error)), baseCtx);
         }
@@ -219,6 +267,7 @@ async function executeProcedure<TCustomContext extends object>(
   payload: unknown,
   baseCtx: WarpStreamContext,
   options: CreateWorkerOptions<TCustomContext>,
+  _telemetryConfig?: ResolvedWorkerTelemetryConfig,
 ): Promise<void> {
   // Validate input
   const validatedInput = await validateInput(procedure.config.input, payload);

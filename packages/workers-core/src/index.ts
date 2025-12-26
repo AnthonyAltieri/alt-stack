@@ -72,3 +72,21 @@ export type {
   ExtractJobNames,
   ExtractPayloadType,
 } from "./asyncapi.js";
+
+// Telemetry exports
+export {
+  initWorkerTelemetry,
+  createJobSpan,
+  endSpanWithError,
+  setSpanOk,
+  setJobStatus,
+  resolveWorkerTelemetryConfig,
+  shouldIgnoreJob,
+} from "./telemetry.js";
+export type {
+  Span,
+  SpanStatusCode,
+  WorkerTelemetryConfig,
+  WorkerTelemetryOption,
+  ResolvedWorkerTelemetryConfig,
+} from "./telemetry.js";

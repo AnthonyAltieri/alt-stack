@@ -6,11 +6,19 @@ import type {
   InputConfig,
   TypedWorkerContext,
   WorkerProcedure,
+  ResolvedWorkerTelemetryConfig,
 } from "@alt-stack/workers-core";
 import {
   validateInput,
   ProcessingError,
   middlewareMarker,
+  resolveWorkerTelemetryConfig,
+  shouldIgnoreJob,
+  initWorkerTelemetry,
+  createJobSpan,
+  setSpanOk,
+  endSpanWithError,
+  setJobStatus,
 } from "@alt-stack/workers-core";
 import type { MiddlewareResult } from "@alt-stack/workers-core";
 import type { TriggerContext, CreateWorkerOptions, WorkerResult } from "./types.js";
@@ -42,8 +50,16 @@ export function createWorker<TCustomContext extends object = Record<string, neve
   const procedures = router.getProcedures();
   const createdTasks: Record<string, unknown> = {};
 
+  // Resolve telemetry configuration
+  const telemetryConfig = resolveWorkerTelemetryConfig(options?.telemetry);
+
+  // Initialize telemetry if enabled (async, but we don't await - it will be ready by first job)
+  if (telemetryConfig.enabled) {
+    initWorkerTelemetry();
+  }
+
   for (const procedure of procedures) {
-    const taskDef = createTaskFromProcedure(procedure, options);
+    const taskDef = createTaskFromProcedure(procedure, options, telemetryConfig);
     createdTasks[procedure.jobName] = taskDef;
   }
 
@@ -61,14 +77,23 @@ function createRunHandler<TCustomContext extends object>(
     TCustomContext
   >,
   options?: CreateWorkerOptions<TCustomContext>,
+  telemetryConfig?: ResolvedWorkerTelemetryConfig,
 ) {
   return async (payload: unknown, params: { ctx: Context }) => {
     const ctx = params.ctx;
+
+    // Create span if telemetry enabled and job not ignored
+    const shouldTrace = telemetryConfig?.enabled && !shouldIgnoreJob(procedure.jobName, telemetryConfig);
+    const span = shouldTrace
+      ? createJobSpan(procedure.jobName, ctx.run.id, ctx.attempt.number, telemetryConfig!)
+      : undefined;
+
     const baseCtx: TriggerContext = {
       jobId: ctx.run.id,
       jobName: procedure.jobName,
       attempt: ctx.attempt.number,
       trigger: ctx,
+      span,
     };
 
     try {
@@ -163,8 +188,18 @@ function createRunHandler<TCustomContext extends object>(
         procedure.config.output.parse(response);
       }
 
+      // Mark span as successful
+      setJobStatus(span, "success");
+      setSpanOk(span);
+      span?.end();
+
       return response;
     } catch (error) {
+      // Mark span as failed
+      setJobStatus(span, "error");
+      endSpanWithError(span, error);
+      span?.end();
+
       if (options?.onError) {
         await options.onError(
           error instanceof Error ? error : new Error(String(error)),
@@ -184,9 +219,10 @@ function createTaskFromProcedure<TCustomContext extends object>(
     TCustomContext
   >,
   options?: CreateWorkerOptions<TCustomContext>,
+  telemetryConfig?: ResolvedWorkerTelemetryConfig,
 ): unknown {
   const hasPayloadSchema = procedure.config.input?.payload !== undefined;
-  const runHandler = createRunHandler(procedure, options);
+  const runHandler = createRunHandler(procedure, options, telemetryConfig);
 
   // Create the appropriate task type based on procedure type
   switch (procedure.type) {
