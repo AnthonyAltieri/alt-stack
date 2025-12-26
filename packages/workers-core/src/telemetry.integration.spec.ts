@@ -13,6 +13,11 @@ import {
   initWorkerTelemetry,
   resolveWorkerTelemetryConfig,
   shouldIgnoreJob,
+  // Metrics
+  resolveWorkerMetricsConfig,
+  shouldIgnoreJobMetrics,
+  calculateQueueTime,
+  JOB_CREATED_AT_HEADER,
 } from "./telemetry.js";
 
 describe("worker telemetry integration", () => {
@@ -294,6 +299,141 @@ describe("worker telemetry integration", () => {
       expect(spans[0]!.events[1]!.name).toBe("processing.step");
       expect(spans[0]!.events[1]!.attributes?.step).toBe("validation");
       expect(spans[0]!.events[2]!.name).toBe("processing.completed");
+    });
+  });
+
+  // ============================================================================
+  // METRICS TESTS
+  // ============================================================================
+
+  describe("JOB_CREATED_AT_HEADER", () => {
+    it("exports the correct header name", () => {
+      expect(JOB_CREATED_AT_HEADER).toBe("x-created-at");
+    });
+  });
+
+  describe("resolveWorkerMetricsConfig", () => {
+    it("returns disabled config for undefined", () => {
+      const config = resolveWorkerMetricsConfig(undefined);
+      expect(config.enabled).toBe(false);
+      expect(config.serviceName).toBe("altstack-worker");
+      expect(config.ignoreJobs).toEqual([]);
+      expect(config.histogramBuckets).toEqual([10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]);
+    });
+
+    it("returns disabled config for false", () => {
+      const config = resolveWorkerMetricsConfig(false);
+      expect(config.enabled).toBe(false);
+    });
+
+    it("returns enabled config with defaults for true", () => {
+      const config = resolveWorkerMetricsConfig(true);
+      expect(config.enabled).toBe(true);
+      expect(config.serviceName).toBe("altstack-worker");
+      expect(config.ignoreJobs).toEqual([]);
+      expect(config.histogramBuckets).toEqual([10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]);
+    });
+
+    it("uses custom config values", () => {
+      const config = resolveWorkerMetricsConfig({
+        enabled: true,
+        serviceName: "my-metrics-worker",
+        ignoreJobs: ["health-check", "ping"],
+        histogramBuckets: [100, 500, 1000, 5000],
+      });
+      expect(config.enabled).toBe(true);
+      expect(config.serviceName).toBe("my-metrics-worker");
+      expect(config.ignoreJobs).toEqual(["health-check", "ping"]);
+      expect(config.histogramBuckets).toEqual([100, 500, 1000, 5000]);
+    });
+
+    it("uses defaults for missing optional fields", () => {
+      const config = resolveWorkerMetricsConfig({
+        enabled: true,
+      });
+      expect(config.enabled).toBe(true);
+      expect(config.serviceName).toBe("altstack-worker");
+      expect(config.ignoreJobs).toEqual([]);
+      expect(config.histogramBuckets).toEqual([10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]);
+    });
+  });
+
+  describe("shouldIgnoreJobMetrics", () => {
+    it("returns true for jobs in ignoreJobs list", () => {
+      const config = resolveWorkerMetricsConfig({
+        enabled: true,
+        ignoreJobs: ["health-check", "metrics-poll"],
+      });
+      expect(shouldIgnoreJobMetrics("health-check", config)).toBe(true);
+      expect(shouldIgnoreJobMetrics("metrics-poll", config)).toBe(true);
+    });
+
+    it("returns false for jobs not in ignoreJobs list", () => {
+      const config = resolveWorkerMetricsConfig({
+        enabled: true,
+        ignoreJobs: ["health-check"],
+      });
+      expect(shouldIgnoreJobMetrics("send-email", config)).toBe(false);
+      expect(shouldIgnoreJobMetrics("process-order", config)).toBe(false);
+    });
+
+    it("returns false for empty ignoreJobs list", () => {
+      const config = resolveWorkerMetricsConfig(true);
+      expect(shouldIgnoreJobMetrics("any-job", config)).toBe(false);
+    });
+  });
+
+  describe("calculateQueueTime", () => {
+    it("returns null for undefined header", () => {
+      expect(calculateQueueTime(undefined)).toBe(null);
+    });
+
+    it("returns null for empty string", () => {
+      expect(calculateQueueTime("")).toBe(null);
+    });
+
+    it("returns null for invalid timestamp", () => {
+      expect(calculateQueueTime("not-a-number")).toBe(null);
+      expect(calculateQueueTime("abc123")).toBe(null);
+    });
+
+    it("returns null for zero timestamp", () => {
+      expect(calculateQueueTime("0")).toBe(null);
+    });
+
+    it("returns null for negative timestamp", () => {
+      expect(calculateQueueTime("-1000")).toBe(null);
+    });
+
+    it("returns correct queue time for valid timestamp", () => {
+      const now = Date.now();
+      const createdAt = (now - 500).toString(); // 500ms ago
+      const queueTime = calculateQueueTime(createdAt);
+
+      expect(queueTime).not.toBe(null);
+      // Allow some tolerance for test execution time
+      expect(queueTime).toBeGreaterThanOrEqual(500);
+      expect(queueTime).toBeLessThan(600);
+    });
+
+    it("returns null for future timestamps (negative queue time)", () => {
+      const futureTimestamp = (Date.now() + 10000).toString(); // 10 seconds in future
+      expect(calculateQueueTime(futureTimestamp)).toBe(null);
+    });
+
+    it("returns null for very old timestamps (> 7 days)", () => {
+      const eightDaysAgo = (Date.now() - 8 * 24 * 60 * 60 * 1000).toString();
+      expect(calculateQueueTime(eightDaysAgo)).toBe(null);
+    });
+
+    it("returns queue time for timestamps within 7 days", () => {
+      const sixDaysAgo = (Date.now() - 6 * 24 * 60 * 60 * 1000).toString();
+      const queueTime = calculateQueueTime(sixDaysAgo);
+
+      expect(queueTime).not.toBe(null);
+      // Should be approximately 6 days in ms
+      expect(queueTime).toBeGreaterThan(5 * 24 * 60 * 60 * 1000);
+      expect(queueTime).toBeLessThan(7 * 24 * 60 * 60 * 1000);
     });
   });
 });

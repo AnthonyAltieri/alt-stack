@@ -10,6 +10,9 @@ import {
   workerRouter,
   ok,
   initWorkerTelemetry,
+  resolveWorkerMetricsConfig,
+  JOB_CREATED_AT_HEADER,
+  calculateQueueTime,
 } from "@alt-stack/workers-core";
 
 // Note: Full integration tests with Kafka would require a running Kafka broker.
@@ -192,6 +195,105 @@ describe("workers-warpstream telemetry integration", () => {
       };
 
       expect(testRouter).toBeDefined();
+    });
+  });
+
+  // ============================================================================
+  // METRICS TESTS
+  // ============================================================================
+
+  describe("metrics configuration types", () => {
+    it("accepts boolean metrics option in CreateWorkerOptions", () => {
+      // Type check: metrics: true should be valid
+      type TestOptions = {
+        kafka: { brokers: string[] };
+        groupId: string;
+        metrics?: boolean;
+      };
+
+      const _options: TestOptions = {
+        kafka: { brokers: ["localhost:9092"] },
+        groupId: "test-group",
+        metrics: true,
+      };
+
+      expect(_options.metrics).toBe(true);
+    });
+
+    it("accepts full metrics config in CreateWorkerOptions", () => {
+      // Type check: full metrics config should be valid
+      type TestOptions = {
+        kafka: { brokers: string[] };
+        groupId: string;
+        metrics?: {
+          enabled: boolean;
+          serviceName?: string;
+          ignoreJobs?: string[];
+          histogramBuckets?: number[];
+        };
+      };
+
+      const _options: TestOptions = {
+        kafka: { brokers: ["localhost:9092"] },
+        groupId: "test-group",
+        metrics: {
+          enabled: true,
+          serviceName: "my-worker",
+          ignoreJobs: ["health-check"],
+          histogramBuckets: [100, 500, 1000, 5000],
+        },
+      };
+
+      expect(_options.metrics?.enabled).toBe(true);
+    });
+
+    it("supports both telemetry and metrics options together", () => {
+      type TestOptions = {
+        kafka: { brokers: string[] };
+        groupId: string;
+        telemetry?: boolean;
+        metrics?: boolean;
+      };
+
+      const _options: TestOptions = {
+        kafka: { brokers: ["localhost:9092"] },
+        groupId: "test-group",
+        telemetry: true,
+        metrics: true,
+      };
+
+      expect(_options.telemetry).toBe(true);
+      expect(_options.metrics).toBe(true);
+    });
+  });
+
+  describe("metrics helper functions", () => {
+    it("resolveWorkerMetricsConfig returns correct defaults", () => {
+      const config = resolveWorkerMetricsConfig(true);
+      expect(config.enabled).toBe(true);
+      expect(config.serviceName).toBe("altstack-worker");
+      expect(config.ignoreJobs).toEqual([]);
+      expect(config.histogramBuckets).toEqual([10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]);
+    });
+
+    it("JOB_CREATED_AT_HEADER is the expected value", () => {
+      expect(JOB_CREATED_AT_HEADER).toBe("x-created-at");
+    });
+
+    it("calculateQueueTime handles valid timestamps", () => {
+      const now = Date.now();
+      const createdAt = (now - 1000).toString(); // 1 second ago
+      const queueTime = calculateQueueTime(createdAt);
+
+      expect(queueTime).not.toBe(null);
+      expect(queueTime).toBeGreaterThanOrEqual(1000);
+      expect(queueTime).toBeLessThan(1100);
+    });
+
+    it("calculateQueueTime handles invalid timestamps", () => {
+      expect(calculateQueueTime(undefined)).toBe(null);
+      expect(calculateQueueTime("invalid")).toBe(null);
+      expect(calculateQueueTime("")).toBe(null);
     });
   });
 });

@@ -134,3 +134,159 @@ export function setJobStatus(
   if (!span) return;
   span.setAttribute("job.status", status);
 }
+
+// ============================================================================
+// METRICS API
+// ============================================================================
+
+/** Header name for job creation timestamp */
+export const JOB_CREATED_AT_HEADER = "x-created-at";
+
+/** Configuration for worker metrics */
+export interface WorkerMetricsConfig {
+  enabled: boolean;
+  /** Custom service name (defaults to "altstack-worker") */
+  serviceName?: string;
+  /** Job names to skip metrics (e.g., ["health-check"]) */
+  ignoreJobs?: string[];
+  /** Custom histogram bucket boundaries in milliseconds */
+  histogramBuckets?: number[];
+}
+
+/** Metrics option: boolean shorthand or full config */
+export type WorkerMetricsOption = boolean | WorkerMetricsConfig;
+
+/** Default histogram buckets (ms): 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000 */
+const DEFAULT_HISTOGRAM_BUCKETS = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000];
+
+/** Normalized config after processing boolean shorthand */
+export interface ResolvedWorkerMetricsConfig {
+  enabled: boolean;
+  serviceName: string;
+  ignoreJobs: string[];
+  histogramBuckets: number[];
+}
+
+/** Normalize WorkerMetricsOption to full config */
+export function resolveWorkerMetricsConfig(
+  option: WorkerMetricsOption | undefined,
+): ResolvedWorkerMetricsConfig {
+  if (option === undefined || option === false) {
+    return {
+      enabled: false,
+      serviceName: "altstack-worker",
+      ignoreJobs: [],
+      histogramBuckets: DEFAULT_HISTOGRAM_BUCKETS,
+    };
+  }
+  if (option === true) {
+    return {
+      enabled: true,
+      serviceName: "altstack-worker",
+      ignoreJobs: [],
+      histogramBuckets: DEFAULT_HISTOGRAM_BUCKETS,
+    };
+  }
+  return {
+    enabled: option.enabled,
+    serviceName: option.serviceName ?? "altstack-worker",
+    ignoreJobs: option.ignoreJobs ?? [],
+    histogramBuckets: option.histogramBuckets ?? DEFAULT_HISTOGRAM_BUCKETS,
+  };
+}
+
+/** Check if a job should be ignored for metrics */
+export function shouldIgnoreJobMetrics(
+  jobName: string,
+  config: ResolvedWorkerMetricsConfig,
+): boolean {
+  return config.ignoreJobs.includes(jobName);
+}
+
+// Metrics instruments (initialized lazily)
+let metricsInitialized = false;
+let queueTimeHistogram: import("@opentelemetry/api").Histogram | null = null;
+let processingTimeHistogram: import("@opentelemetry/api").Histogram | null = null;
+let e2eTimeHistogram: import("@opentelemetry/api").Histogram | null = null;
+
+/** Initialize metrics (call once at startup with config) */
+export async function initWorkerMetrics(
+  config: ResolvedWorkerMetricsConfig,
+): Promise<boolean> {
+  if (metricsInitialized) return queueTimeHistogram !== null;
+
+  metricsInitialized = true;
+
+  const api = await getOtelApi();
+  if (!api || !api.metrics) return false;
+
+  try {
+    const meter = api.metrics.getMeter(config.serviceName);
+
+    queueTimeHistogram = meter.createHistogram("messaging.process.queue_time", {
+      description: "Time from job creation to processing start",
+      unit: "ms",
+      advice: { explicitBucketBoundaries: config.histogramBuckets },
+    });
+
+    processingTimeHistogram = meter.createHistogram("messaging.process.duration", {
+      description: "Job handler execution duration",
+      unit: "ms",
+      advice: { explicitBucketBoundaries: config.histogramBuckets },
+    });
+
+    e2eTimeHistogram = meter.createHistogram("messaging.process.e2e_time", {
+      description: "End-to-end time from job creation to completion",
+      unit: "ms",
+      advice: { explicitBucketBoundaries: config.histogramBuckets },
+    });
+
+    return true;
+  } catch {
+    // Metrics API not available
+    return false;
+  }
+}
+
+/** Record queue time metric */
+export function recordQueueTime(jobName: string, queueTimeMs: number): void {
+  queueTimeHistogram?.record(queueTimeMs, { "job.name": jobName });
+}
+
+/** Record processing time metric */
+export function recordProcessingTime(
+  jobName: string,
+  processingTimeMs: number,
+  status: "success" | "error",
+): void {
+  processingTimeHistogram?.record(processingTimeMs, {
+    "job.name": jobName,
+    "job.status": status,
+  });
+}
+
+/** Record end-to-end time metric */
+export function recordE2ETime(
+  jobName: string,
+  e2eTimeMs: number,
+  status: "success" | "error",
+): void {
+  e2eTimeHistogram?.record(e2eTimeMs, {
+    "job.name": jobName,
+    "job.status": status,
+  });
+}
+
+/** Calculate queue time from creation timestamp header */
+export function calculateQueueTime(createdAtHeader: string | undefined): number | null {
+  if (!createdAtHeader) return null;
+
+  const createdAt = parseInt(createdAtHeader, 10);
+  if (isNaN(createdAt) || createdAt <= 0) return null;
+
+  const queueTime = Date.now() - createdAt;
+  // Sanity check: ignore negative or unreasonably large values (> 7 days)
+  if (queueTime < 0 || queueTime > 604800000) return null;
+
+  return queueTime;
+}

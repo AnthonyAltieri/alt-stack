@@ -1,7 +1,8 @@
-import type { Kafka, KafkaConfig, Producer, ProducerConfig, Message } from "kafkajs";
+import type { Kafka, KafkaConfig, Producer, ProducerConfig, Message, IHeaders } from "kafkajs";
 import { Kafka as KafkaClass, CompressionTypes } from "kafkajs";
 import type { z } from "zod";
 import type { WorkerRouter, WorkerProcedure, InputConfig } from "@alt-stack/workers-core";
+import { JOB_CREATED_AT_HEADER } from "@alt-stack/workers-core";
 import type {
   CreateJobClientOptions,
   RoutingStrategy,
@@ -69,10 +70,16 @@ class WarpStreamJobClient<TRouter extends WorkerRouter<object>> implements JobCl
 
     const { topic, value } = this.buildMessage(jobName, payload);
 
+    // Add creation timestamp header for queue time metrics
+    const headers: IHeaders = {
+      ...options?.headers,
+      [JOB_CREATED_AT_HEADER]: Date.now().toString(),
+    };
+
     const kafkaMessage: Message = {
       value,
       key: options?.key ?? null,
-      headers: options?.headers,
+      headers,
     };
 
     try {

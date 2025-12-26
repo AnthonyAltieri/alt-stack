@@ -172,6 +172,7 @@ module.exports = {
           label: 'Guides',
           items: [
             'workers-warpstream/guides/sdk-generation',
+            'workers-warpstream/guides/telemetry',
           ],
         },
       ],

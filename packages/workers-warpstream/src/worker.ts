@@ -7,6 +7,7 @@ import type {
   TypedWorkerContext,
   WorkerProcedure,
   ResolvedWorkerTelemetryConfig,
+  ResolvedWorkerMetricsConfig,
 } from "@alt-stack/workers-core";
 import {
   validateInput,
@@ -19,6 +20,15 @@ import {
   setSpanOk,
   endSpanWithError,
   setJobStatus,
+  // Metrics
+  JOB_CREATED_AT_HEADER,
+  resolveWorkerMetricsConfig,
+  shouldIgnoreJobMetrics,
+  initWorkerMetrics,
+  recordQueueTime,
+  recordProcessingTime,
+  recordE2ETime,
+  calculateQueueTime,
 } from "@alt-stack/workers-core";
 import type { MiddlewareResult } from "@alt-stack/workers-core";
 import type {
@@ -95,6 +105,14 @@ export async function createWorker<TCustomContext extends object = Record<string
     await initWorkerTelemetry();
   }
 
+  // Resolve metrics configuration
+  const metricsConfig = resolveWorkerMetricsConfig(options.metrics);
+
+  // Initialize metrics if enabled
+  if (metricsConfig.enabled) {
+    await initWorkerMetrics(metricsConfig);
+  }
+
   const consumer = kafka.consumer({
     ...options.consumerConfig,
     groupId: options.groupId,
@@ -123,6 +141,28 @@ export async function createWorker<TCustomContext extends object = Record<string
       } catch (error) {
         // Can't extract job info, re-throw
         throw error;
+      }
+
+      // Metrics: Extract creation timestamp and record queue time
+      const shouldRecordMetrics = metricsConfig.enabled && !shouldIgnoreJobMetrics(jobName, metricsConfig);
+      let createdAtTimestamp: number | null = null;
+      const processingStartTime = Date.now();
+
+      if (shouldRecordMetrics) {
+        const createdAtHeader = message.headers?.[JOB_CREATED_AT_HEADER];
+        const createdAtValue = createdAtHeader
+          ? Buffer.isBuffer(createdAtHeader)
+            ? createdAtHeader.toString()
+            : typeof createdAtHeader === "string"
+              ? createdAtHeader
+              : undefined
+          : undefined;
+
+        const queueTimeMs = calculateQueueTime(createdAtValue);
+        if (queueTimeMs !== null) {
+          recordQueueTime(jobName, queueTimeMs);
+          createdAtTimestamp = parseInt(createdAtValue!, 10);
+        }
       }
 
       // Create span if telemetry enabled and job not ignored
@@ -154,11 +194,33 @@ export async function createWorker<TCustomContext extends object = Record<string
         setJobStatus(span, "success");
         setSpanOk(span);
         span?.end();
+
+        // Record metrics on success
+        if (shouldRecordMetrics) {
+          const processingTimeMs = Date.now() - processingStartTime;
+          recordProcessingTime(jobName, processingTimeMs, "success");
+
+          if (createdAtTimestamp !== null) {
+            const e2eTimeMs = Date.now() - createdAtTimestamp;
+            recordE2ETime(jobName, e2eTimeMs, "success");
+          }
+        }
       } catch (error) {
         // Mark span as failed
         setJobStatus(span, "error");
         endSpanWithError(span, error);
         span?.end();
+
+        // Record metrics on error
+        if (shouldRecordMetrics) {
+          const processingTimeMs = Date.now() - processingStartTime;
+          recordProcessingTime(jobName, processingTimeMs, "error");
+
+          if (createdAtTimestamp !== null) {
+            const e2eTimeMs = Date.now() - createdAtTimestamp;
+            recordE2ETime(jobName, e2eTimeMs, "error");
+          }
+        }
 
         if (options.onError) {
           await options.onError(error instanceof Error ? error : new Error(String(error)), baseCtx);
