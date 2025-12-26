@@ -110,9 +110,9 @@ const worker = await createWorker(jobRouter, {
 
 | Metric | Type | Description |
 |--------|------|-------------|
-| `messaging.process.queue_time` | Histogram | Time from job creation to processing start (ms) |
-| `messaging.process.duration` | Histogram | Job handler execution duration (ms) |
-| `messaging.process.e2e_time` | Histogram | End-to-end time from creation to completion (ms) |
+| `messaging.process.queue_time_ms` | Histogram | Time from job creation to processing start (ms) |
+| `messaging.process.duration_ms` | Histogram | Job handler execution duration (ms) |
+| `messaging.process.e2e_time_ms` | Histogram | End-to-end time from creation to completion (ms) |
 
 All metrics include these attributes:
 - `job.name`: The job name

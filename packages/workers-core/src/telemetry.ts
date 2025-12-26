@@ -223,19 +223,19 @@ export async function initWorkerMetrics(
   try {
     const meter = api.metrics.getMeter(config.serviceName);
 
-    queueTimeHistogram = meter.createHistogram("messaging.process.queue_time", {
+    queueTimeHistogram = meter.createHistogram("messaging.process.queue_time_ms", {
       description: "Time from job creation to processing start",
       unit: "ms",
       advice: { explicitBucketBoundaries: config.histogramBuckets },
     });
 
-    processingTimeHistogram = meter.createHistogram("messaging.process.duration", {
+    processingTimeHistogram = meter.createHistogram("messaging.process.duration_ms", {
       description: "Job handler execution duration",
       unit: "ms",
       advice: { explicitBucketBoundaries: config.histogramBuckets },
     });
 
-    e2eTimeHistogram = meter.createHistogram("messaging.process.e2e_time", {
+    e2eTimeHistogram = meter.createHistogram("messaging.process.e2e_time_ms", {
       description: "End-to-end time from job creation to completion",
       unit: "ms",
       advice: { explicitBucketBoundaries: config.histogramBuckets },
