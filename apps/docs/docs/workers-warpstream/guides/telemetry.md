@@ -118,6 +118,61 @@ All metrics include these attributes:
 - `job.name`: The job name
 - `job.status`: `"success"` or `"error"` (for duration and e2e_time)
 
+### How Timing is Calculated
+
+**Timeline:**
+```
+[Job Created] ---queue_time---> [Processing Starts] ---duration---> [Processing Ends]
+|<-------------------------- e2e_time -------------------------->|
+```
+
+**Queue Time** - Recorded when message is received:
+```typescript
+const createdAt = parseInt(message.headers["x-created-at"]);
+const queueTimeMs = Date.now() - createdAt;
+```
+
+**Processing Time** - Recorded when handler completes:
+```typescript
+const startTime = Date.now();
+await handler(job);
+const durationMs = Date.now() - startTime;
+```
+
+**E2E Time** - Recorded when handler completes:
+```typescript
+const createdAt = parseInt(message.headers["x-created-at"]);
+await handler(job);
+const e2eTimeMs = Date.now() - createdAt;
+```
+
+### Retries and Timing
+
+Kafka/WarpStream handles retries at the consumer level. When a message fails:
+
+| Scenario | Queue Time | Duration | E2E Time |
+|----------|------------|----------|----------|
+| First attempt fails | Recorded | Recorded with `status: "error"` | Recorded with `status: "error"` |
+| Redelivered message | Includes original wait + retry delay | Fresh measurement | Includes all time since creation |
+
+**Important:** The `x-created-at` header persists across redeliveries, so:
+- Queue time accumulates (original wait + time in DLQ/retry topic)
+- E2E time reflects total time from original job creation
+- Duration is always the current attempt's execution time
+
+```typescript
+// On retry, queue_time grows:
+// Attempt 1: queue_time = 100ms (original)
+// Attempt 2: queue_time = 5100ms (100ms + 5s retry delay)
+
+// Duration is per-attempt:
+// Attempt 1: duration = 50ms (failed)
+// Attempt 2: duration = 45ms (succeeded)
+
+// E2E includes everything:
+// Attempt 2: e2e_time = 5145ms (queue + all durations)
+```
+
 ### How Queue Time Works
 
 Queue time is measured using the `x-created-at` header automatically added by job clients. Both `createJobClient` and `createWarpStreamClient` add this header when enqueuing jobs.
