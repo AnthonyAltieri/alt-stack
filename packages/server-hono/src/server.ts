@@ -15,6 +15,7 @@ import {
   createRequestSpan,
   endSpanWithError,
   setSpanOk,
+  withActiveSpan,
   isOk,
   isErr,
   ok as resultOk,
@@ -190,6 +191,9 @@ export function createServer<
           )
         : undefined;
 
+      // Wrap handler execution in active span context so child spans
+      // (e.g., database operations) are automatically parented
+      return withActiveSpan(span, async () => {
       try {
         const params = c.req.param();
         const queryRaw = c.req.query();
@@ -511,6 +515,7 @@ export function createServer<
           500,
         );
       }
+      });
     };
 
     switch (procedure.method) {

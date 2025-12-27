@@ -17,6 +17,7 @@ import {
   createRequestSpan,
   endSpanWithError,
   setSpanOk,
+  withActiveSpan,
   isErr,
   ok as resultOk,
   err as resultErr,
@@ -157,6 +158,7 @@ export function createServer<
             )
           : undefined;
 
+        return withActiveSpan(span, async () => {
         try {
           // Extract query parameters
           const query: Record<string, unknown> = {};
@@ -503,6 +505,7 @@ export function createServer<
             500,
           );
         }
+        });
       },
     );
   }
