@@ -1,4 +1,4 @@
-import type { Kafka, Producer, ProducerConfig, Message } from "kafkajs";
+import type { Kafka, Producer, ProducerConfig, Message, IHeaders } from "kafkajs";
 import { Kafka as KafkaClass, CompressionTypes } from "kafkajs";
 import type { z } from "zod";
 import type {
@@ -8,6 +8,9 @@ import type {
   TriggerResult,
 } from "@alt-stack/workers-client-core";
 import { ValidationError, TriggerError, ConnectionError } from "@alt-stack/workers-client-core";
+
+/** Header name for job creation timestamp (used for queue time metrics) */
+const JOB_CREATED_AT_HEADER = "x-created-at";
 
 /**
  * Options for creating a WarpStream worker client.
@@ -86,10 +89,16 @@ class WarpStreamWorkerClient<T extends JobsMap> implements WorkerClient<T> {
     const jobId = this.generateJobId();
     const topic = `${this._topicPrefix}${jobName}`;
 
+    // Add creation timestamp header for queue time metrics
+    const headers: IHeaders = {
+      ...options?.metadata,
+      [JOB_CREATED_AT_HEADER]: Date.now().toString(),
+    };
+
     const kafkaMessage: Message = {
       value: JSON.stringify(payload),
       key: options?.idempotencyKey ?? null,
-      headers: options?.metadata,
+      headers,
     };
 
     try {
@@ -136,13 +145,18 @@ class WarpStreamWorkerClient<T extends JobsMap> implements WorkerClient<T> {
     const topic = `${this._topicPrefix}${jobName}`;
     const results: TriggerResult[] = [];
 
+    // Add creation timestamp header for queue time metrics
+    const createdAt = Date.now().toString();
     const kafkaMessages: Message[] = payloads.map((payload) => {
       const jobId = this.generateJobId();
       results.push({ id: jobId });
       return {
         value: JSON.stringify(payload),
         key: options?.idempotencyKey ?? null,
-        headers: options?.metadata,
+        headers: {
+          ...options?.metadata,
+          [JOB_CREATED_AT_HEADER]: createdAt,
+        },
       };
     });
 

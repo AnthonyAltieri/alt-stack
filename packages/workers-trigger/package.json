@@ -28,6 +28,9 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/sdk-trace-base": "^2.0.0",
+    "@opentelemetry/sdk-trace-node": "^2.0.0",
     "@trigger.dev/sdk": "^3.3.16",
     "oxlint": "^1.24.0",
     "tsup": "^8.0.0",

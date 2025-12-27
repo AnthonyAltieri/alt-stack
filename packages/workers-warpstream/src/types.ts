@@ -1,5 +1,5 @@
 import type { Kafka, KafkaConfig, ConsumerConfig, ProducerConfig, KafkaMessage } from "kafkajs";
-import type { BaseWorkerContext, WorkerRouter } from "@alt-stack/workers-core";
+import type { BaseWorkerContext, WorkerRouter, WorkerTelemetryOption, WorkerMetricsOption } from "@alt-stack/workers-core";
 
 /** Routing strategy for job distribution */
 export type RoutingStrategy =
@@ -32,6 +32,17 @@ export interface CreateWorkerOptions<TCustomContext extends object = Record<stri
   createContext?: (baseCtx: WarpStreamContext) => Promise<TCustomContext> | TCustomContext;
   /** Error handler */
   onError?: (error: Error, ctx: WarpStreamContext) => void | Promise<void>;
+  /**
+   * Enable OpenTelemetry tracing for jobs.
+   * Set to true for default config, or provide a config object.
+   */
+  telemetry?: WorkerTelemetryOption;
+  /**
+   * Enable OpenTelemetry metrics for job timing.
+   * Records queue time, processing time, and end-to-end time.
+   * Set to true for default config, or provide a config object.
+   */
+  metrics?: WorkerMetricsOption;
 }
 
 /** Options for createJobClient */

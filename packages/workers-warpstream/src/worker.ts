@@ -6,8 +6,30 @@ import type {
   InputConfig,
   TypedWorkerContext,
   WorkerProcedure,
+  ResolvedWorkerTelemetryConfig,
+  ResolvedWorkerMetricsConfig,
 } from "@alt-stack/workers-core";
-import { validateInput, ProcessingError, middlewareMarker } from "@alt-stack/workers-core";
+import {
+  validateInput,
+  ProcessingError,
+  middlewareMarker,
+  resolveWorkerTelemetryConfig,
+  shouldIgnoreJob,
+  initWorkerTelemetry,
+  createJobSpan,
+  setSpanOk,
+  endSpanWithError,
+  setJobStatus,
+  // Metrics
+  JOB_CREATED_AT_HEADER,
+  resolveWorkerMetricsConfig,
+  shouldIgnoreJobMetrics,
+  initWorkerMetrics,
+  recordQueueTime,
+  recordProcessingTime,
+  recordE2ETime,
+  calculateQueueTime,
+} from "@alt-stack/workers-core";
 import type { MiddlewareResult } from "@alt-stack/workers-core";
 import type {
   CreateWorkerOptions,
@@ -75,6 +97,22 @@ export async function createWorker<TCustomContext extends object = Record<string
   const routing = options.routing ?? DEFAULT_ROUTING;
   const procedures = router.getProcedures();
 
+  // Resolve telemetry configuration
+  const telemetryConfig = resolveWorkerTelemetryConfig(options.telemetry);
+
+  // Initialize telemetry if enabled
+  if (telemetryConfig.enabled) {
+    await initWorkerTelemetry();
+  }
+
+  // Resolve metrics configuration
+  const metricsConfig = resolveWorkerMetricsConfig(options.metrics);
+
+  // Initialize metrics if enabled
+  if (metricsConfig.enabled) {
+    await initWorkerMetrics(metricsConfig);
+  }
+
   const consumer = kafka.consumer({
     ...options.consumerConfig,
     groupId: options.groupId,
@@ -91,27 +129,99 @@ export async function createWorker<TCustomContext extends object = Record<string
 
   await consumer.run({
     eachMessage: async ({ topic, partition, message }) => {
+      const jobId = `${topic}-${partition}-${message.offset}`;
+      let jobName = ""; // Will be set after routing
+
+      // Extract job info first to get the job name for span creation
+      let payload: unknown;
+      try {
+        const jobInfo = extractJobInfo(message, topic, routing);
+        jobName = jobInfo.jobName;
+        payload = jobInfo.payload;
+      } catch (error) {
+        // Can't extract job info, re-throw
+        throw error;
+      }
+
+      // Metrics: Extract creation timestamp and record queue time
+      const shouldRecordMetrics = metricsConfig.enabled && !shouldIgnoreJobMetrics(jobName, metricsConfig);
+      let createdAtTimestamp: number | null = null;
+      const processingStartTime = Date.now();
+
+      if (shouldRecordMetrics) {
+        const createdAtHeader = message.headers?.[JOB_CREATED_AT_HEADER];
+        const createdAtValue = createdAtHeader
+          ? Buffer.isBuffer(createdAtHeader)
+            ? createdAtHeader.toString()
+            : typeof createdAtHeader === "string"
+              ? createdAtHeader
+              : undefined
+          : undefined;
+
+        const queueTimeMs = calculateQueueTime(createdAtValue);
+        if (queueTimeMs !== null) {
+          recordQueueTime(jobName, queueTimeMs);
+          createdAtTimestamp = parseInt(createdAtValue!, 10);
+        }
+      }
+
+      // Create span if telemetry enabled and job not ignored
+      const shouldTrace = telemetryConfig.enabled && !shouldIgnoreJob(jobName, telemetryConfig);
+      const span = shouldTrace
+        ? createJobSpan(jobName, jobId, 1, telemetryConfig)
+        : undefined;
+
       const baseCtx: WarpStreamContext = {
-        jobId: `${topic}-${partition}-${message.offset}`,
-        jobName: "", // Will be set after routing
+        jobId,
+        jobName,
         attempt: 1,
         topic,
         partition,
         offset: message.offset,
         message,
+        span,
       };
 
       try {
-        const { jobName, payload } = extractJobInfo(message, topic, routing);
-        baseCtx.jobName = jobName;
-
         const procedure = procedureMap.get(jobName);
         if (!procedure) {
           throw new ProcessingError(`Unknown job: ${jobName}`, { jobName });
         }
 
-        await executeProcedure(procedure, payload, baseCtx, options);
+        await executeProcedure(procedure, payload, baseCtx, options, telemetryConfig);
+
+        // Mark span as successful
+        setJobStatus(span, "success");
+        setSpanOk(span);
+        span?.end();
+
+        // Record metrics on success
+        if (shouldRecordMetrics) {
+          const processingTimeMs = Date.now() - processingStartTime;
+          recordProcessingTime(jobName, processingTimeMs, "success");
+
+          if (createdAtTimestamp !== null) {
+            const e2eTimeMs = Date.now() - createdAtTimestamp;
+            recordE2ETime(jobName, e2eTimeMs, "success");
+          }
+        }
       } catch (error) {
+        // Mark span as failed
+        setJobStatus(span, "error");
+        endSpanWithError(span, error);
+        span?.end();
+
+        // Record metrics on error
+        if (shouldRecordMetrics) {
+          const processingTimeMs = Date.now() - processingStartTime;
+          recordProcessingTime(jobName, processingTimeMs, "error");
+
+          if (createdAtTimestamp !== null) {
+            const e2eTimeMs = Date.now() - createdAtTimestamp;
+            recordE2ETime(jobName, e2eTimeMs, "error");
+          }
+        }
+
         if (options.onError) {
           await options.onError(error instanceof Error ? error : new Error(String(error)), baseCtx);
         }
@@ -219,6 +329,7 @@ async function executeProcedure<TCustomContext extends object>(
   payload: unknown,
   baseCtx: WarpStreamContext,
   options: CreateWorkerOptions<TCustomContext>,
+  _telemetryConfig?: ResolvedWorkerTelemetryConfig,
 ): Promise<void> {
   // Validate input
   const validatedInput = await validateInput(procedure.config.input, payload);

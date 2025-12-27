@@ -40,6 +40,8 @@ export interface BaseWorkerContext {
   jobName: string;
   /** Current attempt number (starts at 1) */
   attempt: number;
+  /** OpenTelemetry span for this job (undefined if telemetry disabled or not installed) */
+  span?: import("@opentelemetry/api").Span;
 }
 
 /**
