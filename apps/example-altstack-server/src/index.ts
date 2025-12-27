@@ -9,7 +9,7 @@ import {
   flatMap,
   TaggedError,
 } from "@alt-stack/server-hono";
-import type { Result } from "@alt-stack/server-hono";
+import type { Result, HonoBaseContext } from "@alt-stack/server-hono";
 import type { Context } from "hono";
 import { z } from "zod";
 
@@ -84,7 +84,7 @@ const UserSchema = z.object({
 });
 type User = z.infer<typeof UserSchema>;
 
-interface AppContext {
+interface AppContext extends HonoBaseContext {
   user: User | null;
 }
 
@@ -768,7 +768,7 @@ function deleteTodoWithPermission(
 // Create Server
 // ============================================================================
 
-async function createContext(c: Context): Promise<AppContext> {
+async function createContext(c: Context): Promise<Omit<AppContext, "hono" | "span">> {
   const user = await getUserFromRequest(c.req.header("Authorization"));
   return { user };
 }
