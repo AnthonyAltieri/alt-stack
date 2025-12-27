@@ -1,0 +1,38 @@
+{
+  "name": "@alt-stack/zod-error",
+  "version": "0.0.1",
+  "description": "Utilities for formatting ZodError for structured logging",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest",
+    "check-types": "tsc --noEmit"
+  },
+  "keywords": [
+    "zod",
+    "error",
+    "validation",
+    "logging",
+    "structured-logging"
+  ],
+  "author": "",
+  "license": "MIT",
+  "peerDependencies": {
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.9.2",
+    "vitest": "^4.0.3",
+    "zod": "^4.0.0"
+  }
+}
