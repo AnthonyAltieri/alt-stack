@@ -137,3 +137,21 @@ export function setSpanOk(span: SpanLike | undefined): void {
   span.setStatus({ code: api.SpanStatusCode.OK });
 }
 
+/**
+ * Execute a function with a span set as the active context.
+ * This enables automatic parent-child span relationships for instrumented libraries
+ * (e.g., MongoDB, HTTP clients) that create spans during the function execution.
+ */
+export function withActiveSpan<T>(
+  span: SpanLike | undefined,
+  fn: () => T,
+): T {
+  const api = getOtelApiSync();
+  if (!api || !span) return fn();
+
+  return api.context.with(
+    api.trace.setSpan(api.context.active(), span as import("@opentelemetry/api").Span),
+    fn,
+  );
+}
+

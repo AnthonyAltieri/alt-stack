@@ -60,6 +60,7 @@ export {
   createRequestSpan,
   endSpanWithError,
   setSpanOk,
+  withActiveSpan,
 } from "./telemetry.js";
 export type {
   TelemetryConfig,

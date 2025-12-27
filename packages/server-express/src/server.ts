@@ -15,6 +15,7 @@ import {
   createRequestSpan,
   endSpanWithError,
   setSpanOk,
+  withActiveSpan,
   isOk,
   isErr,
   ok as resultOk,
@@ -142,6 +143,9 @@ export function createServer<TContext extends ExpressBaseContext = ExpressBaseCo
           )
         : undefined;
 
+      // Wrap handler execution in active span context so child spans
+      // (e.g., database operations) are automatically parented
+      await withActiveSpan(span, async () => {
       try {
         const params = req.params as Record<string, unknown>;
         const query = req.query as Record<string, unknown>;
@@ -430,6 +434,7 @@ export function createServer<TContext extends ExpressBaseContext = ExpressBaseCo
           },
         });
       }
+      });
     };
 
     switch (procedure.method) {
