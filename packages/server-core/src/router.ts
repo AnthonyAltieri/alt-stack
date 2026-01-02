@@ -1,6 +1,8 @@
 import type { z } from "zod";
 import type {
   InputConfig,
+  InputConfigForPath,
+  ExtractPathParams,
   Procedure,
   ReadyProcedure,
   PendingProcedure,
@@ -174,62 +176,159 @@ export class Router<TCustomContext extends object = Record<string, never>> {
 // Type helper for methods object keys - maps lowercase method names to HTTP methods
 type MethodKey = "get" | "post" | "put" | "patch" | "delete";
 
-// Type helper for methods object - validates each method's PendingProcedure matches path requirements
-// Use a more flexible type that accepts any PendingProcedure subtype
-// Accept procedures with narrowed context types (e.g., AuthenticatedContext extends AppContext)
-type RouteMethods<
-  TPath extends string,
-  TCustomContext extends object,
-> = {
-  [K in MethodKey]?: PendingProcedure<
-    any,
-    any,
-    any,
-    any // Accept any context type - will be validated at runtime
-  >;
+/**
+ * Procedure type constrained by path parameters.
+ * For paths with params (e.g., "/users/{id}"), requires a params schema.
+ * For paths without params, accepts any procedure.
+ */
+type ProcedureForPath<TPath extends string, TCustomContext extends object> =
+  ExtractPathParams<TPath> extends never
+    ? PendingProcedure<any, any, any, TCustomContext>
+    : PendingProcedure<{ params: z.ZodType<Record<ExtractPathParams<TPath>, unknown>> }, any, any, TCustomContext>;
+
+/**
+ * Methods object type constrained by path parameters.
+ */
+type MethodsForPath<TPath extends string, TCustomContext extends object> = {
+  [M in MethodKey]?: ProcedureForPath<TPath, TCustomContext>;
 };
 
-// Type helper to extract ReadyProcedure from a router config value
-// Use more flexible types that accept any Procedure subtype
-// Accept procedures with narrowed context types (e.g., AuthenticatedContext extends AppContext)
-export type RouterConfigValue<
-  TCustomContext extends object,
+/**
+ * Helper function to define a route with compile-time validation.
+ * Use this to get call-site errors when params schema is missing.
+ *
+ * @example
+ * ```typescript
+ * // ✅ Valid - has params schema
+ * const userRoute = route<"/users/{id}", AppContext>(
+ *   "/users/{id}",
+ *   {
+ *     get: procedure
+ *       .input({ params: z.object({ id: z.string() }) })
+ *       .output(z.object({ id: z.string() }))
+ *       .handler(({ input }) => ok({ id: input.params.id })),
+ *   }
+ * );
+ *
+ * // ❌ Error - missing params schema for {id}
+ * const badRoute = route<"/users/{id}", AppContext>(
+ *   "/users/{id}",
+ *   {
+ *     get: procedure  // Error: Type 'PendingProcedure<...>' is not assignable
+ *       .output(z.object({ id: z.string() }))
+ *       .handler(() => ok({ id: "test" })),
+ *   }
+ * );
+ * ```
+ */
+export function route<
   TPath extends string,
-> =
-  | ReadyProcedure<
-      any,
-      any,
-      any,
-      any // Accept any context type - will be validated at runtime
-    >
-  | RouteMethods<TPath, TCustomContext>
+  TCustomContext extends object = Record<string, never>,
+>(
+  path: TPath,
+  methods: MethodsForPath<TPath, TCustomContext>,
+): { path: TPath; methods: MethodsForPath<TPath, TCustomContext> } {
+  return { path, methods };
+}
+
+/**
+ * Create a router from route definitions created with route().
+ *
+ * @example
+ * ```typescript
+ * const appRouter = routerFromRoutes<AppContext>(
+ *   route("/users/{id}", { get: ... }),
+ *   route("/users", { get: ..., post: ... }),
+ * );
+ * ```
+ */
+export function routerFromRoutes<TCustomContext extends object = Record<string, never>>(
+  ...routes: { path: string; methods: RouteMethods }[]
+): Router<TCustomContext> {
+  const config: Record<string, RouteMethods> = {};
+  for (const { path, methods } of routes) {
+    config[path] = methods;
+  }
+  return buildRouter<TCustomContext>(config);
+}
+
+/**
+ * Type helper for methods object structure (no validation here, just shape).
+ */
+export type RouteMethods = {
+  [K in MethodKey]?: PendingProcedure<any, any, any, any>;
+};
+
+/**
+ * Type helper to extract valid router config values (structure only, no validation).
+ */
+export type RouterConfigValue<TCustomContext extends object> =
+  | ReadyProcedure<any, any, any, any>
+  | RouteMethods
   | Router<TCustomContext>;
 
-// New tRPC-style router function
-export function router<
-  TCustomContext extends object = Record<string, never>,
-  TConfig extends {
-    [K in string]: RouterConfigValue<TCustomContext, K>;
-  } = {
-    [K in string]: RouterConfigValue<TCustomContext, K>;
-  },
->(
-  config: TConfig,
+/**
+ * Validates each key-value pair in a router config object.
+ * For each key K (path), validates that procedures have required params.
+ *
+ * Key insight: We must use `infer TInput` to extract the actual input type
+ * from the procedure, then check if TInput has params. Direct structural
+ * checks like `extends { config: { input: { params: object } } }` don't work
+ * because they check the outer structure rather than the inferred generic.
+ *
+ * Note: This validation works at the type level. Due to TypeScript limitations
+ * with generic inference, call-site errors may not appear. Use type-level
+ * assertions (as shown in router.spec.ts) to verify validation behavior.
+ */
+export type ValidateRouterConfig<T, TCustomContext extends object> = {
+  [K in keyof T]: K extends string
+    ? T[K] extends Router<TCustomContext>
+      ? T[K]
+      : T[K] extends ReadyProcedure<infer TInput, any, any, any>
+        ? ExtractPathParams<K> extends never
+          ? T[K]  // No path params needed
+          : TInput extends { params: z.ZodTypeAny }
+            ? T[K]  // Has required params
+            : never  // Missing params - type error
+        : T[K] extends RouteMethods
+          ? ValidateMethodsForPath<K, T[K]>
+          : T[K]
+    : T[K];
+};
+
+/**
+ * Validates each method in a RouteMethods object against path requirements.
+ */
+type ValidateMethodsForPath<TPath extends string, T extends RouteMethods> = {
+  [M in keyof T]: T[M] extends PendingProcedure<infer TInput, any, any, any>
+    ? ExtractPathParams<TPath> extends never
+      ? T[M]  // No path params needed
+      : TInput extends { params: z.ZodTypeAny }
+        ? T[M]  // Has required params
+        : never  // Missing params - type error
+    : T[M];
+};
+
+// Helper to check if a value is a methods object
+function isMethodsObject(value: unknown): value is Record<string, any> {
+  if (typeof value !== "object" || value === null || value instanceof Router) {
+    return false;
+  }
+  // Check if it has method-like keys (get, post, put, patch, delete)
+  const keys = Object.keys(value);
+  const methodKeys: MethodKey[] = ["get", "post", "put", "patch", "delete"];
+  return keys.some((k) => methodKeys.includes(k as MethodKey));
+}
+
+/**
+ * Internal function that builds a router from config without type validation.
+ * Used by both router() and init().router to avoid duplicating logic.
+ * @internal
+ */
+export function buildRouter<TCustomContext extends object>(
+  config: Record<string, unknown>,
 ): Router<TCustomContext> {
   const routerInstance = new Router<TCustomContext>();
-
-  // Helper to check if a value is a methods object
-  const isMethodsObject = (
-    value: unknown,
-  ): value is Record<string, any> => {
-    if (typeof value !== "object" || value === null || value instanceof Router) {
-      return false;
-    }
-    // Check if it has method-like keys (get, post, put, patch, delete)
-    const keys = Object.keys(value);
-    const methodKeys: MethodKey[] = ["get", "post", "put", "patch", "delete"];
-    return keys.some((k) => methodKeys.includes(k as MethodKey));
-  };
 
   for (const [key, value] of Object.entries(config)) {
     if (value instanceof Router) {
@@ -266,6 +365,16 @@ export function router<
   }
 
   return routerInstance;
+}
+
+// New tRPC-style router function
+export function router<
+  TCustomContext extends object = Record<string, never>,
+  const TConfig extends Record<string, unknown> = Record<string, unknown>,
+>(
+  config: TConfig & ValidateRouterConfig<TConfig, TCustomContext>,
+): Router<TCustomContext> {
+  return buildRouter<TCustomContext>(config);
 }
 
 export function createRouter<
