@@ -17,6 +17,8 @@ export type {
 export type {
   ExtractPathParams,
   RequireParamsForPath,
+  ValidateInputForPath,
+  InputConfigForPath,
   ProcedureConfig,
   Procedure,
   ReadyProcedure,
