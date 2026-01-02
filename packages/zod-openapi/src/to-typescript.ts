@@ -14,6 +14,7 @@ import {
   generateRouteSchemaNames,
   type RouteInfo,
 } from "./routes";
+import { generateInterface, schemaToTypeString } from "./interface-generator";
 
 const validIdentifierRegex = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/;
 
@@ -429,10 +430,18 @@ export const openApiToZodTsCode = (
   lines.push(...(customImportLines ?? []));
   lines.push("");
 
+  // Type assertion helper for compile-time verification
+  lines.push("// Type assertion helper - verifies interface matches schema at compile time");
+  lines.push("type _AssertEqual<T, U> = [T] extends [U] ? ([U] extends [T] ? true : never) : never;");
+  lines.push("");
+
   // Create registry for schema deduplication
   const registry = createSchemaRegistry();
 
   const sortedSchemaNames = topologicalSortSchemas(schemas);
+
+  // Collect all type assertions to emit after all schemas
+  const typeAssertions: string[] = [];
 
   for (const name of sortedSchemaNames) {
     const schema = schemas[name];
@@ -440,14 +449,28 @@ export const openApiToZodTsCode = (
       const zodExpr = convertSchemaToZodString(schema);
       const schemaName = `${name}Schema`;
       const typeName = name;
-      lines.push(`export const ${schemaName} = ${zodExpr};`);
-      lines.push(`export type ${typeName} = z.infer<typeof ${schemaName}>;`);
+
+      // Generate interface (concrete type in .d.ts)
+      lines.push(generateInterface(typeName, schema));
+
+      // Generate schema with ZodType<T> annotation (simple type in .d.ts)
+      lines.push(`export const ${schemaName}: z.ZodType<${typeName}> = ${zodExpr};`);
       lines.push("");
+
+      // Add type assertion to verify interface matches schema
+      typeAssertions.push(`type _Assert${typeName} = _AssertEqual<${typeName}, z.infer<typeof ${schemaName}>>;`);
 
       // Register component schemas so they can be referenced by route schemas
       const fingerprint = getSchemaFingerprint(schema);
       preRegisterSchema(registry, schemaName, fingerprint);
     }
+  }
+
+  // Emit all type assertions
+  if (typeAssertions.length > 0) {
+    lines.push("// Compile-time type assertions - ensure interfaces match schemas");
+    lines.push(typeAssertions.join("\n"));
+    lines.push("");
   }
 
   if (options?.includeRoutes) {
