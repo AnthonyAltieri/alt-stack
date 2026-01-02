@@ -289,9 +289,12 @@ describe("openApiToZodTsCode", () => {
 
       const result = openApiToZodTsCode(openapi);
       expect(result).toContain("import { z } from 'zod';");
-      expect(result).toContain("export const UserSchema =");
+      // New format: interface + ZodType annotation
+      expect(result).toContain("export interface User {");
+      expect(result).toContain("export const UserSchema: z.ZodType<User> =");
       expect(result).toContain("z.object({ name: z.string() })");
-      expect(result).toContain("export type User = z.infer<typeof UserSchema>;");
+      // Type assertion for compile-time verification
+      expect(result).toContain("type _AssertUser = _AssertEqual<User, z.infer<typeof UserSchema>>;");
     });
 
     it("should convert OpenAPI document with multiple schemas", () => {
@@ -317,10 +320,11 @@ describe("openApiToZodTsCode", () => {
       };
 
       const result = openApiToZodTsCode(openapi);
-      expect(result).toContain("export const UserSchema =");
-      expect(result).toContain("export const ProductSchema =");
-      expect(result).toContain("export type User =");
-      expect(result).toContain("export type Product =");
+      // New format: interface + ZodType annotation
+      expect(result).toContain("export interface User {");
+      expect(result).toContain("export interface Product {");
+      expect(result).toContain("export const UserSchema: z.ZodType<User> =");
+      expect(result).toContain("export const ProductSchema: z.ZodType<Product> =");
     });
 
     it("should include file header comment", () => {

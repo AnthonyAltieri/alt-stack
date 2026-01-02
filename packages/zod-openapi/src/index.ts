@@ -13,6 +13,7 @@ export type {
   ZodOpenApiRegistration,
 } from "./registry.js";
 export { convertSchemaToZodString } from "./to-zod.js";
+export { generateInterface, schemaToTypeString } from "./interface-generator.js";
 export {
   parseOpenApiPaths,
   generateRouteSchemaNames,
