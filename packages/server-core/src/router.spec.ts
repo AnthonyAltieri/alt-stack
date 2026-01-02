@@ -1,6 +1,6 @@
 import { describe, it, expect, expectTypeOf } from "vitest";
 import { z } from "zod";
-import { Router, router, createRouter, mergeRouters } from "./router.js";
+import { Router, router, createRouter, mergeRouters, route, routerFromRoutes } from "./router.js";
 import { ok } from "@alt-stack/result";
 import type {
   ExtractPathParams,
@@ -375,6 +375,99 @@ describe("Router", () => {
 
         expect(r.getProcedures()).toHaveLength(1);
       });
+    });
+  });
+
+  describe("route() helper for call-site validation", () => {
+    it("should create a route definition with path and methods", () => {
+      interface AppContext {
+        user: { id: string } | null;
+      }
+      const baseRouter = new Router<AppContext>();
+
+      const userRoute = route<"/users/{id}", AppContext>(
+        "/users/{id}",
+        {
+          get: baseRouter.procedure
+            .input({ params: z.object({ id: z.string() }) })
+            .output(z.object({ id: z.string() }))
+            .handler(({ input }) => ok({ id: input.params.id })),
+        },
+      );
+
+      expect(userRoute.path).toBe("/users/{id}");
+      expect(userRoute.methods.get).toBeDefined();
+    });
+
+    it("should work with paths without params", () => {
+      interface AppContext {
+        user: { id: string } | null;
+      }
+      const baseRouter = new Router<AppContext>();
+
+      const usersRoute = route<"/users", AppContext>(
+        "/users",
+        {
+          get: baseRouter.procedure
+            .output(z.object({ users: z.array(z.string()) }))
+            .handler(() => ok({ users: [] })),
+        },
+      );
+
+      expect(usersRoute.path).toBe("/users");
+    });
+
+    /**
+     * Type-level test: Verify that route() produces call-site errors
+     * when params schema is missing for parameterized paths.
+     */
+    it("should produce type error when params schema is missing", () => {
+      interface AppContext {
+        user: { id: string } | null;
+      }
+      const baseRouter = new Router<AppContext>();
+
+      const _badRoute = route<"/users/{id}", AppContext>(
+        "/users/{id}",
+        {
+          // @ts-expect-error - Missing params schema for {id}
+          get: baseRouter.procedure
+            .output(z.object({ id: z.string() }))
+            .handler(() => ok({ id: "test" })),
+        },
+      );
+    });
+  });
+
+  describe("routerFromRoutes()", () => {
+    it("should create router from route definitions", () => {
+      interface AppContext {
+        user: { id: string } | null;
+      }
+      const baseRouter = new Router<AppContext>();
+
+      const appRouter = routerFromRoutes<AppContext>(
+        route<"/users/{id}", AppContext>(
+          "/users/{id}",
+          {
+            get: baseRouter.procedure
+              .input({ params: z.object({ id: z.string() }) })
+              .output(z.object({ id: z.string() }))
+              .handler(({ input }) => ok({ id: input.params.id })),
+          },
+        ),
+        route<"/users", AppContext>(
+          "/users",
+          {
+            get: baseRouter.procedure
+              .output(z.object({ users: z.array(z.string()) }))
+              .handler(() => ok({ users: [] })),
+          },
+        ),
+      );
+
+      expect(appRouter.getProcedures()).toHaveLength(2);
+      expect(appRouter.getProcedures().map(p => p.path).sort()).toEqual(["/users", "/users/{id}"]);
     });
   });
 });

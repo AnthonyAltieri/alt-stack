@@ -177,6 +177,82 @@ export class Router<TCustomContext extends object = Record<string, never>> {
 type MethodKey = "get" | "post" | "put" | "patch" | "delete";
 
 /**
+ * Procedure type constrained by path parameters.
+ * For paths with params (e.g., "/users/{id}"), requires a params schema.
+ * For paths without params, accepts any procedure.
+ */
+type ProcedureForPath<TPath extends string, TCustomContext extends object> =
+  ExtractPathParams<TPath> extends never
+    ? PendingProcedure<any, any, any, TCustomContext>
+    : PendingProcedure<{ params: z.ZodType<Record<ExtractPathParams<TPath>, unknown>> }, any, any, TCustomContext>;
+
+/**
+ * Methods object type constrained by path parameters.
+ */
+type MethodsForPath<TPath extends string, TCustomContext extends object> = {
+  [M in MethodKey]?: ProcedureForPath<TPath, TCustomContext>;
+};
+
+/**
+ * Helper function to define a route with compile-time validation.
+ * Use this to get call-site errors when params schema is missing.
+ *
+ * @example
+ * ```typescript
+ * // ✅ Valid - has params schema
+ * const userRoute = route<"/users/{id}", AppContext>(
+ *   "/users/{id}",
+ *   {
+ *     get: procedure
+ *       .input({ params: z.object({ id: z.string() }) })
+ *       .output(z.object({ id: z.string() }))
+ *       .handler(({ input }) => ok({ id: input.params.id })),
+ *   }
+ * );
+ *
+ * // ❌ Error - missing params schema for {id}
+ * const badRoute = route<"/users/{id}", AppContext>(
+ *   "/users/{id}",
+ *   {
+ *     get: procedure  // Error: Type 'PendingProcedure<...>' is not assignable
+ *       .output(z.object({ id: z.string() }))
+ *       .handler(() => ok({ id: "test" })),
+ *   }
+ * );
+ * ```
+ */
+export function route<
+  TPath extends string,
+  TCustomContext extends object = Record<string, never>,
+>(
+  path: TPath,
+  methods: MethodsForPath<TPath, TCustomContext>,
+): { path: TPath; methods: MethodsForPath<TPath, TCustomContext> } {
+  return { path, methods };
+}
+
+/**
+ * Create a router from route definitions created with route().
+ *
+ * @example
+ * ```typescript
+ * const appRouter = routerFromRoutes<AppContext>(
+ *   route("/users/{id}", { get: ... }),
+ *   route("/users", { get: ..., post: ... }),
+ * );
+ * ```
+ */
+export function routerFromRoutes<TCustomContext extends object = Record<string, never>>(
+  ...routes: { path: string; methods: RouteMethods }[]
+): Router<TCustomContext> {
+  const config: Record<string, RouteMethods> = {};
+  for (const { path, methods } of routes) {
+    config[path] = methods;
+  }
+  return buildRouter<TCustomContext>(config);
+}
+
+/**
  * Type helper for methods object structure (no validation here, just shape).
  */
 export type RouteMethods = {
