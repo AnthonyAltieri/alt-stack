@@ -437,6 +437,28 @@ describe("Router", () => {
         },
       );
     });
+
+    /**
+     * Type-level test: Verify that route() produces call-site errors
+     * when params schema has wrong keys.
+     */
+    it("should produce type error when params schema has wrong keys", () => {
+      interface AppContext {
+        user: { id: string } | null;
+      }
+      const baseRouter = new Router<AppContext>();
+
+      const _wrongKeys = route<"/users/{id}", AppContext>(
+        "/users/{id}",
+        {
+          // @ts-expect-error - params schema has 'otherId' but path requires 'id'
+          get: baseRouter.procedure
+            .input({ params: z.object({ otherId: z.string() }) })
+            .output(z.object({ id: z.string() }))
+            .handler(() => ok({ id: "test" })),
+        },
+      );
+    });
   });
 
   describe("routerFromRoutes()", () => {
