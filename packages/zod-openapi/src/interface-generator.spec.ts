@@ -1,6 +1,19 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { z } from "zod";
 import { schemaToTypeString, generateInterface } from "./interface-generator";
 import { openApiToZodTsCode } from "./to-typescript";
+import {
+  registerZodSchemaToOpenApiSchema,
+  clearZodSchemaToOpenApiSchemaRegistry,
+} from "./registry";
+
+beforeEach(() => {
+  clearZodSchemaToOpenApiSchemaRegistry();
+});
+
+afterEach(() => {
+  clearZodSchemaToOpenApiSchemaRegistry();
+});
 
 describe("schemaToTypeString", () => {
   describe("primitive types", () => {
@@ -48,6 +61,31 @@ describe("schemaToTypeString", () => {
         enum: ["ONLY"],
       });
       expect(result).toBe('"ONLY"');
+    });
+  });
+
+  describe("registered schemas", () => {
+    it("should use output alias for registered string format", () => {
+      const uuidSchema = z.string().uuid();
+      registerZodSchemaToOpenApiSchema(uuidSchema, {
+        schemaExportedVariableName: "uuidSchema",
+        type: "string",
+        format: "uuid",
+      });
+
+      const result = schemaToTypeString({ type: "string", format: "uuid" });
+      expect(result).toBe("UuidSchemaOutput");
+    });
+
+    it("should use output alias for registered number type", () => {
+      const numberSchema = z.number();
+      registerZodSchemaToOpenApiSchema(numberSchema, {
+        schemaExportedVariableName: "numberSchema",
+        type: "number",
+      });
+
+      const result = schemaToTypeString({ type: "number" });
+      expect(result).toBe("NumberSchemaOutput");
     });
   });
 
@@ -404,6 +442,41 @@ describe("openApiToZodTsCode - optimized .d.ts output", () => {
 
     // Should NOT have z.infer type alias
     expect(code).not.toContain("export type User = z.infer<");
+  });
+
+  it("should emit output alias once for registered schemas", () => {
+    const uuidSchema = z.string().uuid();
+    registerZodSchemaToOpenApiSchema(uuidSchema, {
+      schemaExportedVariableName: "uuidSchema",
+      type: "string",
+      format: "uuid",
+    });
+
+    const spec = {
+      components: {
+        schemas: {
+          User: {
+            type: "object",
+            properties: {
+              id: { type: "string", format: "uuid" },
+            },
+            required: ["id"],
+          },
+        },
+      },
+    };
+
+    const code = openApiToZodTsCode(spec, [
+      'import { uuidSchema } from "./custom-schemas";',
+    ]);
+
+    expect(code).toContain(
+      "type UuidSchemaOutput = z.output<typeof uuidSchema>;",
+    );
+    expect(code).toContain("id: UuidSchemaOutput;");
+    expect(
+      code.match(/type UuidSchemaOutput = z\.output<typeof uuidSchema>;/g)?.length ?? 0,
+    ).toBe(1);
   });
 
   it("should generate ZodType<T> annotation", () => {

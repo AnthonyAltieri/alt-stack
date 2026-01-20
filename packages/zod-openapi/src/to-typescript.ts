@@ -14,7 +14,7 @@ import {
   generateRouteSchemaNames,
   type RouteInfo,
 } from "./routes";
-import { generateInterface, schemaToTypeString } from "./interface-generator";
+import { generateInterface, schemaExportNameToOutputAlias } from "./interface-generator";
 
 const validIdentifierRegex = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/;
 
@@ -442,6 +442,8 @@ export const openApiToZodTsCode = (
 
   // Collect all type assertions to emit after all schemas
   const typeAssertions: string[] = [];
+  const outputSchemaNames = new Set<string>();
+  const schemaBlocks: string[] = [];
 
   for (const name of sortedSchemaNames) {
     const schema = schemas[name];
@@ -451,11 +453,11 @@ export const openApiToZodTsCode = (
       const typeName = name;
 
       // Generate interface (concrete type in .d.ts)
-      lines.push(generateInterface(typeName, schema));
+      schemaBlocks.push(generateInterface(typeName, schema, { outputSchemaNames }));
 
       // Generate schema with ZodType<T> annotation (simple type in .d.ts)
-      lines.push(`export const ${schemaName}: z.ZodType<${typeName}> = ${zodExpr};`);
-      lines.push("");
+      schemaBlocks.push(`export const ${schemaName}: z.ZodType<${typeName}> = ${zodExpr};`);
+      schemaBlocks.push("");
 
       // Add type assertion to verify interface matches schema
       typeAssertions.push(`type _Assert${typeName} = _AssertEqual<${typeName}, z.infer<typeof ${schemaName}>>;`);
@@ -465,6 +467,17 @@ export const openApiToZodTsCode = (
       preRegisterSchema(registry, schemaName, fingerprint);
     }
   }
+
+  if (outputSchemaNames.size > 0) {
+    lines.push("// Zod output aliases for registered schemas");
+    for (const schemaName of outputSchemaNames) {
+      const aliasName = schemaExportNameToOutputAlias(schemaName);
+      lines.push(`type ${aliasName} = z.output<typeof ${schemaName}>;`);
+    }
+    lines.push("");
+  }
+
+  lines.push(...schemaBlocks);
 
   // Emit all type assertions
   if (typeAssertions.length > 0) {
