@@ -76,6 +76,12 @@ function isStringsRegistration(
   return reg.type === "string" && "formats" in reg;
 }
 
+function isSupportedStringFormat(
+  format: string,
+): format is SupportedStringFormat {
+  return Object.prototype.hasOwnProperty.call(SUPPORTED_STRING_FORMATS_MAP, format);
+}
+
 // ============================================================================
 // Helper Functions
 // ============================================================================
@@ -167,8 +173,9 @@ class ZodSchemaRegistry {
    * Reverse-lookup helper: given a string format, return the registered schema's exported variable name
    */
   getSchemaExportedVariableNameForStringFormat(
-    format: SupportedStringFormat,
+    format: SupportedStringFormat | string,
   ): string | undefined {
+    if (!isSupportedStringFormat(format)) return undefined;
     for (const registration of this.map.values()) {
       if (registration.type !== "string") continue;
 
@@ -183,6 +190,20 @@ class ZodSchemaRegistry {
         isStringsRegistration(registration) &&
         registration.formats.includes(format)
       ) {
+        return registration.schemaExportedVariableName;
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Reverse-lookup helper: given a primitive type, return the registered schema's exported variable name
+   */
+  getSchemaExportedVariableNameForPrimitiveType(
+    type: ZodOpenApiRegistrationPrimitive["type"],
+  ): string | undefined {
+    for (const registration of this.map.values()) {
+      if (registration.type === type) {
         return registration.schemaExportedVariableName;
       }
     }
@@ -214,9 +235,18 @@ export function registerZodSchemaToOpenApiSchema(
  * Convenience helper to get an exported schema variable name for a given string format
  */
 export function getSchemaExportedVariableNameForStringFormat(
-  format: SupportedStringFormat,
+  format: SupportedStringFormat | string,
 ): string | undefined {
   return schemaRegistry.getSchemaExportedVariableNameForStringFormat(format);
+}
+
+/**
+ * Convenience helper to get an exported schema variable name for a given primitive type
+ */
+export function getSchemaExportedVariableNameForPrimitiveType(
+  type: ZodOpenApiRegistrationPrimitive["type"],
+): string | undefined {
+  return schemaRegistry.getSchemaExportedVariableNameForPrimitiveType(type);
 }
 
 /**

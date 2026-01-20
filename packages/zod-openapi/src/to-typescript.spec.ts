@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { z } from "zod";
 import { openApiToZodTsCode } from "./to-typescript";
 import {
   registerZodSchemaToOpenApiSchema,
@@ -67,6 +68,65 @@ describe("openApiToZodTsCode with routes", () => {
       expect(result).toContain("'/users/{id}':");
       expect(result).toContain("GET:");
       expect(result).toContain("params: GetUsersIdParams");
+      expect(result).toContain("'200': GetUsersId200Response");
+    });
+
+    it("should use output alias for registered schemas in routes", () => {
+      const uuidSchema = z.string().uuid();
+      registerZodSchemaToOpenApiSchema(uuidSchema, {
+        schemaExportedVariableName: "uuidSchema",
+        type: "string",
+        format: "uuid",
+      });
+
+      const openapi = {
+        components: {
+          schemas: {
+            User: {
+              type: "object",
+              properties: {
+                id: { type: "string", format: "uuid" },
+              },
+              required: ["id"],
+            },
+          },
+        },
+        paths: {
+          "/users/{id}": {
+            get: {
+              parameters: [
+                {
+                  name: "id",
+                  in: "path",
+                  required: true,
+                  schema: { type: "string" },
+                },
+              ],
+              responses: {
+                "200": {
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/User" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      };
+
+      const result = openApiToZodTsCode(
+        openapi,
+        ['import { uuidSchema } from "./custom-schemas";'],
+        { includeRoutes: true },
+      );
+
+      expect(result).toContain(
+        "type UuidSchemaOutput = z.output<typeof uuidSchema>;",
+      );
+      expect(result).toContain("id: UuidSchemaOutput;");
+      expect(result).toContain("export const GetUsersId200Response = UserSchema;");
       expect(result).toContain("'200': GetUsersId200Response");
     });
 
