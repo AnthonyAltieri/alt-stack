@@ -456,7 +456,7 @@ export const openApiToZodTsCode = (
       schemaBlocks.push(generateInterface(typeName, schema, { outputSchemaNames }));
 
       // Generate schema with ZodType<T> annotation (simple type in .d.ts)
-      schemaBlocks.push(`export const ${schemaName}: z.ZodType<${typeName}> = ${zodExpr};`);
+      schemaBlocks.push(`export const ${schemaName} = ${zodExpr};`);
       schemaBlocks.push("");
 
       // Add type assertion to verify interface matches schema
