@@ -479,7 +479,7 @@ describe("openApiToZodTsCode - optimized .d.ts output", () => {
     ).toBe(1);
   });
 
-  it("should generate ZodType<T> annotation", () => {
+  it("should generate schema without explicit type annotation", () => {
     const spec = {
       components: {
         schemas: {
@@ -493,7 +493,8 @@ describe("openApiToZodTsCode - optimized .d.ts output", () => {
     };
 
     const code = openApiToZodTsCode(spec);
-    expect(code).toContain("export const UserSchema: z.ZodType<User> =");
+    expect(code).toContain("export const UserSchema = z.object({");
+    expect(code).not.toContain("z.ZodType<User>");
   });
 
   it("should generate type assertions", () => {
@@ -605,9 +606,9 @@ describe(".d.ts output verification", () => {
     expect(code).toContain("export interface User {");
     expect(code).toContain("export interface Product {");
 
-    // 2. Should have ZodType<T> annotations (will produce simple z.ZodType<T> in .d.ts)
-    expect(code).toContain("export const UserSchema: z.ZodType<User> =");
-    expect(code).toContain("export const ProductSchema: z.ZodType<Product> =");
+    // 2. Should have schemas without explicit type annotations (TypeScript infers the type)
+    expect(code).toContain("export const UserSchema = z.object({");
+    expect(code).toContain("export const ProductSchema = z.object({");
 
     // 3. Should NOT have z.infer type aliases (would require resolution in .d.ts)
     expect(code).not.toContain("export type User = z.infer<");
