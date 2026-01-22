@@ -14,7 +14,7 @@ import {
   generateRouteSchemaNames,
   type RouteInfo,
 } from "./routes";
-import { generateInterface, schemaExportNameToOutputAlias } from "./interface-generator";
+import { generateInterface, schemaExportNameToOutputAlias, schemaExportNameToInputAlias, schemaToInputTypeString } from "./interface-generator";
 
 const validIdentifierRegex = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/;
 
@@ -443,6 +443,7 @@ export const openApiToZodTsCode = (
   // Collect all type assertions to emit after all schemas
   const typeAssertions: string[] = [];
   const outputSchemaNames = new Set<string>();
+  const inputSchemaNames = new Set<string>();
   const schemaBlocks: string[] = [];
 
   for (const name of sortedSchemaNames) {
@@ -468,11 +469,52 @@ export const openApiToZodTsCode = (
     }
   }
 
+  // Pre-process routes to collect input schema names for alias generation
+  let routesForGeneration: RouteInfo[] = [];
+  if (options?.includeRoutes) {
+    routesForGeneration = parseOpenApiPaths(openapi);
+    // Collect input schema names by processing input schemas
+    for (const route of routesForGeneration) {
+      const pathParams = route.parameters.filter((p) => p.in === "path");
+      const queryParams = route.parameters.filter((p) => p.in === "query");
+      const headerParams = route.parameters.filter((p) => p.in === "header");
+
+      // Process path params
+      for (const param of pathParams) {
+        schemaToInputTypeString(param.schema, { inputSchemaNames });
+      }
+
+      // Process query params
+      for (const param of queryParams) {
+        schemaToInputTypeString(param.schema, { inputSchemaNames });
+      }
+
+      // Process header params
+      for (const param of headerParams) {
+        schemaToInputTypeString(param.schema, { inputSchemaNames });
+      }
+
+      // Process request body
+      if (route.requestBody) {
+        schemaToInputTypeString(route.requestBody, { inputSchemaNames });
+      }
+    }
+  }
+
   if (outputSchemaNames.size > 0) {
     lines.push("// Zod output aliases for registered schemas");
     for (const schemaName of outputSchemaNames) {
       const aliasName = schemaExportNameToOutputAlias(schemaName);
       lines.push(`type ${aliasName} = z.output<typeof ${schemaName}>;`);
+    }
+    lines.push("");
+  }
+
+  if (inputSchemaNames.size > 0) {
+    lines.push("// Zod input aliases for registered schemas");
+    for (const schemaName of inputSchemaNames) {
+      const aliasName = schemaExportNameToInputAlias(schemaName);
+      lines.push(`type ${aliasName} = z.input<typeof ${schemaName}>;`);
     }
     lines.push("");
   }
@@ -486,44 +528,41 @@ export const openApiToZodTsCode = (
     lines.push("");
   }
 
-  if (options?.includeRoutes) {
-    const routes = parseOpenApiPaths(openapi);
-    if (routes.length > 0) {
-      // Find common schemas that appear multiple times (for error responses, etc.)
-      const routeSchemaList = collectRouteSchemas(routes);
-      const commonSchemas = findCommonSchemas(routeSchemaList, 2);
+  if (routesForGeneration.length > 0) {
+    // Find common schemas that appear multiple times (for error responses, etc.)
+    const routeSchemaList = collectRouteSchemas(routesForGeneration);
+    const commonSchemas = findCommonSchemas(routeSchemaList, 2);
 
-      // Generate common schemas first (e.g., UnauthorizedErrorSchema, NotFoundErrorSchema)
-      if (commonSchemas.length > 0) {
-        lines.push("// Common Error Schemas (deduplicated)");
-        for (const common of commonSchemas) {
-          const zodExpr = convertSchemaToZodString(common.schema);
-          lines.push(`export const ${common.name} = ${zodExpr};`);
-          // Pre-register so route schemas reference this instead of duplicating
-          preRegisterSchema(registry, common.name, common.fingerprint);
-        }
-        lines.push("");
+    // Generate common schemas first (e.g., UnauthorizedErrorSchema, NotFoundErrorSchema)
+    if (commonSchemas.length > 0) {
+      lines.push("// Common Error Schemas (deduplicated)");
+      for (const common of commonSchemas) {
+        const zodExpr = convertSchemaToZodString(common.schema);
+        lines.push(`export const ${common.name} = ${zodExpr};`);
+        // Pre-register so route schemas reference this instead of duplicating
+        preRegisterSchema(registry, common.name, common.fingerprint);
       }
+      lines.push("");
+    }
 
-      // Generate route schemas with deduplication
-      const { declarations, schemaNameToCanonical } = generateRouteSchemas(
-        routes,
-        convertSchemaToZodString,
-        registry,
+    // Generate route schemas with deduplication
+    const { declarations, schemaNameToCanonical } = generateRouteSchemas(
+      routesForGeneration,
+      convertSchemaToZodString,
+      registry,
+    );
+
+    if (declarations.length > 0) {
+      lines.push("// Route Schemas");
+      lines.push(...declarations);
+      lines.push("");
+
+      // Generate Request/Response objects using canonical names
+      const requestResponseObjs = generateRequestResponseObjects(
+        routesForGeneration,
+        schemaNameToCanonical,
       );
-
-      if (declarations.length > 0) {
-        lines.push("// Route Schemas");
-        lines.push(...declarations);
-        lines.push("");
-
-        // Generate Request/Response objects using canonical names
-        const requestResponseObjs = generateRequestResponseObjects(
-          routes,
-          schemaNameToCanonical,
-        );
-        lines.push(...requestResponseObjs);
-      }
+      lines.push(...requestResponseObjs);
     }
   }
 
