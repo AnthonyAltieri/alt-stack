@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { z } from "zod";
-import { schemaToTypeString, generateInterface } from "./interface-generator";
+import { schemaToTypeString, schemaToInputTypeString, generateInterface } from "./interface-generator";
 import { openApiToZodTsCode } from "./to-typescript";
 import {
   registerZodSchemaToOpenApiSchema,
@@ -354,6 +354,84 @@ describe("schemaToTypeString", () => {
   });
 });
 
+describe("schemaToInputTypeString", () => {
+  describe("primitive types", () => {
+    it("should convert string type", () => {
+      expect(schemaToInputTypeString({ type: "string" })).toBe("string");
+    });
+
+    it("should convert number type", () => {
+      expect(schemaToInputTypeString({ type: "number" })).toBe("number");
+    });
+
+    it("should convert boolean type", () => {
+      expect(schemaToInputTypeString({ type: "boolean" })).toBe("boolean");
+    });
+  });
+
+  describe("registered schemas", () => {
+    it("should use input alias for registered string format", () => {
+      const uuidSchema = z.string().uuid();
+      registerZodSchemaToOpenApiSchema(uuidSchema, {
+        schemaExportedVariableName: "uuidSchema",
+        type: "string",
+        format: "uuid",
+      });
+
+      const result = schemaToInputTypeString({ type: "string", format: "uuid" });
+      expect(result).toBe("UuidSchemaInput");
+    });
+
+    it("should use input alias for registered number type", () => {
+      const numberSchema = z.number();
+      registerZodSchemaToOpenApiSchema(numberSchema, {
+        schemaExportedVariableName: "numberSchema",
+        type: "number",
+      });
+
+      const result = schemaToInputTypeString({ type: "number" });
+      expect(result).toBe("NumberSchemaInput");
+    });
+
+    it("should track input schema names in options", () => {
+      const uuidSchema = z.string().uuid();
+      registerZodSchemaToOpenApiSchema(uuidSchema, {
+        schemaExportedVariableName: "uuidSchema",
+        type: "string",
+        format: "uuid",
+      });
+
+      const inputSchemaNames = new Set<string>();
+      schemaToInputTypeString({ type: "string", format: "uuid" }, { inputSchemaNames });
+      expect(inputSchemaNames.has("uuidSchema")).toBe(true);
+    });
+  });
+
+  describe("arrays", () => {
+    it("should convert array of strings", () => {
+      const result = schemaToInputTypeString({
+        type: "array",
+        items: { type: "string" },
+      });
+      expect(result).toBe("Array<string>");
+    });
+  });
+
+  describe("objects", () => {
+    it("should convert object with required properties", () => {
+      const result = schemaToInputTypeString({
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          name: { type: "string" },
+        },
+        required: ["id", "name"],
+      });
+      expect(result).toBe("{ id: string; name: string }");
+    });
+  });
+});
+
 describe("generateInterface", () => {
   it("should generate interface for object schema", () => {
     const result = generateInterface("User", {
@@ -567,6 +645,104 @@ describe("openApiToZodTsCode - optimized .d.ts output", () => {
 
     const code = openApiToZodTsCode(spec);
     expect(code).toContain("address: Address;");
+  });
+
+  it("should emit input alias for registered schemas used in route inputs", () => {
+    const uuidSchema = z.string().uuid();
+    registerZodSchemaToOpenApiSchema(uuidSchema, {
+      schemaExportedVariableName: "uuidSchema",
+      type: "string",
+      format: "uuid",
+    });
+
+    const spec = {
+      openapi: "3.0.0",
+      paths: {
+        "/users/{id}": {
+          get: {
+            parameters: [
+              {
+                name: "id",
+                in: "path",
+                required: true,
+                schema: { type: "string", format: "uuid" },
+              },
+            ],
+            responses: {
+              "200": {
+                content: {
+                  "application/json": {
+                    schema: { type: "object", properties: { name: { type: "string" } } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+
+    const code = openApiToZodTsCode(spec, [
+      'import { uuidSchema } from "./custom-schemas";',
+    ], { includeRoutes: true });
+
+    expect(code).toContain(
+      "type UuidSchemaInput = z.input<typeof uuidSchema>;",
+    );
+    // Input alias should only be emitted once
+    expect(
+      code.match(/type UuidSchemaInput = z\.input<typeof uuidSchema>;/g)?.length ?? 0,
+    ).toBe(1);
+  });
+
+  it("should emit input alias for registered schemas used in request body", () => {
+    const uuidSchema = z.string().uuid();
+    registerZodSchemaToOpenApiSchema(uuidSchema, {
+      schemaExportedVariableName: "uuidSchema",
+      type: "string",
+      format: "uuid",
+    });
+
+    const spec = {
+      openapi: "3.0.0",
+      paths: {
+        "/users": {
+          post: {
+            requestBody: {
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      id: { type: "string", format: "uuid" },
+                      name: { type: "string" },
+                    },
+                    required: ["id", "name"],
+                  },
+                },
+              },
+            },
+            responses: {
+              "201": {
+                content: {
+                  "application/json": {
+                    schema: { type: "object", properties: { success: { type: "boolean" } } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+
+    const code = openApiToZodTsCode(spec, [
+      'import { uuidSchema } from "./custom-schemas";',
+    ], { includeRoutes: true });
+
+    expect(code).toContain(
+      "type UuidSchemaInput = z.input<typeof uuidSchema>;",
+    );
   });
 });
 
