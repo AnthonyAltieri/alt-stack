@@ -1,6 +1,11 @@
 // Client
 export { ApiClient } from "./client.js";
-export type { ApiClientOptions } from "./client.js";
+export type {
+  ApiClientOptions,
+  ApiClientValidationErrorLocation,
+  ApiClientValidationErrorContext,
+  ApiClientValidationErrorHandler,
+} from "./client.js";
 
 // Errors
 export {
@@ -37,4 +42,3 @@ export type {
   UnexpectedErrorResponse,
   ApiResponse,
 } from "./types.js";
-

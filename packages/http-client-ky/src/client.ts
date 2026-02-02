@@ -1,6 +1,6 @@
 import type { z } from "zod";
 import type { KyInstance, Options as KyOptions, KyResponse } from "ky";
-import { ApiClient } from "@alt-stack/http-client-core";
+import { ApiClient, type ApiClientValidationErrorHandler } from "@alt-stack/http-client-core";
 import { KyExecutor, type KyExecutorOptions } from "./executor.js";
 
 /**
@@ -14,6 +14,10 @@ export interface KyClientOptions<
   headers?: Record<string, unknown>;
   Request: TRequest;
   Response: TResponse;
+  /**
+   * Called when Zod validation fails for request or response data.
+   */
+  onValidationError?: ApiClientValidationErrorHandler<KyResponse>;
   /**
    * Use a custom ky instance.
    * Useful for pre-configured ky instances with hooks, defaults, etc.
@@ -79,10 +83,10 @@ export function createApiClient<
     headers: options.headers,
     Request: options.Request,
     Response: options.Response,
+    onValidationError: options.onValidationError,
     executor,
   });
 }
 
 // Re-export ky types for convenience
 export type { KyInstance, KyOptions, KyResponse };
-

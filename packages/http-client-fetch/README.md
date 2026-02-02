@@ -41,6 +41,21 @@ if (result.success) {
 - **Timeout support**
 - **Raw Response access** for streaming, headers, etc.
 
+## Validation Hook
+
+Capture schema mismatches (e.g. unexpected response shapes) by passing `onValidationError`:
+
+```typescript
+const client = createApiClient({
+  baseUrl: "https://api.example.com",
+  Request,
+  Response,
+  onValidationError: ({ kind, location, endpoint, method, issues }) => {
+    console.error("Validation failed", { kind, location, endpoint, method, issues });
+  },
+});
+```
+
 ## Fetch Options
 
 Pass additional fetch options for credentials, cache mode, etc.:
@@ -92,4 +107,3 @@ if (result.success) {
 | `TimeoutError` | Request exceeded timeout |
 | `UnexpectedApiClientError` | Network error or unexpected response |
 | `ApiClientError` | Base class for all errors |
-

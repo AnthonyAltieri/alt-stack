@@ -42,6 +42,21 @@ if (result.success) {
 - **Raw KyResponse access** for streaming, headers, etc.
 - **Ky hooks** for request/response interception
 
+## Validation Hook
+
+Capture schema mismatches (e.g. unexpected response shapes) by passing `onValidationError`:
+
+```typescript
+const client = createApiClient({
+  baseUrl: "https://api.example.com",
+  Request,
+  Response,
+  onValidationError: ({ kind, location, endpoint, method, issues }) => {
+    console.error("Validation failed", { kind, location, endpoint, method, issues });
+  },
+});
+```
+
 ## Ky Options
 
 Pass ky-specific options like hooks, retry config, etc.:
@@ -122,4 +137,3 @@ if (result.success) {
 | `TimeoutError` | Request exceeded timeout |
 | `UnexpectedApiClientError` | Network error or unexpected response |
 | `ApiClientError` | Base class for all errors |
-

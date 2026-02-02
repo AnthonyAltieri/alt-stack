@@ -17,6 +17,9 @@ export {
 
 export type {
   ApiClientOptions,
+  ApiClientValidationErrorLocation,
+  ApiClientValidationErrorContext,
+  ApiClientValidationErrorHandler,
   HttpExecutor,
   ExecuteRequest,
   ExecuteResponse,
@@ -39,4 +42,3 @@ export type {
   UnexpectedErrorResponse,
   ApiResponse,
 } from "@alt-stack/http-client-core";
-

@@ -26,8 +26,40 @@ export interface ApiClientOptions<
   headers?: Record<string, unknown>;
   Request: TRequest;
   Response: TResponse;
+  /**
+   * Called when Zod validation fails for request or response data.
+   * This is only invoked for schema parse failures (i.e. when Zod would throw),
+   * not for other validation errors like missing path params.
+   */
+  onValidationError?: ApiClientValidationErrorHandler<TRawResponse>;
   executor: HttpExecutor<TRawResponse>;
 }
+
+export type ApiClientValidationErrorLocation = "params" | "query" | "body" | "response";
+
+export type ApiClientValidationErrorContext<TRawResponse = unknown> = {
+  kind: "request" | "response";
+  location: ApiClientValidationErrorLocation;
+  endpoint: string;
+  method: string;
+  /** Human-readable context string (also used as the thrown ValidationError message). */
+  message: string;
+  /** The data that failed validation. */
+  data: unknown;
+  /** Zod issues produced by the schema. */
+  issues: z.ZodIssue[];
+  /** The underlying ZodError object. */
+  zodError: z.ZodError;
+  /** Response-only context. */
+  status?: number;
+  statusCode?: string;
+  statusText?: string;
+  raw?: TRawResponse;
+};
+
+export type ApiClientValidationErrorHandler<TRawResponse = unknown> = (
+  context: ApiClientValidationErrorContext<TRawResponse>,
+) => void;
 
 // ============================================================================
 // Helper Functions
@@ -72,24 +104,6 @@ function calculateBackoff(attempt: number, baseDelay: number = 1000): number {
   return Math.min(baseDelay * Math.pow(2, attempt), 30000); // Max 30 seconds
 }
 
-/**
- * Validates data against a Zod schema
- */
-function validate<TSchema extends z.ZodTypeAny>(
-  schema: TSchema,
-  data: unknown,
-  errorMessage: string,
-): z.infer<TSchema> {
-  try {
-    return schema.parse(data);
-  } catch (error: unknown) {
-    if (error instanceof z.ZodError) {
-      throw new ValidationError(errorMessage, error.issues, undefined, undefined);
-    }
-    throw error;
-  }
-}
-
 // ============================================================================
 // ApiClient Class
 // ============================================================================
@@ -100,6 +114,40 @@ export class ApiClient<
   TRawResponse = unknown,
 > {
   constructor(public readonly options: ApiClientOptions<TRequest, TResponse, TRawResponse>) {}
+
+  private safeInvokeOnValidationError(
+    context: ApiClientValidationErrorContext<TRawResponse>,
+  ): void {
+    if (!this.options.onValidationError) return;
+    try {
+      this.options.onValidationError(context);
+    } catch {
+      // Never allow a user-provided callback to affect control-flow, retries, etc.
+    }
+  }
+
+  private validateSchema<TSchema extends z.ZodTypeAny>(
+    schema: TSchema,
+    data: unknown,
+    message: string,
+    context: Omit<
+      ApiClientValidationErrorContext<TRawResponse>,
+      "data" | "issues" | "zodError" | "message"
+    >,
+  ): z.infer<TSchema> {
+    const parsed = schema.safeParse(data);
+    if (parsed.success) return parsed.data;
+
+    this.safeInvokeOnValidationError({
+      ...context,
+      message,
+      data,
+      issues: parsed.error.issues,
+      zodError: parsed.error,
+    });
+
+    throw new ValidationError(message, parsed.error.issues, context.endpoint, context.method);
+  }
 
   /**
    * Makes a GET request
@@ -342,10 +390,12 @@ export class ApiClient<
 
     const paramsSchema = (requestDef as { params?: z.ZodTypeAny }).params;
     if (paramsSchema) {
-      return validate(paramsSchema, params, "Path parameters validation failed") as Record<
-        string,
-        unknown
-      >;
+      return this.validateSchema(paramsSchema, params, "Path parameters validation failed", {
+        kind: "request",
+        location: "params",
+        endpoint,
+        method,
+      }) as Record<string, unknown>;
     }
 
     // Check if endpoint requires params but none provided
@@ -377,10 +427,12 @@ export class ApiClient<
 
     const querySchema = (requestDef as { query?: z.ZodTypeAny }).query;
     if (querySchema) {
-      return validate(querySchema, query, "Query parameters validation failed") as Record<
-        string,
-        unknown
-      >;
+      return this.validateSchema(querySchema, query, "Query parameters validation failed", {
+        kind: "request",
+        location: "query",
+        endpoint,
+        method,
+      }) as Record<string, unknown>;
     }
 
     return query;
@@ -397,7 +449,12 @@ export class ApiClient<
 
     const bodySchema = (requestDef as { body?: z.ZodTypeAny }).body;
     if (bodySchema) {
-      validate(bodySchema, body, "Request body validation failed");
+      this.validateSchema(bodySchema, body, "Request body validation failed", {
+        kind: "request",
+        location: "body",
+        endpoint,
+        method,
+      });
     }
   }
 
@@ -455,10 +512,20 @@ export class ApiClient<
 
     // Validate against schema
     try {
-      const validated = validate(
+      const validated = this.validateSchema(
         responseSchema,
         data,
         `Response validation failed for ${statusCode}`,
+        {
+          kind: "response",
+          location: "response",
+          endpoint,
+          method,
+          status,
+          statusCode,
+          statusText,
+          raw,
+        },
       );
 
       if (statusCode.startsWith("2")) {
@@ -493,4 +560,3 @@ export class ApiClient<
     }
   }
 }
-
