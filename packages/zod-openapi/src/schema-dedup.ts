@@ -38,8 +38,6 @@ export function getSchemaFingerprint(schema: AnySchema): string {
 export interface SchemaRegistry {
   /** Map from fingerprint to the first schema name that used it */
   fingerprintToName: Map<string, string>;
-  /** Map from schema name to its fingerprint (for reverse lookup) */
-  nameToFingerprint: Map<string, string>;
 }
 
 /**
@@ -48,7 +46,6 @@ export interface SchemaRegistry {
 export function createSchemaRegistry(): SchemaRegistry {
   return {
     fingerprintToName: new Map(),
-    nameToFingerprint: new Map(),
   };
 }
 
@@ -79,7 +76,6 @@ export function registerSchema(
   }
 
   registry.fingerprintToName.set(fingerprint, name);
-  registry.nameToFingerprint.set(name, fingerprint);
   return { isNew: true, canonicalName: name };
 }
 
@@ -93,7 +89,6 @@ export function preRegisterSchema(
   fingerprint: string,
 ): void {
   registry.fingerprintToName.set(fingerprint, name);
-  registry.nameToFingerprint.set(name, fingerprint);
 }
 
 /**
