@@ -104,7 +104,6 @@ describe("convertOpenAPIStringToZod", () => {
     it("should ignore unknown format", () => {
       const result = convertOpenAPIStringToZod({
         type: "string",
-        // @ts-expect-error - testing with unsupported format
         format: "unsupported-format",
       });
       expect(result).toBe("z.string()");

@@ -4,24 +4,20 @@ import { z } from "zod";
 // Constants
 // ============================================================================
 
-const SUPPORTED_STRING_FORMATS_MAP = {
-  "color-hex": 1,
-  date: 1,
-  "date-time": 1,
-  email: 1,
-  "iso-date": 1,
-  "iso-date-time": 1,
-  objectid: 1,
-  uri: 1,
-  url: 1,
-  uuid: 1,
-} as const;
+export const SUPPORTED_STRING_FORMATS = [
+  "color-hex",
+  "date",
+  "date-time",
+  "email",
+  "iso-date",
+  "iso-date-time",
+  "objectid",
+  "uri",
+  "url",
+  "uuid",
+] as const;
 
-export const SUPPORTED_STRING_FORMATS = Object.keys(
-  SUPPORTED_STRING_FORMATS_MAP,
-) as unknown as keyof typeof SUPPORTED_STRING_FORMATS_MAP;
-
-type SupportedStringFormat = typeof SUPPORTED_STRING_FORMATS;
+type SupportedStringFormat = (typeof SUPPORTED_STRING_FORMATS)[number];
 
 // ============================================================================
 // Types
@@ -79,7 +75,7 @@ function isStringsRegistration(
 function isSupportedStringFormat(
   format: string,
 ): format is SupportedStringFormat {
-  return Object.prototype.hasOwnProperty.call(SUPPORTED_STRING_FORMATS_MAP, format);
+  return (SUPPORTED_STRING_FORMATS as readonly string[]).includes(format);
 }
 
 // ============================================================================

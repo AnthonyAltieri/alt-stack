@@ -1,6 +1,5 @@
 import {
   getSchemaExportedVariableNameForStringFormat,
-  SUPPORTED_STRING_FORMATS,
 } from "../registry";
 
 /**
@@ -8,7 +7,7 @@ import {
  */
 export function convertOpenAPIStringToZod(schema: {
   type: "string";
-  format?: typeof SUPPORTED_STRING_FORMATS;
+  format?: string;
   minLength?: number;
   maxLength?: number;
   pattern?: string;
@@ -20,15 +19,10 @@ export function convertOpenAPIStringToZod(schema: {
   }
 
   // Check for custom registered format schemas
-  if (schema.format && SUPPORTED_STRING_FORMATS.includes(schema.format)) {
-    const customSchemaName = getSchemaExportedVariableNameForStringFormat(
-      schema.format,
-    );
-
-    // Use custom schema if registered (ignores other constraints)
-    if (customSchemaName) {
-      return customSchemaName;
-    }
+  if (schema.format) {
+    const customSchemaName =
+      getSchemaExportedVariableNameForStringFormat(schema.format);
+    if (customSchemaName) return customSchemaName;
   }
 
   // Build string schema with format modifiers
