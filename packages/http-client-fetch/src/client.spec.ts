@@ -347,6 +347,37 @@ describe("FetchApiClient", () => {
       );
     });
 
+    it("calls onValidationError for request validation failures", async () => {
+      const onValidationError = vi.fn();
+      const client = createApiClient({
+        baseUrl: "https://api.example.com",
+        Request,
+        Response,
+        onValidationError,
+      });
+
+      await expect(client.get("/users/{id}", { params: { id: "not-a-uuid" } })).rejects.toThrow(
+        ValidationError,
+      );
+
+      expect(onValidationError).toHaveBeenCalledTimes(1);
+      const ctx = onValidationError.mock.calls[0]?.[0];
+
+      expect(ctx).toEqual(
+        expect.objectContaining({
+          kind: "request",
+          location: "params",
+          endpoint: "/users/{id}",
+          method: "GET",
+          message: "Path parameters validation failed",
+          data: { id: "not-a-uuid" },
+          zodError: expect.any(z.ZodError),
+        }),
+      );
+      expect(ctx.issues).toEqual(expect.any(Array));
+      expect(ctx.issues.length).toBeGreaterThan(0);
+    });
+
     it("throws ValidationError for invalid body", async () => {
       const client = createApiClient({ baseUrl: "https://api.example.com", Request, Response });
 
@@ -423,6 +454,46 @@ describe("FetchApiClient", () => {
       if (!result.success) {
         expect(result.error).toBeInstanceOf(UnexpectedApiClientError);
       }
+    });
+
+    it("calls onValidationError when response validation fails", async () => {
+      const invalidData = [{ id: 123, name: 456 }];
+      globalThis.fetch = createMockFetch(invalidData, 200);
+
+      const onValidationError = vi.fn();
+      const client = createApiClient({
+        baseUrl: "https://api.example.com",
+        Request,
+        Response,
+        onValidationError,
+      });
+      const result = await client.get("/users", {});
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error).toBeInstanceOf(UnexpectedApiClientError);
+      }
+
+      expect(onValidationError).toHaveBeenCalledTimes(1);
+      const ctx = onValidationError.mock.calls[0]?.[0];
+
+      expect(ctx).toEqual(
+        expect.objectContaining({
+          kind: "response",
+          location: "response",
+          endpoint: "/users",
+          method: "GET",
+          message: "Response validation failed for 200",
+          data: invalidData,
+          status: 200,
+          statusCode: "200",
+          statusText: "OK",
+          zodError: expect.any(z.ZodError),
+        }),
+      );
+      expect(ctx.raw).toBeDefined();
+      expect(ctx.issues).toEqual(expect.any(Array));
+      expect(ctx.issues.length).toBeGreaterThan(0);
     });
 
     it("handles text responses", async () => {
@@ -762,4 +833,3 @@ describe("FetchApiClient", () => {
     });
   });
 });
-
