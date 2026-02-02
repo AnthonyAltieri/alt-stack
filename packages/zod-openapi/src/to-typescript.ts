@@ -13,6 +13,7 @@ import {
   parseOpenApiPaths,
   generateRouteSchemaNames,
   type RouteInfo,
+  type RouteParameter,
 } from "./routes";
 import { generateInterface, schemaExportNameToOutputAlias } from "./interface-generator";
 
@@ -65,7 +66,51 @@ function generateRouteSchemas(
 ): RouteSchemaResult {
   const declarations: string[] = [];
   const schemaNameToCanonical = new Map<string, string>();
-  const generatedNames = new Set<string>();
+
+  const registerAndDeclare = (
+    schemaName: string,
+    schema: AnySchema,
+    zodExpression: string,
+  ): void => {
+    const { isNew, canonicalName } = registerSchema(
+      registry,
+      schemaName,
+      schema,
+    );
+    schemaNameToCanonical.set(schemaName, canonicalName);
+
+    if (isNew) {
+      declarations.push(`export const ${schemaName} = ${zodExpression};`);
+      return;
+    }
+
+    if (schemaName !== canonicalName) {
+      declarations.push(`export const ${schemaName} = ${canonicalName};`);
+    }
+  };
+
+  const buildOpenApiObjectSchema = (params: RouteParameter[]): AnySchema => {
+    return {
+      type: "object",
+      properties: Object.fromEntries(params.map((p) => [p.name, p.schema])),
+      required: params.filter((p) => p.required).map((p) => p.name),
+    };
+  };
+
+  const buildZodObjectSchema = (
+    params: RouteParameter[],
+    options: { optionalizeNonRequired: boolean },
+  ): string => {
+    const properties: string[] = [];
+    for (const param of params) {
+      let zodExpr = convertSchema(param.schema);
+      if (options.optionalizeNonRequired && !param.required) {
+        zodExpr += ".optional()";
+      }
+      properties.push(`${quotePropertyName(param.name)}: ${zodExpr}`);
+    }
+    return `z.object({ ${properties.join(", ")} })`;
+  };
 
   for (const route of routes) {
     const names = generateRouteSchemaNames(route);
@@ -73,147 +118,38 @@ function generateRouteSchemas(
     const queryParams = route.parameters.filter((p) => p.in === "query");
     const headerParams = route.parameters.filter((p) => p.in === "header");
 
-    // Generate params schema with deduplication
     if (names.paramsSchemaName && pathParams.length > 0) {
-      const paramsSchema: AnySchema = {
-        type: "object",
-        properties: Object.fromEntries(
-          pathParams.map((p) => [p.name, p.schema]),
-        ),
-        required: pathParams.filter((p) => p.required).map((p) => p.name),
-      };
-
-      const { isNew, canonicalName } = registerSchema(
-        registry,
+      registerAndDeclare(
         names.paramsSchemaName,
-        paramsSchema,
+        buildOpenApiObjectSchema(pathParams),
+        buildZodObjectSchema(pathParams, { optionalizeNonRequired: false }),
       );
-      schemaNameToCanonical.set(names.paramsSchemaName, canonicalName);
-
-      if (isNew && !generatedNames.has(names.paramsSchemaName)) {
-        generatedNames.add(names.paramsSchemaName);
-        const properties: string[] = [];
-        for (const param of pathParams) {
-          const zodExpr = convertSchema(param.schema);
-          properties.push(`${quotePropertyName(param.name)}: ${zodExpr}`);
-        }
-        declarations.push(
-          `export const ${names.paramsSchemaName} = z.object({ ${properties.join(", ")} });`,
-        );
-      } else if (!isNew && names.paramsSchemaName !== canonicalName) {
-        if (!generatedNames.has(names.paramsSchemaName)) {
-          generatedNames.add(names.paramsSchemaName);
-          declarations.push(
-            `export const ${names.paramsSchemaName} = ${canonicalName};`,
-          );
-        }
-      }
     }
 
-    // Generate query schema with deduplication
     if (names.querySchemaName && queryParams.length > 0) {
-      const querySchema: AnySchema = {
-        type: "object",
-        properties: Object.fromEntries(
-          queryParams.map((p) => [p.name, p.schema]),
-        ),
-        required: queryParams.filter((p) => p.required).map((p) => p.name),
-      };
-
-      const { isNew, canonicalName } = registerSchema(
-        registry,
+      registerAndDeclare(
         names.querySchemaName,
-        querySchema,
+        buildOpenApiObjectSchema(queryParams),
+        buildZodObjectSchema(queryParams, { optionalizeNonRequired: true }),
       );
-      schemaNameToCanonical.set(names.querySchemaName, canonicalName);
-
-      if (isNew && !generatedNames.has(names.querySchemaName)) {
-        generatedNames.add(names.querySchemaName);
-        const properties: string[] = [];
-        for (const param of queryParams) {
-          let zodExpr = convertSchema(param.schema);
-          if (!param.required) {
-            zodExpr += ".optional()";
-          }
-          properties.push(`${quotePropertyName(param.name)}: ${zodExpr}`);
-        }
-        declarations.push(
-          `export const ${names.querySchemaName} = z.object({ ${properties.join(", ")} });`,
-        );
-      } else if (!isNew && names.querySchemaName !== canonicalName) {
-        if (!generatedNames.has(names.querySchemaName)) {
-          generatedNames.add(names.querySchemaName);
-          declarations.push(
-            `export const ${names.querySchemaName} = ${canonicalName};`,
-          );
-        }
-      }
     }
 
-    // Generate headers schema with deduplication
     if (names.headersSchemaName && headerParams.length > 0) {
-      const headersSchema: AnySchema = {
-        type: "object",
-        properties: Object.fromEntries(
-          headerParams.map((p) => [p.name, p.schema]),
-        ),
-        required: headerParams.filter((p) => p.required).map((p) => p.name),
-      };
-
-      const { isNew, canonicalName } = registerSchema(
-        registry,
+      registerAndDeclare(
         names.headersSchemaName,
-        headersSchema,
+        buildOpenApiObjectSchema(headerParams),
+        buildZodObjectSchema(headerParams, { optionalizeNonRequired: true }),
       );
-      schemaNameToCanonical.set(names.headersSchemaName, canonicalName);
-
-      if (isNew && !generatedNames.has(names.headersSchemaName)) {
-        generatedNames.add(names.headersSchemaName);
-        const properties: string[] = [];
-        for (const param of headerParams) {
-          let zodExpr = convertSchema(param.schema);
-          if (!param.required) {
-            zodExpr += ".optional()";
-          }
-          properties.push(`${quotePropertyName(param.name)}: ${zodExpr}`);
-        }
-        declarations.push(
-          `export const ${names.headersSchemaName} = z.object({ ${properties.join(", ")} });`,
-        );
-      } else if (!isNew && names.headersSchemaName !== canonicalName) {
-        if (!generatedNames.has(names.headersSchemaName)) {
-          generatedNames.add(names.headersSchemaName);
-          declarations.push(
-            `export const ${names.headersSchemaName} = ${canonicalName};`,
-          );
-        }
-      }
     }
 
-    // Generate body schema with deduplication
     if (names.bodySchemaName && route.requestBody) {
-      const { isNew, canonicalName } = registerSchema(
-        registry,
+      registerAndDeclare(
         names.bodySchemaName,
         route.requestBody,
+        convertSchema(route.requestBody),
       );
-      schemaNameToCanonical.set(names.bodySchemaName, canonicalName);
-
-      if (isNew && !generatedNames.has(names.bodySchemaName)) {
-        generatedNames.add(names.bodySchemaName);
-        const zodExpr = convertSchema(route.requestBody);
-        declarations.push(`export const ${names.bodySchemaName} = ${zodExpr};`);
-      } else if (!isNew && names.bodySchemaName !== canonicalName) {
-        if (!generatedNames.has(names.bodySchemaName)) {
-          generatedNames.add(names.bodySchemaName);
-          declarations.push(
-            `export const ${names.bodySchemaName} = ${canonicalName};`,
-          );
-        }
-      }
     }
 
-    // Generate schemas for ALL status codes with deduplication
     for (const [statusCode, responseSchema] of Object.entries(
       route.responses,
     )) {
@@ -229,25 +165,11 @@ function generateRouteSchemas(
         suffix,
       );
 
-      const { isNew, canonicalName } = registerSchema(
-        registry,
+      registerAndDeclare(
         responseSchemaName,
         responseSchema,
+        convertSchema(responseSchema),
       );
-      schemaNameToCanonical.set(responseSchemaName, canonicalName);
-
-      if (isNew && !generatedNames.has(responseSchemaName)) {
-        generatedNames.add(responseSchemaName);
-        const zodExpr = convertSchema(responseSchema);
-        declarations.push(`export const ${responseSchemaName} = ${zodExpr};`);
-      } else if (!isNew && responseSchemaName !== canonicalName) {
-        if (!generatedNames.has(responseSchemaName)) {
-          generatedNames.add(responseSchemaName);
-          declarations.push(
-            `export const ${responseSchemaName} = ${canonicalName};`,
-          );
-        }
-      }
     }
   }
 
