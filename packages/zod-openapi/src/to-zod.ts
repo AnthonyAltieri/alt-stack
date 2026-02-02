@@ -10,19 +10,19 @@ import type { AnySchema } from "./types/types";
 export function convertSchemaToZodString(schema: AnySchema): string {
   if (!schema || typeof schema !== "object") return "z.unknown()";
 
+  const isNullable = schema["nullable"] === true;
+
   if (schema["$ref"] && typeof schema["$ref"] === "string") {
     const match = (schema["$ref"] as string).match(
       /#\/components\/schemas\/(.+)/,
     );
-    let result = "z.unknown()";
+    let result: string = "z.unknown()";
     if (match && match[1]) {
       result = `${match[1]}Schema`;
     }
-    if (schema["nullable"] === true) {
-      result = `z.union([${result}, z.null()])`;
-    }
-    return result;
+    return isNullable ? `${result}.nullable()` : result;
   }
+
   let result: string = "z.unknown()";
 
   if ("oneOf" in schema && Array.isArray(schema["oneOf"])) {
@@ -104,9 +104,5 @@ export function convertSchemaToZodString(schema: AnySchema): string {
     }
   }
 
-  if (schema["nullable"] === true) {
-    result = `z.union([${result}, z.null()])`;
-  }
-
-  return result;
+  return isNullable ? `${result}.nullable()` : result;
 }

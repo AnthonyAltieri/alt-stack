@@ -82,7 +82,7 @@ describe("convertSchemaToZodString", () => {
         $ref: "#/components/schemas/User",
         nullable: true,
       });
-      expect(result).toBe("z.union([UserSchema, z.null()])");
+      expect(result).toBe("UserSchema.nullable()");
     });
 
     it("should handle invalid $ref format", () => {
@@ -106,7 +106,7 @@ describe("convertSchemaToZodString", () => {
         type: "string",
         nullable: true,
       });
-      expect(result).toBe("z.union([z.string(), z.null()])");
+      expect(result).toBe("z.string().nullable()");
     });
 
     it("should add nullable modifier to number", () => {
@@ -114,7 +114,7 @@ describe("convertSchemaToZodString", () => {
         type: "number",
         nullable: true,
       });
-      expect(result).toBe("z.union([z.number(), z.null()])");
+      expect(result).toBe("z.number().nullable()");
     });
 
     it("should add nullable modifier to array", () => {
@@ -123,7 +123,7 @@ describe("convertSchemaToZodString", () => {
         items: { type: "string" },
         nullable: true,
       });
-      expect(result).toBe("z.union([z.array(z.string()), z.null()])");
+      expect(result).toBe("z.array(z.string()).nullable()");
     });
 
     it("should not add nullable when false", () => {
@@ -139,7 +139,7 @@ describe("convertSchemaToZodString", () => {
         oneOf: [{ type: "string" }, { type: "number" }],
         nullable: true,
       });
-      expect(result).toBe("z.union([z.union([z.string(), z.number()]), z.null()])");
+      expect(result).toBe("z.union([z.string(), z.number()]).nullable()");
     });
 
     it("should add nullable modifier to intersection", () => {
@@ -147,7 +147,7 @@ describe("convertSchemaToZodString", () => {
         allOf: [{ type: "string" }, { type: "number" }],
         nullable: true,
       });
-      expect(result).toBe("z.union([z.intersection(z.string(), z.number()), z.null()])");
+      expect(result).toBe("z.intersection(z.string(), z.number()).nullable()");
     });
 
     it("should add nullable modifier to object", () => {
@@ -159,7 +159,7 @@ describe("convertSchemaToZodString", () => {
         required: ["name"],
         nullable: true,
       });
-      expect(result).toBe("z.union([z.object({ name: z.string() }), z.null()])");
+      expect(result).toBe("z.object({ name: z.string() }).nullable()");
     });
   });
 
@@ -484,4 +484,3 @@ describe("openApiToZodTsCode", () => {
     });
   });
 });
-
