@@ -1,0 +1,668 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Alt Stack Master OpenAPI Test Spec",
+    "version": "0.0.0"
+  },
+  "paths": {
+    "/users/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          },
+          {
+            "name": "includeProfile",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "x-trace-id",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "minLength": 8 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/User" }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/UnauthorizedError" }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/NotFoundError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateUser" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/User" }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ValidationError" }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/UnauthorizedError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pets": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Pet" }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/UnauthorizedError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stats": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "count": { "type": "integer", "minimum": 0 }
+                  },
+                  "required": ["count"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/UnauthorizedError" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ScalarString": {
+        "type": "string",
+        "x-altstack-examples": {
+          "valid": ["hello"],
+          "invalid": [123]
+        }
+      },
+      "StringEmail": {
+        "type": "string",
+        "format": "email",
+        "x-altstack-examples": {
+          "valid": ["test@example.com"],
+          "invalid": ["not-an-email"]
+        }
+      },
+      "StringUrl": {
+        "type": "string",
+        "format": "url",
+        "x-altstack-examples": {
+          "valid": ["https://example.com/path?q=1"],
+          "invalid": ["not a url"]
+        }
+      },
+      "StringUri": {
+        "type": "string",
+        "format": "uri",
+        "x-altstack-examples": {
+          "valid": ["https://example.com"],
+          "invalid": ["not a uri"]
+        }
+      },
+      "StringUuid": {
+        "type": "string",
+        "format": "uuid",
+        "x-altstack-examples": {
+          "valid": ["550e8400-e29b-41d4-a716-446655440000"],
+          "invalid": ["not-a-uuid"]
+        }
+      },
+      "StringColorHex": {
+        "type": "string",
+        "format": "color-hex",
+        "x-altstack-examples": {
+          "valid": ["ffffff", "Aa00Ff"],
+          "invalid": ["fff", "gggggg"]
+        }
+      },
+      "StringPattern": {
+        "type": "string",
+        "pattern": "^[a-z]+$",
+        "x-altstack-examples": {
+          "valid": ["abc"],
+          "invalid": ["abc123"]
+        }
+      },
+      "StringMinMax": {
+        "type": "string",
+        "minLength": 2,
+        "maxLength": 5,
+        "x-altstack-examples": {
+          "valid": ["ab", "abcde"],
+          "invalid": ["a", "abcdef"]
+        }
+      },
+      "StringAllConstraints": {
+        "type": "string",
+        "format": "email",
+        "minLength": 6,
+        "maxLength": 50,
+        "pattern": ".*@example\\.com$",
+        "x-altstack-examples": {
+          "valid": ["person@example.com"],
+          "invalid": ["person@other.com"]
+        }
+      },
+      "StringEnum": {
+        "type": "string",
+        "enum": ["red", "green", "blue"],
+        "x-altstack-examples": {
+          "valid": ["red"],
+          "invalid": ["purple"]
+        }
+      },
+      "NumberMinMax": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 10,
+        "x-altstack-examples": {
+          "valid": [0, 5, 10],
+          "invalid": [-1, 11, "5"]
+        }
+      },
+      "IntegerMinMax": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100,
+        "x-altstack-examples": {
+          "valid": [1, 50, 100],
+          "invalid": [0, 101, 1.5]
+        }
+      },
+      "ScalarBoolean": {
+        "type": "boolean",
+        "x-altstack-examples": {
+          "valid": [true, false],
+          "invalid": ["true"]
+        }
+      },
+      "ArrayOfStrings": {
+        "type": "array",
+        "items": { "type": "string" },
+        "minItems": 1,
+        "maxItems": 3,
+        "x-altstack-examples": {
+          "valid": [["a"], ["a", "b", "c"]],
+          "invalid": [[], ["a", "b", "c", "d"], "not-an-array"]
+        }
+      },
+      "ArrayOfUuids": {
+        "type": "array",
+        "items": { "$ref": "#/components/schemas/StringUuid" },
+        "x-altstack-examples": {
+          "valid": [["550e8400-e29b-41d4-a716-446655440000"]],
+          "invalid": [["not-a-uuid"]]
+        }
+      },
+      "ArrayOfUnion": {
+        "type": "array",
+        "items": {
+          "oneOf": [{ "type": "string" }, { "type": "number" }]
+        },
+        "x-altstack-examples": {
+          "valid": [["hello", 5]],
+          "invalid": [[true]]
+        }
+      },
+      "ImplicitObject": {
+        "type": "object",
+        "properties": {
+          "id": { "$ref": "#/components/schemas/StringUuid" }
+        },
+        "required": ["id"],
+        "additionalProperties": false,
+        "x-altstack-examples": {
+          "valid": [{ "id": "550e8400-e29b-41d4-a716-446655440000" }],
+          "invalid": [{}, { "id": "not-a-uuid" }]
+        }
+      },
+      "ObjectSimple": {
+        "type": "object",
+        "properties": {
+          "id": { "$ref": "#/components/schemas/StringUuid" },
+          "count": { "$ref": "#/components/schemas/IntegerMinMax" }
+        },
+        "required": ["id"],
+        "x-altstack-examples": {
+          "valid": [{ "id": "550e8400-e29b-41d4-a716-446655440000", "count": 10 }],
+          "invalid": [{ "count": 10 }, { "id": 123 }]
+        }
+      },
+      "ObjectOptionalAndNullable": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "nickname": { "type": "string", "nullable": true },
+          "x-rate-limit": { "type": "integer", "minimum": 0 }
+        },
+        "required": ["name"],
+        "x-altstack-examples": {
+          "valid": [
+            { "name": "Ada", "nickname": null },
+            { "name": "Ada", "nickname": "ace", "x-rate-limit": 10 }
+          ],
+          "invalid": [{ "nickname": "missing name" }]
+        }
+      },
+      "EmptyObjectStrict": {
+        "type": "object",
+        "additionalProperties": false,
+        "x-altstack-examples": {
+          "valid": [{}],
+          "invalid": [{ "extra": 1 }]
+        }
+      },
+      "FreeformObject": {
+        "type": "object",
+        "x-altstack-examples": {
+          "valid": [{ "a": 1, "b": "two" }],
+          "invalid": [123]
+        }
+      },
+      "Named": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "minLength": 1 }
+        },
+        "required": ["name"],
+        "x-altstack-examples": {
+          "valid": [{ "name": "Thing" }],
+          "invalid": [{}]
+        }
+      },
+      "Timestamped": {
+        "type": "object",
+        "properties": {
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time", "nullable": true }
+        },
+        "required": ["createdAt"],
+        "x-altstack-examples": {
+          "valid": [{ "createdAt": "2020-01-01T00:00:00.000Z", "updatedAt": null }],
+          "invalid": [{ "createdAt": 1 }]
+        }
+      },
+      "Audited": {
+        "type": "object",
+        "properties": {
+          "createdBy": { "type": "string", "minLength": 1 },
+          "updatedBy": { "type": "string", "nullable": true }
+        },
+        "required": ["createdBy"],
+        "x-altstack-examples": {
+          "valid": [{ "createdBy": "user_1", "updatedBy": null }],
+          "invalid": [{}]
+        }
+      },
+      "NamedTimestamped": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Named" },
+          { "$ref": "#/components/schemas/Timestamped" }
+        ],
+        "x-altstack-examples": {
+          "valid": [{ "name": "Thing", "createdAt": "2020-01-01T00:00:00.000Z" }],
+          "invalid": [{ "name": "Thing" }]
+        }
+      },
+      "FullAuditRecord": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Named" },
+          { "$ref": "#/components/schemas/Timestamped" },
+          { "$ref": "#/components/schemas/Audited" }
+        ],
+        "x-altstack-examples": {
+          "valid": [
+            {
+              "name": "Thing",
+              "createdAt": "2020-01-01T00:00:00.000Z",
+              "createdBy": "user_1"
+            }
+          ],
+          "invalid": [
+            { "name": "Thing", "createdAt": "2020-01-01T00:00:00.000Z" }
+          ]
+        }
+      },
+      "Cat": {
+        "type": "object",
+        "properties": {
+          "kind": { "type": "string", "enum": ["cat"] },
+          "meows": { "type": "boolean" }
+        },
+        "required": ["kind", "meows"],
+        "additionalProperties": false,
+        "x-altstack-examples": {
+          "valid": [{ "kind": "cat", "meows": true }],
+          "invalid": [{ "kind": "cat" }]
+        }
+      },
+      "Dog": {
+        "type": "object",
+        "properties": {
+          "kind": { "type": "string", "enum": ["dog"] },
+          "barks": { "type": "boolean" }
+        },
+        "required": ["kind", "barks"],
+        "additionalProperties": false,
+        "x-altstack-examples": {
+          "valid": [{ "kind": "dog", "barks": true }],
+          "invalid": [{ "kind": "dog" }]
+        }
+      },
+      "Pet": {
+        "oneOf": [
+          { "$ref": "#/components/schemas/Cat" },
+          { "$ref": "#/components/schemas/Dog" }
+        ],
+        "discriminator": {
+          "propertyName": "kind",
+          "mapping": {
+            "cat": "#/components/schemas/Cat",
+            "dog": "#/components/schemas/Dog"
+          }
+        },
+        "x-altstack-examples": {
+          "valid": [{ "kind": "cat", "meows": true }, { "kind": "dog", "barks": false }],
+          "invalid": [{ "kind": "cat", "barks": true }]
+        }
+      },
+      "UserCreatedEvent": {
+        "type": "object",
+        "properties": {
+          "eventType": { "type": "string", "enum": ["user.created"] },
+          "data": { "$ref": "#/components/schemas/User" }
+        },
+        "required": ["eventType", "data"],
+        "additionalProperties": false,
+        "x-altstack-examples": {
+          "valid": [
+            {
+              "eventType": "user.created",
+              "data": {
+                "id": "550e8400-e29b-41d4-a716-446655440000",
+                "name": "Ada",
+                "email": "test@example.com",
+                "roles": ["red"],
+                "profile": null
+              }
+            }
+          ],
+          "invalid": [{ "eventType": "user.created" }]
+        }
+      },
+      "PetAdoptedEvent": {
+        "type": "object",
+        "properties": {
+          "eventType": { "type": "string", "enum": ["pet.adopted"] },
+          "data": { "$ref": "#/components/schemas/Pet" }
+        },
+        "required": ["eventType", "data"],
+        "additionalProperties": false,
+        "x-altstack-examples": {
+          "valid": [
+            {
+              "eventType": "pet.adopted",
+              "data": { "kind": "dog", "barks": true }
+            }
+          ],
+          "invalid": [{ "eventType": "pet.adopted" }]
+        }
+      },
+      "Event": {
+        "oneOf": [
+          { "$ref": "#/components/schemas/UserCreatedEvent" },
+          { "$ref": "#/components/schemas/PetAdoptedEvent" }
+        ],
+        "discriminator": {
+          "propertyName": "eventType",
+          "mapping": {
+            "user.created": "#/components/schemas/UserCreatedEvent",
+            "pet.adopted": "#/components/schemas/PetAdoptedEvent"
+          }
+        },
+        "x-altstack-examples": {
+          "valid": [
+            {
+              "eventType": "user.created",
+              "data": {
+                "id": "550e8400-e29b-41d4-a716-446655440000",
+                "name": "Ada",
+                "email": "test@example.com",
+                "roles": ["red"],
+                "profile": null
+              }
+            },
+            {
+              "eventType": "pet.adopted",
+              "data": { "kind": "cat", "meows": true }
+            }
+          ],
+          "invalid": [
+            {
+              "eventType": "user.created",
+              "data": { "kind": "cat", "meows": true }
+            },
+            {
+              "eventType": "pet.adopted",
+              "data": {
+                "id": "550e8400-e29b-41d4-a716-446655440000",
+                "name": "Ada",
+                "email": "test@example.com",
+                "roles": ["red"],
+                "profile": null
+              }
+            }
+          ]
+        }
+      },
+      "Profile": {
+        "type": "object",
+        "properties": {
+          "bio": { "type": "string", "maxLength": 160 },
+          "website": { "$ref": "#/components/schemas/StringUrl", "nullable": true },
+          "location": { "type": "string", "nullable": true }
+        },
+        "required": ["bio"],
+        "additionalProperties": false,
+        "x-altstack-examples": {
+          "valid": [{ "bio": "Hello", "website": null }],
+          "invalid": [{ "bio": 123 }]
+        }
+      },
+      "CreateUser": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "email": { "$ref": "#/components/schemas/StringEmail" },
+          "profile": { "$ref": "#/components/schemas/Profile", "nullable": true }
+        },
+        "required": ["name", "email"],
+        "additionalProperties": false,
+        "x-altstack-examples": {
+          "valid": [
+            { "name": "Ada", "email": "test@example.com", "profile": null }
+          ],
+          "invalid": [{ "name": "Ada" }]
+        }
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": { "$ref": "#/components/schemas/StringUuid" },
+          "name": { "type": "string", "minLength": 1 },
+          "email": { "$ref": "#/components/schemas/StringEmail" },
+          "roles": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/StringEnum" },
+            "minItems": 1
+          },
+          "profile": { "$ref": "#/components/schemas/Profile", "nullable": true }
+        },
+        "required": ["id", "name", "email", "roles"],
+        "additionalProperties": false,
+        "x-altstack-examples": {
+          "valid": [
+            {
+              "id": "550e8400-e29b-41d4-a716-446655440000",
+              "name": "Ada",
+              "email": "test@example.com",
+              "roles": ["red"],
+              "profile": null
+            }
+          ],
+          "invalid": [{ "id": "not-a-uuid", "name": "Ada", "email": "test@example.com", "roles": ["red"] }]
+        }
+      },
+      "NullableUser": {
+        "$ref": "#/components/schemas/User",
+        "nullable": true,
+        "x-altstack-examples": {
+          "valid": [null, { "id": "550e8400-e29b-41d4-a716-446655440000", "name": "Ada", "email": "test@example.com", "roles": ["red"], "profile": null }],
+          "invalid": ["not-a-user"]
+        }
+      },
+      "UnauthorizedError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string", "enum": ["UNAUTHORIZED"] },
+              "message": { "type": "string", "minLength": 1 }
+            },
+            "required": ["code", "message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["error"],
+        "additionalProperties": false,
+        "x-altstack-examples": {
+          "valid": [{ "error": { "code": "UNAUTHORIZED", "message": "nope" } }],
+          "invalid": [{ "error": { "code": "UNAUTHORIZED" } }]
+        }
+      },
+      "NotFoundError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string", "enum": ["NOT_FOUND"] },
+              "message": { "type": "string", "minLength": 1 }
+            },
+            "required": ["code", "message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["error"],
+        "additionalProperties": false,
+        "x-altstack-examples": {
+          "valid": [{ "error": { "code": "NOT_FOUND", "message": "missing" } }],
+          "invalid": [{ "error": { "code": "NOT_FOUND" } }]
+        }
+      },
+      "ValidationError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string", "enum": ["VALIDATION_ERROR"] },
+              "message": { "type": "string", "minLength": 1 }
+            },
+            "required": ["code", "message"],
+            "additionalProperties": false
+          },
+          "details": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "required": ["error"],
+        "additionalProperties": false,
+        "x-altstack-examples": {
+          "valid": [{ "error": { "code": "VALIDATION_ERROR", "message": "bad" }, "details": ["field required"] }],
+          "invalid": [{ "details": ["field required"] }]
+        }
+      }
+    }
+  }
+}

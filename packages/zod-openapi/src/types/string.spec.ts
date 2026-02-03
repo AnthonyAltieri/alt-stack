@@ -66,7 +66,9 @@ describe("convertOpenAPIStringToZod", () => {
         type: "string",
         format: "email",
       });
-      expect(result).toBe("z.string().email()");
+      expect(result).toBe(
+        `z.string().email().meta(${JSON.stringify({ openapi: { format: "email" } })})`,
+      );
     });
 
     it("should convert url format", () => {
@@ -74,7 +76,9 @@ describe("convertOpenAPIStringToZod", () => {
         type: "string",
         format: "url",
       });
-      expect(result).toBe("z.string().url()");
+      expect(result).toBe(
+        `z.string().url().meta(${JSON.stringify({ openapi: { format: "url" } })})`,
+      );
     });
 
     it("should convert uri format to url", () => {
@@ -82,7 +86,9 @@ describe("convertOpenAPIStringToZod", () => {
         type: "string",
         format: "uri",
       });
-      expect(result).toBe("z.string().url()");
+      expect(result).toBe(
+        `z.string().url().meta(${JSON.stringify({ openapi: { format: "uri" } })})`,
+      );
     });
 
     it("should convert uuid format", () => {
@@ -90,7 +96,9 @@ describe("convertOpenAPIStringToZod", () => {
         type: "string",
         format: "uuid",
       });
-      expect(result).toBe("z.string().uuid()");
+      expect(result).toBe(
+        `z.string().uuid().meta(${JSON.stringify({ openapi: { format: "uuid" } })})`,
+      );
     });
 
     it("should convert color-hex format", () => {
@@ -98,7 +106,9 @@ describe("convertOpenAPIStringToZod", () => {
         type: "string",
         format: "color-hex",
       });
-      expect(result).toBe("z.string().regex(/^[a-fA-F0-9]{6}$/)");
+      expect(result).toBe(
+        `z.string().regex(/^[a-fA-F0-9]{6}$/).meta(${JSON.stringify({ openapi: { format: "color-hex" } })})`,
+      );
     });
 
     it("should ignore unknown format", () => {
@@ -106,7 +116,9 @@ describe("convertOpenAPIStringToZod", () => {
         type: "string",
         format: "unsupported-format",
       });
-      expect(result).toBe("z.string()");
+      expect(result).toBe(
+        `z.string().meta(${JSON.stringify({ openapi: { format: "unsupported-format" } })})`,
+      );
     });
   });
 
@@ -215,16 +227,20 @@ describe("convertOpenAPIStringToZod", () => {
         type: "string",
         pattern: "^[A-Z]+$",
       });
-      expect(result).toBe("z.string().regex(/^[A-Z]+$/)");
+      expect(result).toBe(
+        `z.string().regex(/^[A-Z]+$/).meta(${JSON.stringify({ openapi: { pattern: "^[A-Z]+$" } })})`,
+      );
     });
 
     it("should handle complex regex pattern", () => {
+      const pattern =
+        "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$";
       const result = convertOpenAPIStringToZod({
         type: "string",
-        pattern: "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$",
+        pattern,
       });
       expect(result).toBe(
-        "z.string().regex(/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$/)",
+        `z.string().regex(/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$/).meta(${JSON.stringify({ openapi: { pattern } })})`,
       );
     });
 
@@ -245,39 +261,48 @@ describe("convertOpenAPIStringToZod", () => {
         minLength: 5,
         maxLength: 100,
       });
-      expect(result).toBe("z.string().email().min(5).max(100)");
+      expect(result).toBe(
+        `z.string().email().min(5).max(100).meta(${JSON.stringify({ openapi: { format: "email" } })})`,
+      );
     });
 
     it("should combine format and pattern constraints", () => {
+      const pattern = "^[a-f0-9-]+$";
       const result = convertOpenAPIStringToZod({
         type: "string",
         format: "uuid",
-        pattern: "^[a-f0-9-]+$",
+        pattern,
       });
-      expect(result).toBe("z.string().uuid().regex(/^[a-f0-9-]+$/)");
+      expect(result).toBe(
+        `z.string().uuid().regex(/^[a-f0-9-]+$/).meta(${JSON.stringify({ openapi: { format: "uuid", pattern } })})`,
+      );
     });
 
     it("should combine all constraints", () => {
+      const pattern = ".*@example\\.com$";
       const result = convertOpenAPIStringToZod({
         type: "string",
         format: "email",
         minLength: 10,
         maxLength: 50,
-        pattern: ".*@example\\.com$",
+        pattern,
       });
       expect(result).toBe(
-        "z.string().email().min(10).max(50).regex(/.*@example\\.com$/)",
+        `z.string().email().min(10).max(50).regex(/.*@example\\.com$/).meta(${JSON.stringify({ openapi: { format: "email", pattern } })})`,
       );
     });
 
     it("should combine length and pattern without format", () => {
+      const pattern = "^[a-z]+$";
       const result = convertOpenAPIStringToZod({
         type: "string",
         minLength: 3,
         maxLength: 20,
-        pattern: "^[a-z]+$",
+        pattern,
       });
-      expect(result).toBe("z.string().min(3).max(20).regex(/^[a-z]+$/)");
+      expect(result).toBe(
+        `z.string().min(3).max(20).regex(/^[a-z]+$/).meta(${JSON.stringify({ openapi: { pattern } })})`,
+      );
     });
   });
 
@@ -304,18 +329,23 @@ describe("convertOpenAPIStringToZod", () => {
         type: "string",
         pattern: "",
       });
-      expect(result).toBe("z.string().regex(//)");
+      expect(result).toBe(
+        `z.string().regex(//).meta(${JSON.stringify({ openapi: { pattern: "" } })})`,
+      );
     });
 
     it("should maintain order: format, minLength, maxLength, pattern", () => {
+      const pattern = "^test$";
       const result = convertOpenAPIStringToZod({
         type: "string",
-        pattern: "^test$",
+        pattern,
         maxLength: 20,
         minLength: 5,
         format: "url",
       });
-      expect(result).toBe("z.string().url().min(5).max(20).regex(/^test$/)");
+      expect(result).toBe(
+        `z.string().url().min(5).max(20).regex(/^test$/).meta(${JSON.stringify({ openapi: { format: "url", pattern } })})`,
+      );
     });
 
     it("should handle only maxLength without minLength", () => {
@@ -324,15 +354,20 @@ describe("convertOpenAPIStringToZod", () => {
         format: "email",
         maxLength: 100,
       });
-      expect(result).toBe("z.string().email().max(100)");
+      expect(result).toBe(
+        `z.string().email().max(100).meta(${JSON.stringify({ openapi: { format: "email" } })})`,
+      );
     });
 
     it("should handle only pattern without other constraints", () => {
+      const pattern = "\\d{3}-\\d{4}";
       const result = convertOpenAPIStringToZod({
         type: "string",
-        pattern: "\\d{3}-\\d{4}",
+        pattern,
       });
-      expect(result).toBe("z.string().regex(/\\d{3}-\\d{4}/)");
+      expect(result).toBe(
+        `z.string().regex(/\\d{3}-\\d{4}/).meta(${JSON.stringify({ openapi: { pattern } })})`,
+      );
     });
   });
 
@@ -342,7 +377,9 @@ describe("convertOpenAPIStringToZod", () => {
         type: "string",
         format: "date",
       });
-      expect(result).toBe("z.string()");
+      expect(result).toBe(
+        `z.string().date().meta(${JSON.stringify({ openapi: { format: "date" } })})`,
+      );
     });
 
     it("should handle date-time format without built-in modifier", () => {
@@ -350,7 +387,9 @@ describe("convertOpenAPIStringToZod", () => {
         type: "string",
         format: "date-time",
       });
-      expect(result).toBe("z.string()");
+      expect(result).toBe(
+        `z.string().datetime().meta(${JSON.stringify({ openapi: { format: "date-time" } })})`,
+      );
     });
 
     it("should handle objectid format without built-in modifier", () => {
@@ -358,7 +397,9 @@ describe("convertOpenAPIStringToZod", () => {
         type: "string",
         format: "objectid",
       });
-      expect(result).toBe("z.string()");
+      expect(result).toBe(
+        `z.string().meta(${JSON.stringify({ openapi: { format: "objectid" } })})`,
+      );
     });
 
     it("should apply constraints to supported formats without built-in modifiers", () => {
@@ -368,7 +409,9 @@ describe("convertOpenAPIStringToZod", () => {
         minLength: 10,
         maxLength: 10,
       });
-      expect(result).toBe("z.string().min(10).max(10)");
+      expect(result).toBe(
+        `z.string().date().min(10).max(10).meta(${JSON.stringify({ openapi: { format: "date" } })})`,
+      );
     });
   });
 
@@ -388,7 +431,9 @@ describe("convertOpenAPIStringToZod", () => {
         format: "email",
       });
       // Should use built-in email format, not custom schema
-      expect(result).toBe("z.string().email()");
+      expect(result).toBe(
+        `z.string().email().meta(${JSON.stringify({ openapi: { format: "email" } })})`,
+      );
     });
 
     it("should handle multiple schemas registered for different formats", () => {
@@ -424,7 +469,9 @@ describe("convertOpenAPIStringToZod", () => {
         type: "string",
         format: "url",
       });
-      expect(urlResult).toBe("z.string().url()");
+      expect(urlResult).toBe(
+        `z.string().url().meta(${JSON.stringify({ openapi: { format: "url" } })})`,
+      );
     });
   });
 });

@@ -41,7 +41,7 @@ describe("convertOpenAPIIntersectionToZod", () => {
         mockConvertSchema,
       );
       expect(result).toBe(
-        "z.intersection(z.string(), z.number(), z.boolean())",
+        "z.intersection(z.intersection(z.string(), z.number()), z.boolean())",
       );
     });
 
@@ -101,7 +101,7 @@ describe("convertOpenAPIIntersectionToZod", () => {
         mockConvertSchema,
       );
       expect(result).toBe(
-        "z.intersection(z.boolean(), z.number(), z.string())",
+        "z.intersection(z.intersection(z.boolean(), z.number()), z.string())",
       );
     });
   });
