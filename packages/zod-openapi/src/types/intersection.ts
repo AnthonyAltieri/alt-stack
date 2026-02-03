@@ -9,6 +9,9 @@ export function convertOpenAPIIntersectionToZod(
   if (schema.allOf.length === 0) return "z.unknown()";
   if (schema.allOf.length === 1) return convertSchema(schema.allOf[0]!);
 
-  return `z.intersection(${items.join(", ")})`;
+  let result = `z.intersection(${items[0]}, ${items[1]})`;
+  for (let i = 2; i < items.length; i++) {
+    result = `z.intersection(${result}, ${items[i]})`;
+  }
+  return result;
 }
-
