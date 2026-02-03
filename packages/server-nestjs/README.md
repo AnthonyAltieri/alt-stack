@@ -48,6 +48,40 @@ export const apiRouter = router({
 });
 ```
 
+## Nest middleware (Alt Stack middleware)
+
+You can also author Nest (Express) middleware using Alt Stack middleware builders. Context overrides are stored on the request and merged into `ctx` for Alt Stack handlers in the same request.
+
+```ts
+import { createNestMiddleware, createMiddlewareWithErrors, err, TaggedError } from "@alt-stack/server-nestjs";
+import { z } from "zod";
+import { AuthService } from "./auth.service";
+
+class UnauthorizedError extends TaggedError {
+  readonly _tag = "UnauthorizedError" as const;
+  constructor(message = "Unauthorized") {
+    super(message);
+  }
+}
+
+const authMiddleware = createMiddlewareWithErrors<any>()
+  .errors({ 401: z.object({ _tag: z.literal("UnauthorizedError") }) })
+  .fn(async ({ ctx, next }) => {
+    const token = ctx.express.req.headers.authorization;
+    if (!token) return err(new UnauthorizedError());
+
+    const auth = ctx.nest.get(AuthService);
+    const user = await auth.verify(token);
+
+    return next({ ctx: { user } });
+  });
+
+// In main.ts, before `registerAltStack(...)`:
+app.use(createNestMiddleware(app, authMiddleware));
+```
+
+Note: since this runs outside Alt Stack’s procedure builder, TypeScript can’t automatically narrow the handler context. Model any injected fields (like `user`) in your `init<TCustomContext>()` type.
+
 ## Migration to Bun/Fastify
 
 Keep your route code depending only on the small `ctx.nest.get/resolve` contract. When you move off Nest, provide the same shape from your runtime’s `createContext()`:

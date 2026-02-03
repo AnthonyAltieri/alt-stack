@@ -6,6 +6,7 @@ import type { Router } from "@alt-stack/server-core";
 import { createDocsRouter, createServer } from "@alt-stack/server-express";
 import type { CreateDocsRouterOptions } from "@alt-stack/server-express";
 import type { NestBaseContext, NestServiceLocator } from "./types.js";
+import { readAltStackRequestContext } from "./request-context.js";
 
 export interface NestAppLike {
   getHttpAdapter: () => { getInstance: () => unknown };
@@ -105,8 +106,10 @@ export function registerAltStack<TCustomContext extends object = Record<string, 
     createContext: async (req, res) => {
       const nest = createNestLocator(app);
       const extra = options?.createContext ? await options.createContext(req, res) : ({} as TCustomContext);
+      const fromMiddleware = readAltStackRequestContext(req) ?? ({} as TCustomContext);
       return {
         ...extra,
+        ...fromMiddleware,
         nest,
       } as Omit<NestBaseContext & TCustomContext, "express" | "span">;
     },

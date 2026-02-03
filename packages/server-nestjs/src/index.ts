@@ -107,6 +107,8 @@ export type {
 export { registerAltStack } from "./register.js";
 export type { NestAppLike, RegisterAltStackOptions, RegisterAltStackDocsOptions } from "./register.js";
 export type { NestBaseContext, NestServiceLocator } from "./types.js";
+export { createNestMiddleware } from "./middleware.js";
+export type { CreateNestMiddlewareOptions } from "./middleware.js";
 
 export function init<TCustomContext extends object = Record<string, never>>(
   options?: InitOptions<NestBaseContext & TCustomContext>,
@@ -135,4 +137,3 @@ export function mergeRouters<TCustomContext extends NestBaseContext = NestBaseCo
 ): Router<TCustomContext> {
   return baseMergeRouters<TCustomContext>(...routers) as Router<TCustomContext>;
 }
-

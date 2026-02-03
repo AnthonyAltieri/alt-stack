@@ -11,6 +11,7 @@ describe("registerAltStack()", () => {
   test("mounts Alt Stack app and injects ctx.nest", async () => {
     const { registerAltStack } = await import("./register.js");
     const { createServer } = await import("@alt-stack/server-express");
+    const { mergeAltStackRequestContext } = await import("./request-context.js");
 
     const expressUse = vi.fn();
     const diGet = vi.fn(() => ({ svc: true }));
@@ -31,9 +32,12 @@ describe("registerAltStack()", () => {
     expect(expressUse).toHaveBeenCalledWith("/api", { __alt: true });
 
     const [, serverOptions] = (createServer as any).mock.calls[0] as [unknown, any];
-    const ctx = await serverOptions.createContext({} as any, {} as any);
+    const req = {} as any;
+    mergeAltStackRequestContext(req, { fromMiddleware: true });
+    const ctx = await serverOptions.createContext(req, {} as any);
 
     expect(ctx.extra).toBe(123);
+    expect(ctx.fromMiddleware).toBe(true);
     expect(ctx.nest).toBeDefined();
     expect(typeof ctx.nest.get).toBe("function");
     expect(typeof ctx.nest.resolve).toBe("function");
@@ -78,4 +82,3 @@ describe("registerAltStack()", () => {
     ).toThrow(/platform-express/i);
   });
 });
-
