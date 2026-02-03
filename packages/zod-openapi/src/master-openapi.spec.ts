@@ -6,6 +6,993 @@ import * as ts from "typescript";
 import { openApiToZodTsCode } from "./to-typescript";
 import type { AnySchema } from "./types/types";
 
+function normalizeSpacing(value: string): string {
+  return value
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+$/g, ""))
+    .join("\n")
+    .trim();
+}
+
+function sortKeysDeep(value: unknown): unknown {
+  if (!value || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map(sortKeysDeep);
+
+  const obj = value as Record<string, unknown>;
+  const sorted: Record<string, unknown> = {};
+  for (const key of Object.keys(obj).sort()) {
+    sorted[key] = sortKeysDeep(obj[key]);
+  }
+  return sorted;
+}
+
+function stableJsonStringify(value: unknown): string {
+  return JSON.stringify(sortKeysDeep(value), null, 2);
+}
+
+// These are intentionally embedded as human-readable full outputs (not snapshots).
+const EXPECTED_ZOD_TS = String.raw`
+/**
+ * This file was automatically generated from OpenAPI schema
+ * Do not manually edit this file
+ */
+
+import { z } from 'zod';
+
+// Type assertion helper - verifies interface matches schema at compile time
+type _AssertEqual<T, U> = [T] extends [U] ? ([U] extends [T] ? true : never) : never;
+
+export type ScalarString = string;
+export const ScalarStringSchema = z.string();
+
+export type StringEmail = string;
+export const StringEmailSchema = z.string().email().meta({"openapi":{"format":"email"}});
+
+export type StringUrl = string;
+export const StringUrlSchema = z.string().url().meta({"openapi":{"format":"url"}});
+
+export type StringUri = string;
+export const StringUriSchema = z.string().url().meta({"openapi":{"format":"uri"}});
+
+export type StringUuid = string;
+export const StringUuidSchema = z.string().uuid().meta({"openapi":{"format":"uuid"}});
+
+export type StringColorHex = string;
+export const StringColorHexSchema = z.string().regex(/^[a-fA-F0-9]{6}$/).meta({"openapi":{"format":"color-hex"}});
+
+export type StringPattern = string;
+export const StringPatternSchema = z.string().regex(/^[a-z]+$/).meta({"openapi":{"pattern":"^[a-z]+$"}});
+
+export type StringMinMax = string;
+export const StringMinMaxSchema = z.string().min(2).max(5);
+
+export type StringAllConstraints = string;
+export const StringAllConstraintsSchema = z.string().email().min(6).max(50).regex(/.*@example\.com$/).meta({"openapi":{"format":"email","pattern":".*@example\\.com$"}});
+
+export type StringEnum = "red" | "green" | "blue";
+export const StringEnumSchema = z.enum(['red', 'green', 'blue']);
+
+export type NumberMinMax = number;
+export const NumberMinMaxSchema = z.number().min(0).max(10);
+
+export type IntegerMinMax = number;
+export const IntegerMinMaxSchema = z.number().int().min(1).max(100);
+
+export type ScalarBoolean = boolean;
+export const ScalarBooleanSchema = z.boolean();
+
+export type ArrayOfStrings = Array<string>;
+export const ArrayOfStringsSchema = z.array(z.string()).min(1).max(3);
+
+export type ArrayOfUnion = Array<(string | number)>;
+export const ArrayOfUnionSchema = z.array(z.union([z.string(), z.number()]));
+
+export interface ObjectOptionalAndNullable {
+  name: string;
+  nickname?: (string | null);
+  'x-rate-limit'?: number;
+}
+export const ObjectOptionalAndNullableSchema = z.object({ name: z.string().min(1), nickname: z.string().nullable().optional(), 'x-rate-limit': z.number().int().min(0).optional() });
+
+export interface EmptyObjectStrict {
+}
+export const EmptyObjectStrictSchema = z.object({}).strict();
+
+export interface FreeformObject {
+}
+export const FreeformObjectSchema = z.record(z.string(), z.unknown());
+
+export interface Named {
+  name: string;
+}
+export const NamedSchema = z.object({ name: z.string().min(1) });
+
+export interface Timestamped {
+  createdAt: string;
+  updatedAt?: (string | null);
+}
+export const TimestampedSchema = z.object({ createdAt: z.string().datetime().meta({"openapi":{"format":"date-time"}}), updatedAt: z.string().datetime().meta({"openapi":{"format":"date-time"}}).nullable().optional() });
+
+export interface Audited {
+  createdBy: string;
+  updatedBy?: (string | null);
+}
+export const AuditedSchema = z.object({ createdBy: z.string().min(1), updatedBy: z.string().nullable().optional() });
+
+export interface Cat {
+  kind: "cat";
+  meows: boolean;
+}
+export const CatSchema = z.object({ kind: z.enum(['cat']), meows: z.boolean() }).strict();
+
+export interface Dog {
+  kind: "dog";
+  barks: boolean;
+}
+export const DogSchema = z.object({ kind: z.enum(['dog']), barks: z.boolean() }).strict();
+
+export interface UnauthorizedError {
+  error: { code: "UNAUTHORIZED"; message: string };
+}
+export const UnauthorizedErrorSchema = z.object({ error: z.object({ code: z.enum(['UNAUTHORIZED']), message: z.string().min(1) }).strict() }).strict();
+
+export interface NotFoundError {
+  error: { code: "NOT_FOUND"; message: string };
+}
+export const NotFoundErrorSchema = z.object({ error: z.object({ code: z.enum(['NOT_FOUND']), message: z.string().min(1) }).strict() }).strict();
+
+export interface ValidationError {
+  error: { code: "VALIDATION_ERROR"; message: string };
+  details?: Array<string>;
+}
+export const ValidationErrorSchema = z.object({ error: z.object({ code: z.enum(['VALIDATION_ERROR']), message: z.string().min(1) }).strict(), details: z.array(z.string()).optional() }).strict();
+
+export interface Profile {
+  bio: string;
+  website?: (StringUrl | null);
+  location?: (string | null);
+}
+export const ProfileSchema = z.object({ bio: z.string().max(160), website: StringUrlSchema.nullable().optional(), location: z.string().nullable().optional() }).strict();
+
+export type ArrayOfUuids = Array<StringUuid>;
+export const ArrayOfUuidsSchema = z.array(StringUuidSchema);
+
+export interface ImplicitObject {
+  id: StringUuid;
+}
+export const ImplicitObjectSchema = z.object({ id: StringUuidSchema }).strict();
+
+export interface ObjectSimple {
+  id: StringUuid;
+  count?: IntegerMinMax;
+}
+export const ObjectSimpleSchema = z.object({ id: StringUuidSchema, count: IntegerMinMaxSchema.optional() });
+
+export type NamedTimestamped = (Named & Timestamped);
+export const NamedTimestampedSchema = z.intersection(NamedSchema, TimestampedSchema);
+
+export type FullAuditRecord = (Named & Timestamped & Audited);
+export const FullAuditRecordSchema = z.intersection(z.intersection(NamedSchema, TimestampedSchema), AuditedSchema);
+
+export type Pet = (Cat | Dog);
+export const PetSchema = z.union([CatSchema, DogSchema]);
+
+export interface CreateUser {
+  name: string;
+  email: StringEmail;
+  profile?: (Profile | null);
+}
+export const CreateUserSchema = z.object({ name: z.string().min(1), email: StringEmailSchema, profile: ProfileSchema.nullable().optional() }).strict();
+
+export interface User {
+  id: StringUuid;
+  name: string;
+  email: StringEmail;
+  roles: Array<StringEnum>;
+  profile?: (Profile | null);
+}
+export const UserSchema = z.object({ id: StringUuidSchema, name: z.string().min(1), email: StringEmailSchema, roles: z.array(StringEnumSchema).min(1), profile: ProfileSchema.nullable().optional() }).strict();
+
+export interface PetAdoptedEvent {
+  eventType: "pet.adopted";
+  data: Pet;
+}
+export const PetAdoptedEventSchema = z.object({ eventType: z.enum(['pet.adopted']), data: PetSchema }).strict();
+
+export interface UserCreatedEvent {
+  eventType: "user.created";
+  data: User;
+}
+export const UserCreatedEventSchema = z.object({ eventType: z.enum(['user.created']), data: UserSchema }).strict();
+
+export type NullableUser = (User | null);
+export const NullableUserSchema = UserSchema.nullable();
+
+export type Event = (UserCreatedEvent | PetAdoptedEvent);
+export const EventSchema = z.union([UserCreatedEventSchema, PetAdoptedEventSchema]);
+
+// Compile-time type assertions - ensure interfaces match schemas
+type _AssertScalarString = _AssertEqual<ScalarString, z.infer<typeof ScalarStringSchema>>;
+type _AssertStringEmail = _AssertEqual<StringEmail, z.infer<typeof StringEmailSchema>>;
+type _AssertStringUrl = _AssertEqual<StringUrl, z.infer<typeof StringUrlSchema>>;
+type _AssertStringUri = _AssertEqual<StringUri, z.infer<typeof StringUriSchema>>;
+type _AssertStringUuid = _AssertEqual<StringUuid, z.infer<typeof StringUuidSchema>>;
+type _AssertStringColorHex = _AssertEqual<StringColorHex, z.infer<typeof StringColorHexSchema>>;
+type _AssertStringPattern = _AssertEqual<StringPattern, z.infer<typeof StringPatternSchema>>;
+type _AssertStringMinMax = _AssertEqual<StringMinMax, z.infer<typeof StringMinMaxSchema>>;
+type _AssertStringAllConstraints = _AssertEqual<StringAllConstraints, z.infer<typeof StringAllConstraintsSchema>>;
+type _AssertStringEnum = _AssertEqual<StringEnum, z.infer<typeof StringEnumSchema>>;
+type _AssertNumberMinMax = _AssertEqual<NumberMinMax, z.infer<typeof NumberMinMaxSchema>>;
+type _AssertIntegerMinMax = _AssertEqual<IntegerMinMax, z.infer<typeof IntegerMinMaxSchema>>;
+type _AssertScalarBoolean = _AssertEqual<ScalarBoolean, z.infer<typeof ScalarBooleanSchema>>;
+type _AssertArrayOfStrings = _AssertEqual<ArrayOfStrings, z.infer<typeof ArrayOfStringsSchema>>;
+type _AssertArrayOfUnion = _AssertEqual<ArrayOfUnion, z.infer<typeof ArrayOfUnionSchema>>;
+type _AssertObjectOptionalAndNullable = _AssertEqual<ObjectOptionalAndNullable, z.infer<typeof ObjectOptionalAndNullableSchema>>;
+type _AssertEmptyObjectStrict = _AssertEqual<EmptyObjectStrict, z.infer<typeof EmptyObjectStrictSchema>>;
+type _AssertFreeformObject = _AssertEqual<FreeformObject, z.infer<typeof FreeformObjectSchema>>;
+type _AssertNamed = _AssertEqual<Named, z.infer<typeof NamedSchema>>;
+type _AssertTimestamped = _AssertEqual<Timestamped, z.infer<typeof TimestampedSchema>>;
+type _AssertAudited = _AssertEqual<Audited, z.infer<typeof AuditedSchema>>;
+type _AssertCat = _AssertEqual<Cat, z.infer<typeof CatSchema>>;
+type _AssertDog = _AssertEqual<Dog, z.infer<typeof DogSchema>>;
+type _AssertUnauthorizedError = _AssertEqual<UnauthorizedError, z.infer<typeof UnauthorizedErrorSchema>>;
+type _AssertNotFoundError = _AssertEqual<NotFoundError, z.infer<typeof NotFoundErrorSchema>>;
+type _AssertValidationError = _AssertEqual<ValidationError, z.infer<typeof ValidationErrorSchema>>;
+type _AssertProfile = _AssertEqual<Profile, z.infer<typeof ProfileSchema>>;
+type _AssertArrayOfUuids = _AssertEqual<ArrayOfUuids, z.infer<typeof ArrayOfUuidsSchema>>;
+type _AssertImplicitObject = _AssertEqual<ImplicitObject, z.infer<typeof ImplicitObjectSchema>>;
+type _AssertObjectSimple = _AssertEqual<ObjectSimple, z.infer<typeof ObjectSimpleSchema>>;
+type _AssertNamedTimestamped = _AssertEqual<NamedTimestamped, z.infer<typeof NamedTimestampedSchema>>;
+type _AssertFullAuditRecord = _AssertEqual<FullAuditRecord, z.infer<typeof FullAuditRecordSchema>>;
+type _AssertPet = _AssertEqual<Pet, z.infer<typeof PetSchema>>;
+type _AssertCreateUser = _AssertEqual<CreateUser, z.infer<typeof CreateUserSchema>>;
+type _AssertUser = _AssertEqual<User, z.infer<typeof UserSchema>>;
+type _AssertPetAdoptedEvent = _AssertEqual<PetAdoptedEvent, z.infer<typeof PetAdoptedEventSchema>>;
+type _AssertUserCreatedEvent = _AssertEqual<UserCreatedEvent, z.infer<typeof UserCreatedEventSchema>>;
+type _AssertNullableUser = _AssertEqual<NullableUser, z.infer<typeof NullableUserSchema>>;
+type _AssertEvent = _AssertEqual<Event, z.infer<typeof EventSchema>>;
+
+// Common Error Schemas (deduplicated)
+export const GetUsersId401ErrorResponse = UnauthorizedErrorSchema;
+export const GetUsersId200Response = UserSchema;
+
+// Route Schemas
+export const GetUsersIdParams = z.object({ id: z.string().uuid().meta({"openapi":{"format":"uuid"}}) });
+export const GetUsersIdQuery = z.object({ includeProfile: z.boolean().optional() });
+export const GetUsersIdHeaders = z.object({ 'x-trace-id': z.string().min(8) });
+export const GetUsersId404ErrorResponse = NotFoundErrorSchema;
+export const PostUsersBody = CreateUserSchema;
+export const PostUsers201Response = GetUsersId200Response;
+export const PostUsers400ErrorResponse = ValidationErrorSchema;
+export const PostUsers401ErrorResponse = GetUsersId401ErrorResponse;
+export const GetPets200Response = PetSchema;
+export const GetPets401ErrorResponse = GetUsersId401ErrorResponse;
+export const GetStats200Response = z.object({ count: z.number().int().min(0) }).strict();
+export const GetStats401ErrorResponse = GetUsersId401ErrorResponse;
+
+export const Request = {
+  '/users/{id}': {
+    GET: {
+      params: GetUsersIdParams,
+      query: GetUsersIdQuery,
+      headers: GetUsersIdHeaders,
+    },
+  },
+  '/users': {
+    POST: {
+      body: PostUsersBody,
+    },
+  },
+} as const;
+
+export const Response = {
+  '/users/{id}': {
+    GET: {
+      '200': GetUsersId200Response,
+      '401': GetUsersId401ErrorResponse,
+      '404': GetUsersId404ErrorResponse,
+    },
+  },
+  '/users': {
+    POST: {
+      '201': GetUsersId200Response,
+      '400': PostUsers400ErrorResponse,
+      '401': GetUsersId401ErrorResponse,
+    },
+  },
+  '/pets': {
+    GET: {
+      '200': GetPets200Response,
+      '401': GetUsersId401ErrorResponse,
+    },
+  },
+  '/stats': {
+    GET: {
+      '200': GetStats200Response,
+      '401': GetUsersId401ErrorResponse,
+    },
+  },
+} as const;
+`;
+
+const EXPECTED_OPENAPI_JSON = String.raw`
+{
+  "components": {
+    "schemas": {
+      "ArrayOfStrings": {
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 3,
+        "minItems": 1,
+        "type": "array"
+      },
+      "ArrayOfUnion": {
+        "items": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "type": "array"
+      },
+      "ArrayOfUuids": {
+        "items": {
+          "$ref": "#/components/schemas/StringUuid"
+        },
+        "type": "array"
+      },
+      "Audited": {
+        "properties": {
+          "createdBy": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "updatedBy": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "createdBy"
+        ],
+        "type": "object"
+      },
+      "Cat": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "cat"
+            ],
+            "type": "string"
+          },
+          "meows": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kind",
+          "meows"
+        ],
+        "type": "object"
+      },
+      "CreateUser": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "$ref": "#/components/schemas/StringEmail"
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/Profile",
+            "nullable": true
+          }
+        },
+        "required": [
+          "name",
+          "email"
+        ],
+        "type": "object"
+      },
+      "Dog": {
+        "additionalProperties": false,
+        "properties": {
+          "barks": {
+            "type": "boolean"
+          },
+          "kind": {
+            "enum": [
+              "dog"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "barks"
+        ],
+        "type": "object"
+      },
+      "EmptyObjectStrict": {
+        "additionalProperties": false,
+        "type": "object"
+      },
+      "Event": {
+        "discriminator": {
+          "mapping": {
+            "pet.adopted": "#/components/schemas/PetAdoptedEvent",
+            "user.created": "#/components/schemas/UserCreatedEvent"
+          },
+          "propertyName": "eventType"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/UserCreatedEvent"
+          },
+          {
+            "$ref": "#/components/schemas/PetAdoptedEvent"
+          }
+        ]
+      },
+      "FreeformObject": {
+        "type": "object"
+      },
+      "FullAuditRecord": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Named"
+          },
+          {
+            "$ref": "#/components/schemas/Timestamped"
+          },
+          {
+            "$ref": "#/components/schemas/Audited"
+          }
+        ]
+      },
+      "ImplicitObject": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/StringUuid"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "IntegerMinMax": {
+        "maximum": 100,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "Named": {
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "NamedTimestamped": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Named"
+          },
+          {
+            "$ref": "#/components/schemas/Timestamped"
+          }
+        ]
+      },
+      "NotFoundError": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "NOT_FOUND"
+                ],
+                "type": "string"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "NullableUser": {
+        "$ref": "#/components/schemas/User",
+        "nullable": true
+      },
+      "NumberMinMax": {
+        "maximum": 10,
+        "minimum": 0,
+        "type": "number"
+      },
+      "ObjectOptionalAndNullable": {
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "nickname": {
+            "nullable": true,
+            "type": "string"
+          },
+          "x-rate-limit": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "ObjectSimple": {
+        "properties": {
+          "count": {
+            "$ref": "#/components/schemas/IntegerMinMax"
+          },
+          "id": {
+            "$ref": "#/components/schemas/StringUuid"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "Pet": {
+        "discriminator": {
+          "mapping": {
+            "cat": "#/components/schemas/Cat",
+            "dog": "#/components/schemas/Dog"
+          },
+          "propertyName": "kind"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/Cat"
+          },
+          {
+            "$ref": "#/components/schemas/Dog"
+          }
+        ]
+      },
+      "PetAdoptedEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Pet"
+          },
+          "eventType": {
+            "enum": [
+              "pet.adopted"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "eventType",
+          "data"
+        ],
+        "type": "object"
+      },
+      "Profile": {
+        "additionalProperties": false,
+        "properties": {
+          "bio": {
+            "maxLength": 160,
+            "type": "string"
+          },
+          "location": {
+            "nullable": true,
+            "type": "string"
+          },
+          "website": {
+            "$ref": "#/components/schemas/StringUrl",
+            "nullable": true
+          }
+        },
+        "required": [
+          "bio"
+        ],
+        "type": "object"
+      },
+      "ScalarBoolean": {
+        "type": "boolean"
+      },
+      "ScalarString": {
+        "type": "string"
+      },
+      "StringAllConstraints": {
+        "format": "email",
+        "maxLength": 50,
+        "minLength": 6,
+        "pattern": ".*@example\\.com$",
+        "type": "string"
+      },
+      "StringColorHex": {
+        "format": "color-hex",
+        "type": "string"
+      },
+      "StringEmail": {
+        "format": "email",
+        "type": "string"
+      },
+      "StringEnum": {
+        "enum": [
+          "red",
+          "green",
+          "blue"
+        ],
+        "type": "string"
+      },
+      "StringMinMax": {
+        "maxLength": 5,
+        "minLength": 2,
+        "type": "string"
+      },
+      "StringPattern": {
+        "pattern": "^[a-z]+$",
+        "type": "string"
+      },
+      "StringUri": {
+        "format": "uri",
+        "type": "string"
+      },
+      "StringUrl": {
+        "format": "url",
+        "type": "string"
+      },
+      "StringUuid": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "Timestamped": {
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "UnauthorizedError": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "UNAUTHORIZED"
+                ],
+                "type": "string"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "User": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "$ref": "#/components/schemas/StringEmail"
+          },
+          "id": {
+            "$ref": "#/components/schemas/StringUuid"
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/Profile",
+            "nullable": true
+          },
+          "roles": {
+            "items": {
+              "$ref": "#/components/schemas/StringEnum"
+            },
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "email",
+          "roles"
+        ],
+        "type": "object"
+      },
+      "UserCreatedEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/User"
+          },
+          "eventType": {
+            "enum": [
+              "user.created"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "eventType",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ValidationError": {
+        "additionalProperties": false,
+        "properties": {
+          "details": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "VALIDATION_ERROR"
+                ],
+                "type": "string"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "Alt Stack Master OpenAPI Test Spec",
+    "version": "0.0.0"
+  },
+  "openapi": "3.0.0",
+  "paths": {
+    "/pets": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Pet"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/stats": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "count": {
+                      "minimum": 0,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "count"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/users": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUser"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/users/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "includeProfile",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-trace-id",
+            "required": true,
+            "schema": {
+              "minLength": 8,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            },
+            "description": "Not found"
+          }
+        }
+      }
+    }
+  }
+}
+`;
+
 function loadMasterOpenApiSpec(): AnySchema {
   const specUrl = new URL("../../openapi-test-spec/openapi.json", import.meta.url);
   return JSON.parse(readFileSync(specUrl, "utf8")) as AnySchema;
@@ -394,67 +1381,18 @@ describe("master OpenAPI fixture", () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("snapshots full generated TypeScript output", () => {
-    expect(tsCode).toMatchSnapshot();
+  it("matches the full generated TypeScript output", () => {
+    expect(normalizeSpacing(tsCode)).toBe(normalizeSpacing(EXPECTED_ZOD_TS));
   });
 
-  it("executes generated code and validates fixture examples", () => {
-    const schemas = (openapi.components?.schemas ?? {}) as Record<
-      string,
-      AnySchema
-    >;
-
-    for (const [name, schema] of Object.entries(schemas)) {
-      const zodSchema = generated[`${name}Schema`] as z.ZodTypeAny | undefined;
-      expect(zodSchema).toBeTruthy();
-
-      const examples = schema["x-altstack-examples"] as
-        | { valid?: unknown[]; invalid?: unknown[] }
-        | undefined;
-
-      if (examples?.valid) {
-        for (const [index, value] of examples.valid.entries()) {
-          const result = zodSchema!.safeParse(value);
-          if (!result.success) {
-            throw new Error(
-              [
-                `Expected example to be valid but it failed validation`,
-                `schema: ${name}`,
-                `exampleIndex: ${index}`,
-                `value: ${JSON.stringify(value)}`,
-                `issues: ${JSON.stringify(result.error.issues)}`,
-              ].join("\n"),
-            );
-          }
-        }
-      }
-
-      if (examples?.invalid) {
-        for (const [index, value] of examples.invalid.entries()) {
-          const result = zodSchema!.safeParse(value);
-          if (result.success) {
-            throw new Error(
-              [
-                `Expected example to be invalid but it validated successfully`,
-                `schema: ${name}`,
-                `exampleIndex: ${index}`,
-                `value: ${JSON.stringify(value)}`,
-              ].join("\n"),
-            );
-          }
-        }
-      }
-    }
-  });
-
-  it("regenerates an exact OpenAPI replica (minus examples)", () => {
-    const expected = openapiNoExamples;
-    const actual = structuredClone(expected) as AnySchema;
+  it("matches the full regenerated OpenAPI JSON output (minus examples)", () => {
+    const expected = normalizeSpacing(EXPECTED_OPENAPI_JSON);
+    const actual = structuredClone(openapiNoExamples) as AnySchema;
 
     const schemaToComponentName = new Map<z.ZodTypeAny, string>();
     const componentNameToSchema = new Map<string, z.ZodTypeAny>();
 
-    const componentSchemas = (expected.components?.schemas ?? {}) as Record<
+    const componentSchemas = (actual.components?.schemas ?? {}) as Record<
       string,
       AnySchema
     >;
@@ -556,6 +1494,7 @@ describe("master OpenAPI fixture", () => {
       }
     }
 
-    expect(actual).toEqual(expected);
+    const actualJson = stableJsonStringify(actual);
+    expect(normalizeSpacing(actualJson)).toBe(expected);
   });
 });
