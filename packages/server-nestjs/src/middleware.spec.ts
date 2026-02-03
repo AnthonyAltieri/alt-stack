@@ -83,8 +83,7 @@ describe("createNestMiddleware()", () => {
     expect(next).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith({
-      error: { code: "UnauthorizedError", message: "Unauthorized" },
+      error: { _tag: "UnauthorizedError", code: "UnauthorizedError", message: "Unauthorized" },
     });
   });
 });
-

@@ -139,14 +139,16 @@ export function createServer<TContext extends ExpressBaseContext = ExpressBaseCo
 
     const handler = async (req: Request, res: Response, _next: NextFunction) => {
       // Create telemetry span if enabled
+      const urlPath = `${req.baseUrl ?? ""}${req.path}`;
+      const routePath = `${req.baseUrl ?? ""}${procedure.path}`;
       const shouldTrace =
         telemetryConfig.enabled &&
-        !shouldIgnoreRoute(procedure.path, telemetryConfig);
+        !shouldIgnoreRoute(routePath, telemetryConfig);
       const span = shouldTrace
         ? createRequestSpan(
             procedure.method,
-            procedure.path,
-            req.path,
+            routePath,
+            urlPath,
             telemetryConfig,
           )
         : undefined;
