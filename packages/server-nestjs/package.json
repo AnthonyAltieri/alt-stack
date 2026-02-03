@@ -1,0 +1,46 @@
+{
+  "name": "@alt-stack/server-nestjs",
+  "version": "0.4.5",
+  "description": "Type-safe Alt Stack server integration for NestJS (Express) with Zod validation",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest",
+    "check-types": "tsc --noEmit"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@alt-stack/server-core": "workspace:*",
+    "@alt-stack/server-express": "workspace:*"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^9.0.0 || ^10.0.0 || ^11.0.0",
+    "@nestjs/core": "^9.0.0 || ^10.0.0 || ^11.0.0",
+    "@nestjs/platform-express": "^9.0.0 || ^10.0.0 || ^11.0.0",
+    "express": "^4.0.0 || ^5.0.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/supertest": "^6.0.3",
+    "express": "^5.0.0",
+    "oxlint": "^1.24.0",
+    "supertest": "^7.1.4",
+    "tsup": "^8.0.0",
+    "typescript": "^5.9.2",
+    "vitest": "^4.0.3",
+    "zod": "^4.0.0"
+  }
+}
+

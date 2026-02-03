@@ -3,8 +3,9 @@ import type { Express, Request, Response, NextFunction } from "express";
 import type { z } from "zod";
 import type { ZodError } from "zod";
 import type { TypedContext, InputConfig, TelemetryOption } from "@alt-stack/server-core";
-import type { Procedure, ReadyProcedure } from "@alt-stack/server-core";
+import type { Procedure } from "@alt-stack/server-core";
 import type { Router } from "@alt-stack/server-core";
+import type { Result, ResultError } from "@alt-stack/server-core";
 import {
   validateInput,
   middlewareMarker,
@@ -16,11 +17,9 @@ import {
   endSpanWithError,
   setSpanOk,
   withActiveSpan,
-  isOk,
   isErr,
   ok as resultOk,
   err as resultErr,
-  extractTagsFromSchema,
   findHttpStatusForError,
 } from "@alt-stack/server-core";
 import type { MiddlewareResult, MiddlewareResultSuccess } from "@alt-stack/server-core";
@@ -48,6 +47,15 @@ function normalizePath(prefix: string, path: string): string {
     return normalizedPrefix;
   }
   return `${normalizedPrefix}${cleanPath}`;
+}
+
+function isResult(value: unknown): value is Result<unknown, ResultError> {
+  if (!value || typeof value !== "object") return false;
+  if (!("_tag" in value)) return false;
+  const tag = (value as any)._tag;
+  if (tag === "Ok") return "value" in value;
+  if (tag === "Err") return "error" in value;
+  return false;
 }
 
 
@@ -352,7 +360,8 @@ export function createServer<TContext extends ExpressBaseContext = ExpressBaseCo
 
         currentCtx = middlewareResult.ctx;
 
-        const result = await procedure.handler(currentCtx);
+        const handlerResult = await procedure.handler(currentCtx);
+        const result = isResult(handlerResult) ? handlerResult : resultOk(handlerResult);
 
         // Handle Result type - check if it's Ok or Err
         if (isErr(result)) {
