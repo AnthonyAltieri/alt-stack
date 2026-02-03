@@ -431,9 +431,105 @@
           { "$ref": "#/components/schemas/Cat" },
           { "$ref": "#/components/schemas/Dog" }
         ],
+        "discriminator": {
+          "propertyName": "kind",
+          "mapping": {
+            "cat": "#/components/schemas/Cat",
+            "dog": "#/components/schemas/Dog"
+          }
+        },
         "x-altstack-examples": {
           "valid": [{ "kind": "cat", "meows": true }, { "kind": "dog", "barks": false }],
           "invalid": [{ "kind": "cat", "barks": true }]
+        }
+      },
+      "UserCreatedEvent": {
+        "type": "object",
+        "properties": {
+          "eventType": { "type": "string", "enum": ["user.created"] },
+          "data": { "$ref": "#/components/schemas/User" }
+        },
+        "required": ["eventType", "data"],
+        "additionalProperties": false,
+        "x-altstack-examples": {
+          "valid": [
+            {
+              "eventType": "user.created",
+              "data": {
+                "id": "550e8400-e29b-41d4-a716-446655440000",
+                "name": "Ada",
+                "email": "test@example.com",
+                "roles": ["red"],
+                "profile": null
+              }
+            }
+          ],
+          "invalid": [{ "eventType": "user.created" }]
+        }
+      },
+      "PetAdoptedEvent": {
+        "type": "object",
+        "properties": {
+          "eventType": { "type": "string", "enum": ["pet.adopted"] },
+          "data": { "$ref": "#/components/schemas/Pet" }
+        },
+        "required": ["eventType", "data"],
+        "additionalProperties": false,
+        "x-altstack-examples": {
+          "valid": [
+            {
+              "eventType": "pet.adopted",
+              "data": { "kind": "dog", "barks": true }
+            }
+          ],
+          "invalid": [{ "eventType": "pet.adopted" }]
+        }
+      },
+      "Event": {
+        "oneOf": [
+          { "$ref": "#/components/schemas/UserCreatedEvent" },
+          { "$ref": "#/components/schemas/PetAdoptedEvent" }
+        ],
+        "discriminator": {
+          "propertyName": "eventType",
+          "mapping": {
+            "user.created": "#/components/schemas/UserCreatedEvent",
+            "pet.adopted": "#/components/schemas/PetAdoptedEvent"
+          }
+        },
+        "x-altstack-examples": {
+          "valid": [
+            {
+              "eventType": "user.created",
+              "data": {
+                "id": "550e8400-e29b-41d4-a716-446655440000",
+                "name": "Ada",
+                "email": "test@example.com",
+                "roles": ["red"],
+                "profile": null
+              }
+            },
+            {
+              "eventType": "pet.adopted",
+              "data": { "kind": "cat", "meows": true }
+            }
+          ],
+          "invalid": [
+            {
+              "eventType": "user.created",
+              "data": { "kind": "cat", "meows": true }
+            },
+            {
+              "eventType": "pet.adopted",
+              "data": {
+                "id": "550e8400-e29b-41d4-a716-446655440000",
+                "name": "Ada",
+                "email": "test@example.com",
+                "roles": ["red"],
+                "profile": null
+              }
+            }
+          ]
         }
       },
       "Profile": {
