@@ -283,6 +283,7 @@
         }
       },
       "ImplicitObject": {
+        "type": "object",
         "properties": {
           "id": { "$ref": "#/components/schemas/StringUuid" }
         },

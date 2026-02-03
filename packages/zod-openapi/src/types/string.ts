@@ -1,6 +1,4 @@
-import {
-  getSchemaExportedVariableNameForStringFormat,
-} from "../registry";
+import { getSchemaExportedVariableNameForStringFormat } from "../registry";
 
 /**
  * Convert an OpenAPI v3 string schema to a Zod schema string
@@ -46,6 +44,18 @@ export function convertOpenAPIStringToZod(schema: {
     zodSchema += `.regex(/${schema.pattern}/)`;
   }
 
+  // Preserve OpenAPI-specific metadata for exact roundtrips
+  if (schema.format || typeof schema.pattern === "string") {
+    const openapiMeta: Record<string, unknown> = {};
+    if (schema.format) {
+      openapiMeta["format"] = schema.format;
+    }
+    if (typeof schema.pattern === "string") {
+      openapiMeta["pattern"] = schema.pattern;
+    }
+    zodSchema += `.meta(${JSON.stringify({ openapi: openapiMeta })})`;
+  }
+
   return zodSchema;
 }
 
@@ -61,6 +71,10 @@ function getFormatModifier(format: string): string {
       return ".url()";
     case "uuid":
       return ".uuid()";
+    case "date":
+      return ".date()";
+    case "date-time":
+      return ".datetime()";
     case "color-hex":
       return ".regex(/^[a-fA-F0-9]{6}$/)";
     default:
