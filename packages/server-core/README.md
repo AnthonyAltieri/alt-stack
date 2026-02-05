@@ -5,6 +5,7 @@ Framework-agnostic core package for the Altstack server framework. This package 
 > **Note**: This package is not meant to be used directly. Instead, use one of the adapter packages:
 > - [`@alt-stack/server-hono`](../server-hono/README.md) - For Hono-based servers
 > - [`@alt-stack/server-express`](../server-express/README.md) - For Express-based servers
+> - [`@alt-stack/server-nestjs`](../server-nestjs/README.md) - For NestJS (Express) servers
 > - [`@alt-stack/server-bun`](../server-bun/README.md) - For Bun-based servers
 
 ## What's Included
