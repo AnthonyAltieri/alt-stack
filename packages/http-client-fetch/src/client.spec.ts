@@ -75,6 +75,35 @@ describe("FetchApiClient", () => {
     });
   });
 
+  describe("logging", () => {
+    it("uses the provided logger and formatter", async () => {
+      const mockData = [{ id: "1", name: "John" }];
+      globalThis.fetch = createMockFetch(mockData);
+
+      const logger = {
+        error: vi.fn(),
+        warn: vi.fn(),
+        info: vi.fn(),
+        debug: vi.fn(),
+        format: vi.fn((message: string) => `formatted: ${message}`),
+      };
+
+      const client = createApiClient({
+        baseUrl: "https://api.example.com",
+        Request,
+        Response,
+        logger,
+      });
+
+      const result = await client.get("/users", {});
+
+      expect(result.success).toBe(true);
+      expect(logger.format).toHaveBeenCalled();
+      expect(logger.debug).toHaveBeenCalled();
+      expect(logger.debug.mock.calls[0]?.[0]).toContain("formatted:");
+    });
+  });
+
   describe("GET requests", () => {
     it("makes a basic GET request", async () => {
       const mockData = [{ id: "1", name: "John" }];

@@ -10,6 +10,7 @@ import type {
   RetryContext,
   HttpExecutor,
   ExecuteResponse,
+  Logger,
 } from "./types.js";
 import { UnexpectedApiClientError, ValidationError } from "./errors.js";
 
@@ -32,6 +33,10 @@ export interface ApiClientOptions<
    * not for other validation errors like missing path params.
    */
   onValidationError?: ApiClientValidationErrorHandler<TRawResponse>;
+  /**
+   * Optional logger used for internal client logging.
+   */
+  logger?: Logger;
   executor: HttpExecutor<TRawResponse>;
 }
 
@@ -104,6 +109,13 @@ function calculateBackoff(attempt: number, baseDelay: number = 1000): number {
   return Math.min(baseDelay * Math.pow(2, attempt), 30000); // Max 30 seconds
 }
 
+function formatLogError(error: unknown): Record<string, unknown> {
+  if (error instanceof Error) {
+    return { name: error.name, message: error.message };
+  }
+  return { error };
+}
+
 // ============================================================================
 // ApiClient Class
 // ============================================================================
@@ -114,6 +126,24 @@ export class ApiClient<
   TRawResponse = unknown,
 > {
   constructor(public readonly options: ApiClientOptions<TRequest, TResponse, TRawResponse>) {}
+
+  private log(
+    level: "error" | "warn" | "info" | "debug",
+    message: string,
+    meta?: Record<string, unknown>,
+  ): void {
+    const logger = this.options.logger;
+    if (!logger) return;
+    try {
+      if (logger.format) {
+        logger[level](logger.format(message, meta));
+      } else {
+        logger[level](message, meta);
+      }
+    } catch {
+      // Never allow a user-provided logger to affect control-flow.
+    }
+  }
 
   private safeInvokeOnValidationError(
     context: ApiClientValidationErrorContext<TRawResponse>,
@@ -261,6 +291,14 @@ export class ApiClient<
       }
     }
 
+    this.log("debug", "HTTP request prepared", {
+      method,
+      endpoint,
+      path: interpolatedPath,
+      retries,
+      timeout,
+    });
+
     // Make request with retry logic
     let lastError: unknown;
     let lastResult: ExecuteResponse<TRawResponse> | undefined;
@@ -268,6 +306,14 @@ export class ApiClient<
 
     while (attempt <= retries) {
       try {
+        this.log("debug", "HTTP request attempt", {
+          method,
+          endpoint,
+          path: interpolatedPath,
+          attempt,
+          retries,
+        });
+
         const result = await this.options.executor.execute({
           method,
           url,
@@ -278,6 +324,14 @@ export class ApiClient<
           timeout,
         });
 
+        this.log("debug", "HTTP response received", {
+          method,
+          endpoint,
+          status: result.status,
+          statusText: result.statusText,
+          attempt,
+        });
+
         // Check custom shouldRetry for response-based retry (e.g., 5xx errors)
         if (shouldRetry && attempt < retries) {
           const retryContext: RetryContext = {
@@ -285,6 +339,14 @@ export class ApiClient<
             response: { status: result.status, statusText: result.statusText, data: result.data },
           };
           if (shouldRetry(retryContext)) {
+            this.log("warn", "HTTP retry requested by shouldRetry", {
+              method,
+              endpoint,
+              status: result.status,
+              statusText: result.statusText,
+              attempt,
+              retries,
+            });
             lastResult = result;
             const delay = calculateBackoff(attempt);
             await sleep(delay);
@@ -313,6 +375,13 @@ export class ApiClient<
 
           if (shouldRetry) {
             if (shouldRetry(retryContext)) {
+              this.log("warn", "HTTP retry requested by shouldRetry", {
+                method,
+                endpoint,
+                attempt,
+                retries,
+                ...formatLogError(error),
+              });
               const delay = calculateBackoff(attempt);
               await sleep(delay);
               attempt++;
@@ -333,6 +402,13 @@ export class ApiClient<
           }
 
           // Default: retry on network errors
+          this.log("warn", "HTTP retrying after error", {
+            method,
+            endpoint,
+            attempt,
+            retries,
+            ...formatLogError(error),
+          });
           const delay = calculateBackoff(attempt);
           await sleep(delay);
           attempt++;
@@ -353,6 +429,12 @@ export class ApiClient<
     }
 
     // If we get here, all retries failed
+    this.log("error", "HTTP request failed after retries", {
+      method,
+      endpoint,
+      retries,
+      ...formatLogError(lastError),
+    });
     if (lastError instanceof Error) {
       throw lastError;
     }

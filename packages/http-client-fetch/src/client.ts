@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import { ApiClient, type ApiClientValidationErrorHandler } from "@alt-stack/http-client-core";
+import { ApiClient, type ApiClientValidationErrorHandler, type Logger } from "@alt-stack/http-client-core";
 import { FetchExecutor, type FetchExecutorOptions } from "./executor.js";
 
 /**
@@ -17,6 +17,10 @@ export interface FetchClientOptions<
    * Called when Zod validation fails for request or response data.
    */
   onValidationError?: ApiClientValidationErrorHandler<Response>;
+  /**
+   * Optional logger used for internal client logging.
+   */
+  logger?: Logger;
   /**
    * Additional fetch options to pass to every request.
    * Useful for credentials, cache, mode, etc.
@@ -69,6 +73,7 @@ export function createApiClient<
     Request: options.Request,
     Response: options.Response,
     onValidationError: options.onValidationError,
+    logger: options.logger,
     executor,
   });
 }

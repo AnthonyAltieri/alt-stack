@@ -20,6 +20,7 @@ export type {
   ApiClientValidationErrorLocation,
   ApiClientValidationErrorContext,
   ApiClientValidationErrorHandler,
+  Logger,
   HttpExecutor,
   ExecuteRequest,
   ExecuteResponse,
