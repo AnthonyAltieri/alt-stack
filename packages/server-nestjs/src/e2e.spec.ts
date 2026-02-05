@@ -1,11 +1,12 @@
-import "./test-reflect-metadata.js";
+import "reflect-metadata";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Express } from "express";
 import http from "node:http";
-import { createRequire } from "node:module";
 import { PassThrough } from "node:stream";
 import { z } from "zod";
+import { Injectable, Module, Scope } from "@nestjs/common";
+import { NestFactory } from "@nestjs/core";
 import {
   TaggedError,
   createMiddlewareWithErrors,
@@ -31,27 +32,8 @@ class UnauthorizedError extends TaggedError {
   }
 }
 
-let UsersService: { new (): { findById(id: string): { id: string; name: string } } };
-let RequestContextService: { new (): { id: number } };
-let AppModule: { new (): unknown };
-let NestFactory: typeof import("@nestjs/core").NestFactory;
-let Injectable: typeof import("@nestjs/common").Injectable;
-let Module: typeof import("@nestjs/common").Module;
-let Scope: typeof import("@nestjs/common").Scope;
-
-const require = createRequire(import.meta.url);
-const nestAvailable = (() => {
-  try {
-    require.resolve("@nestjs/common");
-    require.resolve("@nestjs/core");
-    require.resolve("@nestjs/platform-express");
-    return true;
-  } catch {
-    return false;
-  }
-})();
-
-class UsersServiceImpl {
+@Injectable()
+class UsersService {
   findById(id: string) {
     return { id, name: `User ${id}` };
   }
@@ -59,11 +41,16 @@ class UsersServiceImpl {
 
 let requestIdCounter = 0;
 
-class RequestContextServiceImpl {
+@Injectable({ scope: Scope.REQUEST })
+class RequestContextService {
   readonly id = ++requestIdCounter;
 }
 
-class AppModuleImpl {}
+@Module({
+  providers: [UsersService, RequestContextService],
+  exports: [UsersService, RequestContextService],
+})
+class AppModule {}
 
 type DispatchOptions = {
   method: string;
@@ -111,10 +98,13 @@ async function dispatch(
     app(req, res, (error: unknown) => {
       if (error) reject(error);
     });
-    if (payload) {
-      socket.write(payload);
-    }
-    socket.end();
+
+    process.nextTick(() => {
+      if (payload) {
+        req.emit("data", Buffer.from(payload));
+      }
+      req.emit("end");
+    });
   });
 
   return {
@@ -124,29 +114,11 @@ async function dispatch(
   };
 }
 
-const describeNest = nestAvailable ? describe : describe.skip;
-
-describeNest("NestJS E2E with Alt Stack router", () => {
+describe("NestJS E2E with Alt Stack router", () => {
   let app: any;
   let expressApp: Express;
 
   beforeAll(async () => {
-    const nestCommon = await import("@nestjs/common");
-    const nestCore = await import("@nestjs/core");
-    ({ Injectable, Module, Scope } = nestCommon);
-    ({ NestFactory } = nestCore);
-
-    Injectable()(UsersServiceImpl);
-    Injectable({ scope: Scope.REQUEST })(RequestContextServiceImpl);
-    Module({
-      providers: [UsersServiceImpl, RequestContextServiceImpl],
-      exports: [UsersServiceImpl, RequestContextServiceImpl],
-    })(AppModuleImpl);
-
-    UsersService = UsersServiceImpl;
-    RequestContextService = RequestContextServiceImpl;
-    AppModule = AppModuleImpl;
-
     app = await NestFactory.create(AppModule, { logger: false });
     expressApp = app.getHttpAdapter().getInstance();
 
@@ -283,7 +255,7 @@ describeNest("NestJS E2E with Alt Stack router", () => {
     });
     expect(res.status).toBe(404);
     expect(JSON.parse(res.body)).toEqual({
-      error: { code: "NotFoundError", message: "missing" },
+      error: { _tag: "NotFoundError", code: "NotFoundError", message: "missing" },
     });
   });
 });
