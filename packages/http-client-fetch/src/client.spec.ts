@@ -76,9 +76,8 @@ describe("FetchApiClient", () => {
   });
 
   describe("logging", () => {
-    it("uses the provided logger and formatter", async () => {
-      const mockData = [{ id: "1", name: "John" }];
-      globalThis.fetch = createMockFetch(mockData);
+    it("uses the provided logger and formatter for errors", async () => {
+      globalThis.fetch = createMockFetch([]);
 
       const logger = {
         error: vi.fn(),
@@ -95,12 +94,12 @@ describe("FetchApiClient", () => {
         logger,
       });
 
-      const result = await client.get("/users", {});
-
-      expect(result.success).toBe(true);
+      await expect(
+        client.get("/users/{id}", { params: { id: "not-a-uuid" } }),
+      ).rejects.toThrow(ValidationError);
       expect(logger.format).toHaveBeenCalled();
-      expect(logger.debug).toHaveBeenCalled();
-      expect(logger.debug.mock.calls[0]?.[0]).toContain("formatted:");
+      expect(logger.error).toHaveBeenCalled();
+      expect(logger.error.mock.calls[0]?.[0]).toContain("formatted:");
     });
   });
 

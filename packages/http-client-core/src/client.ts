@@ -135,11 +135,8 @@ export class ApiClient<
     const logger = this.options.logger;
     if (!logger) return;
     try {
-      if (logger.format) {
-        logger[level](logger.format(message, meta));
-      } else {
-        logger[level](message, meta);
-      }
+      const formatted = logger.format ? logger.format(message, meta) : message;
+      logger[level](formatted, meta);
     } catch {
       // Never allow a user-provided logger to affect control-flow.
     }
@@ -174,6 +171,16 @@ export class ApiClient<
       data,
       issues: parsed.error.issues,
       zodError: parsed.error,
+    });
+
+    this.log("error", "HTTP validation failed", {
+      kind: context.kind,
+      location: context.location,
+      endpoint: context.endpoint,
+      method: context.method,
+      status: context.status,
+      statusText: context.statusText,
+      message,
     });
 
     throw new ValidationError(message, parsed.error.issues, context.endpoint, context.method);
@@ -291,14 +298,6 @@ export class ApiClient<
       }
     }
 
-    this.log("debug", "HTTP request prepared", {
-      method,
-      endpoint,
-      path: interpolatedPath,
-      retries,
-      timeout,
-    });
-
     // Make request with retry logic
     let lastError: unknown;
     let lastResult: ExecuteResponse<TRawResponse> | undefined;
@@ -306,14 +305,6 @@ export class ApiClient<
 
     while (attempt <= retries) {
       try {
-        this.log("debug", "HTTP request attempt", {
-          method,
-          endpoint,
-          path: interpolatedPath,
-          attempt,
-          retries,
-        });
-
         const result = await this.options.executor.execute({
           method,
           url,
@@ -324,14 +315,6 @@ export class ApiClient<
           timeout,
         });
 
-        this.log("debug", "HTTP response received", {
-          method,
-          endpoint,
-          status: result.status,
-          statusText: result.statusText,
-          attempt,
-        });
-
         // Check custom shouldRetry for response-based retry (e.g., 5xx errors)
         if (shouldRetry && attempt < retries) {
           const retryContext: RetryContext = {
@@ -339,7 +322,7 @@ export class ApiClient<
             response: { status: result.status, statusText: result.statusText, data: result.data },
           };
           if (shouldRetry(retryContext)) {
-            this.log("warn", "HTTP retry requested by shouldRetry", {
+            this.log("warn", "HTTP retry requested (response)", {
               method,
               endpoint,
               status: result.status,
@@ -375,7 +358,7 @@ export class ApiClient<
 
           if (shouldRetry) {
             if (shouldRetry(retryContext)) {
-              this.log("warn", "HTTP retry requested by shouldRetry", {
+              this.log("warn", "HTTP retry requested (error)", {
                 method,
                 endpoint,
                 attempt,
@@ -398,6 +381,12 @@ export class ApiClient<
             error.code >= 400 &&
             error.code < 500
           ) {
+            this.log("error", "HTTP request failed with non-retriable status", {
+              method,
+              endpoint,
+              status: error.code,
+              ...formatLogError(error),
+            });
             throw error;
           }
 
@@ -432,6 +421,7 @@ export class ApiClient<
     this.log("error", "HTTP request failed after retries", {
       method,
       endpoint,
+      attempts: attempt,
       retries,
       ...formatLogError(lastError),
     });
@@ -460,6 +450,11 @@ export class ApiClient<
       // No schema, but check if path has params
       const requiredParams = this.getPathParamNames(endpoint);
       if (requiredParams.length > 0 && Object.keys(params).length === 0) {
+        this.log("error", "HTTP request validation failed", {
+          method,
+          endpoint,
+          missing: requiredParams,
+        });
         throw new ValidationError(
           `Missing required path parameters: ${requiredParams.join(", ")}`,
           { missing: requiredParams },
@@ -483,6 +478,11 @@ export class ApiClient<
     // Check if endpoint requires params but none provided
     const requiredParams = this.getPathParamNames(endpoint);
     if (requiredParams.length > 0 && Object.keys(params).length === 0) {
+      this.log("error", "HTTP request validation failed", {
+        method,
+        endpoint,
+        missing: requiredParams,
+      });
       throw new ValidationError(
         `Missing required path parameters: ${requiredParams.join(", ")}`,
         { missing: requiredParams },
@@ -578,6 +578,12 @@ export class ApiClient<
           raw,
         } as SuccessResponse<unknown, string, TRawResponse>;
       }
+      this.log("error", "HTTP error response", {
+        method,
+        endpoint,
+        status,
+        statusText,
+      });
       return {
         success: false,
         error: new UnexpectedApiClientError(
@@ -619,6 +625,12 @@ export class ApiClient<
         } as SuccessResponse<unknown, string, TRawResponse>;
       }
 
+      this.log("error", "HTTP error response", {
+        method,
+        endpoint,
+        status,
+        statusText,
+      });
       return {
         success: false,
         error: validated,
