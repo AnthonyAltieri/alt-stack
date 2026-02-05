@@ -10,6 +10,7 @@ import type {
   RetryContext,
   HttpExecutor,
   ExecuteResponse,
+  Logger,
 } from "./types.js";
 import { UnexpectedApiClientError, ValidationError } from "./errors.js";
 
@@ -32,6 +33,10 @@ export interface ApiClientOptions<
    * not for other validation errors like missing path params.
    */
   onValidationError?: ApiClientValidationErrorHandler<TRawResponse>;
+  /**
+   * Optional logger used for internal client logging.
+   */
+  logger?: Logger;
   executor: HttpExecutor<TRawResponse>;
 }
 
@@ -104,6 +109,13 @@ function calculateBackoff(attempt: number, baseDelay: number = 1000): number {
   return Math.min(baseDelay * Math.pow(2, attempt), 30000); // Max 30 seconds
 }
 
+function formatLogError(error: unknown): Record<string, unknown> {
+  if (error instanceof Error) {
+    return { name: error.name, message: error.message };
+  }
+  return { error };
+}
+
 // ============================================================================
 // ApiClient Class
 // ============================================================================
@@ -114,6 +126,21 @@ export class ApiClient<
   TRawResponse = unknown,
 > {
   constructor(public readonly options: ApiClientOptions<TRequest, TResponse, TRawResponse>) {}
+
+  private log(
+    level: "error" | "warn" | "info" | "debug",
+    message: string,
+    meta?: Record<string, unknown>,
+  ): void {
+    const logger = this.options.logger;
+    if (!logger) return;
+    try {
+      const formatted = logger.format ? logger.format(message, meta) : message;
+      logger[level](formatted, meta);
+    } catch {
+      // Never allow a user-provided logger to affect control-flow.
+    }
+  }
 
   private safeInvokeOnValidationError(
     context: ApiClientValidationErrorContext<TRawResponse>,
@@ -144,6 +171,16 @@ export class ApiClient<
       data,
       issues: parsed.error.issues,
       zodError: parsed.error,
+    });
+
+    this.log("error", "HTTP validation failed", {
+      kind: context.kind,
+      location: context.location,
+      endpoint: context.endpoint,
+      method: context.method,
+      status: context.status,
+      statusText: context.statusText,
+      message,
     });
 
     throw new ValidationError(message, parsed.error.issues, context.endpoint, context.method);
@@ -285,6 +322,14 @@ export class ApiClient<
             response: { status: result.status, statusText: result.statusText, data: result.data },
           };
           if (shouldRetry(retryContext)) {
+            this.log("warn", "HTTP retry requested (response)", {
+              method,
+              endpoint,
+              status: result.status,
+              statusText: result.statusText,
+              attempt,
+              retries,
+            });
             lastResult = result;
             const delay = calculateBackoff(attempt);
             await sleep(delay);
@@ -313,6 +358,13 @@ export class ApiClient<
 
           if (shouldRetry) {
             if (shouldRetry(retryContext)) {
+              this.log("warn", "HTTP retry requested (error)", {
+                method,
+                endpoint,
+                attempt,
+                retries,
+                ...formatLogError(error),
+              });
               const delay = calculateBackoff(attempt);
               await sleep(delay);
               attempt++;
@@ -329,10 +381,23 @@ export class ApiClient<
             error.code >= 400 &&
             error.code < 500
           ) {
+            this.log("error", "HTTP request failed with non-retriable status", {
+              method,
+              endpoint,
+              status: error.code,
+              ...formatLogError(error),
+            });
             throw error;
           }
 
           // Default: retry on network errors
+          this.log("warn", "HTTP retrying after error", {
+            method,
+            endpoint,
+            attempt,
+            retries,
+            ...formatLogError(error),
+          });
           const delay = calculateBackoff(attempt);
           await sleep(delay);
           attempt++;
@@ -353,6 +418,13 @@ export class ApiClient<
     }
 
     // If we get here, all retries failed
+    this.log("error", "HTTP request failed after retries", {
+      method,
+      endpoint,
+      attempts: attempt,
+      retries,
+      ...formatLogError(lastError),
+    });
     if (lastError instanceof Error) {
       throw lastError;
     }
@@ -378,6 +450,11 @@ export class ApiClient<
       // No schema, but check if path has params
       const requiredParams = this.getPathParamNames(endpoint);
       if (requiredParams.length > 0 && Object.keys(params).length === 0) {
+        this.log("error", "HTTP request validation failed", {
+          method,
+          endpoint,
+          missing: requiredParams,
+        });
         throw new ValidationError(
           `Missing required path parameters: ${requiredParams.join(", ")}`,
           { missing: requiredParams },
@@ -401,6 +478,11 @@ export class ApiClient<
     // Check if endpoint requires params but none provided
     const requiredParams = this.getPathParamNames(endpoint);
     if (requiredParams.length > 0 && Object.keys(params).length === 0) {
+      this.log("error", "HTTP request validation failed", {
+        method,
+        endpoint,
+        missing: requiredParams,
+      });
       throw new ValidationError(
         `Missing required path parameters: ${requiredParams.join(", ")}`,
         { missing: requiredParams },
@@ -496,6 +578,12 @@ export class ApiClient<
           raw,
         } as SuccessResponse<unknown, string, TRawResponse>;
       }
+      this.log("error", "HTTP error response", {
+        method,
+        endpoint,
+        status,
+        statusText,
+      });
       return {
         success: false,
         error: new UnexpectedApiClientError(
@@ -537,6 +625,12 @@ export class ApiClient<
         } as SuccessResponse<unknown, string, TRawResponse>;
       }
 
+      this.log("error", "HTTP error response", {
+        method,
+        endpoint,
+        status,
+        statusText,
+      });
       return {
         success: false,
         error: validated,

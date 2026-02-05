@@ -1,6 +1,6 @@
 {
   "name": "@alt-stack/http-client-fetch",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Type-safe HTTP client using native fetch API",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

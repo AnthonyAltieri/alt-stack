@@ -21,6 +21,7 @@ export type {
   HttpExecutor,
   ExecuteRequest,
   ExecuteResponse,
+  Logger,
   // Request types
   ExtractPathParams,
   ExtractRequestParams,

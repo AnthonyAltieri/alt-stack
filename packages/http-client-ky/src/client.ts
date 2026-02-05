@@ -1,6 +1,6 @@
 import type { z } from "zod";
 import type { KyInstance, Options as KyOptions, KyResponse } from "ky";
-import { ApiClient, type ApiClientValidationErrorHandler } from "@alt-stack/http-client-core";
+import { ApiClient, type ApiClientValidationErrorHandler, type Logger } from "@alt-stack/http-client-core";
 import { KyExecutor, type KyExecutorOptions } from "./executor.js";
 
 /**
@@ -18,6 +18,10 @@ export interface KyClientOptions<
    * Called when Zod validation fails for request or response data.
    */
   onValidationError?: ApiClientValidationErrorHandler<KyResponse>;
+  /**
+   * Optional logger used for internal client logging.
+   */
+  logger?: Logger;
   /**
    * Use a custom ky instance.
    * Useful for pre-configured ky instances with hooks, defaults, etc.
@@ -84,6 +88,7 @@ export function createApiClient<
     Request: options.Request,
     Response: options.Response,
     onValidationError: options.onValidationError,
+    logger: options.logger,
     executor,
   });
 }

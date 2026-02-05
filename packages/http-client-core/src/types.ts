@@ -33,6 +33,21 @@ export interface HttpExecutor<TRawResponse = unknown> {
 }
 
 // ============================================================================
+// Logger Interface
+// ============================================================================
+
+/**
+ * Logger interface for internal client logging.
+ */
+export interface Logger {
+  error: (message: string, meta?: Record<string, unknown>) => void;
+  warn: (message: string, meta?: Record<string, unknown>) => void;
+  info: (message: string, meta?: Record<string, unknown>) => void;
+  debug: (message: string, meta?: Record<string, unknown>) => void;
+  format?: (message: string, meta?: Record<string, unknown>) => string;
+}
+
+// ============================================================================
 // Path Parameter Extraction
 // ============================================================================
 
@@ -326,4 +341,3 @@ export type RequestOptions<
   (BodyRequired<TRequest, TEndpoint, TMethod> extends true
     ? { body: ExtractRequestBody<TRequest, TEndpoint, TMethod> }
     : { body?: ExtractRequestBody<TRequest, TEndpoint, TMethod> });
-
