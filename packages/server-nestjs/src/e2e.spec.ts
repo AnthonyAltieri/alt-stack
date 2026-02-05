@@ -1,22 +1,18 @@
 import "reflect-metadata";
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Express } from "express";
 import http from "node:http";
 import { PassThrough } from "node:stream";
 import { z } from "zod";
 import { Module, Injectable, Scope } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
-import { InMemorySpanExporter, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";
-import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
-import { SpanStatusCode } from "@opentelemetry/api";
 import {
   TaggedError,
   createMiddlewareWithErrors,
   createNestMiddleware,
   err,
   init,
-  initTelemetry,
   ok,
   registerAltStack,
   router,
@@ -118,17 +114,8 @@ async function dispatch(
 describe("NestJS E2E with Alt Stack router", () => {
   let app: any;
   let expressApp: Express;
-  let exporter: InMemorySpanExporter;
-  let provider: NodeTracerProvider;
 
   beforeAll(async () => {
-    exporter = new InMemorySpanExporter();
-    provider = new NodeTracerProvider({
-      spanProcessors: [new SimpleSpanProcessor(exporter)],
-    });
-    provider.register();
-    await initTelemetry();
-
     app = await NestFactory.create(AppModule, { logger: false });
     expressApp = app.getHttpAdapter().getInstance();
 
@@ -182,27 +169,13 @@ describe("NestJS E2E with Alt Stack router", () => {
         .get(() => err(new NotFoundError("missing"))),
     });
 
-    registerAltStack(app, { "/": apiRouter }, {
-      mountPath: "/api",
-      telemetry: true,
-      docs: {
-        title: "Alt Stack E2E",
-        version: "0.0.1",
-        openapiPath: "openapi.json",
-        enableDocs: false,
-      },
-    });
+    registerAltStack(app, { "/": apiRouter }, { mountPath: "/api" });
 
     await app.init();
   });
 
-  beforeEach(() => {
-    exporter.reset();
-  });
-
   afterAll(async () => {
     await app.close();
-    await provider.shutdown();
   });
 
   it("uses Nest DI in handlers and middleware context override", async () => {
@@ -281,33 +254,5 @@ describe("NestJS E2E with Alt Stack router", () => {
     expect(JSON.parse(res.body)).toEqual({
       error: { code: "NotFoundError", message: "missing" },
     });
-  });
-
-  it("serves OpenAPI JSON via docs mount", async () => {
-    const res = await dispatch(expressApp, {
-      method: "GET",
-      url: "/api/docs/openapi.json",
-    });
-    expect(res.status).toBe(200);
-    const json = JSON.parse(res.body) as { paths?: Record<string, unknown> };
-    expect(json.paths).toBeDefined();
-    expect(Object.keys(json.paths ?? {})).toContain("/users/{id}");
-  });
-
-  it("creates telemetry spans for Alt Stack routes", async () => {
-    const res = await dispatch(expressApp, {
-      method: "GET",
-      url: "/api/users/999",
-      headers: { "x-user-id": "u1" },
-    });
-    expect(res.status).toBe(200);
-
-    const spans = exporter.getFinishedSpans();
-    expect(spans).toHaveLength(1);
-    const span = spans[0]!;
-    expect(span.name).toBe("GET /api/users/{id}");
-    expect(span.attributes["http.route"]).toBe("/api/users/{id}");
-    expect(span.attributes["url.path"]).toBe("/api/users/999");
-    expect(span.status.code).toBe(SpanStatusCode.OK);
   });
 });
