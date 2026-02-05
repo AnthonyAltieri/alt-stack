@@ -1,12 +1,11 @@
-import "reflect-metadata";
+import "./test-reflect-metadata.js";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Express } from "express";
 import http from "node:http";
+import { createRequire } from "node:module";
 import { PassThrough } from "node:stream";
 import { z } from "zod";
-import { Module, Injectable, Scope } from "@nestjs/common";
-import { NestFactory } from "@nestjs/core";
 import {
   TaggedError,
   createMiddlewareWithErrors,
@@ -32,8 +31,27 @@ class UnauthorizedError extends TaggedError {
   }
 }
 
-@Injectable()
-class UsersService {
+let UsersService: { new (): { findById(id: string): { id: string; name: string } } };
+let RequestContextService: { new (): { id: number } };
+let AppModule: { new (): unknown };
+let NestFactory: typeof import("@nestjs/core").NestFactory;
+let Injectable: typeof import("@nestjs/common").Injectable;
+let Module: typeof import("@nestjs/common").Module;
+let Scope: typeof import("@nestjs/common").Scope;
+
+const require = createRequire(import.meta.url);
+const nestAvailable = (() => {
+  try {
+    require.resolve("@nestjs/common");
+    require.resolve("@nestjs/core");
+    require.resolve("@nestjs/platform-express");
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
+class UsersServiceImpl {
   findById(id: string) {
     return { id, name: `User ${id}` };
   }
@@ -41,16 +59,11 @@ class UsersService {
 
 let requestIdCounter = 0;
 
-@Injectable({ scope: Scope.REQUEST })
-class RequestContextService {
+class RequestContextServiceImpl {
   readonly id = ++requestIdCounter;
 }
 
-@Module({
-  providers: [UsersService, RequestContextService],
-  exports: [UsersService, RequestContextService],
-})
-class AppModule {}
+class AppModuleImpl {}
 
 type DispatchOptions = {
   method: string;
@@ -111,11 +124,29 @@ async function dispatch(
   };
 }
 
-describe("NestJS E2E with Alt Stack router", () => {
+const describeNest = nestAvailable ? describe : describe.skip;
+
+describeNest("NestJS E2E with Alt Stack router", () => {
   let app: any;
   let expressApp: Express;
 
   beforeAll(async () => {
+    const nestCommon = await import("@nestjs/common");
+    const nestCore = await import("@nestjs/core");
+    ({ Injectable, Module, Scope } = nestCommon);
+    ({ NestFactory } = nestCore);
+
+    Injectable()(UsersServiceImpl);
+    Injectable({ scope: Scope.REQUEST })(RequestContextServiceImpl);
+    Module({
+      providers: [UsersServiceImpl, RequestContextServiceImpl],
+      exports: [UsersServiceImpl, RequestContextServiceImpl],
+    })(AppModuleImpl);
+
+    UsersService = UsersServiceImpl;
+    RequestContextService = RequestContextServiceImpl;
+    AppModule = AppModuleImpl;
+
     app = await NestFactory.create(AppModule, { logger: false });
     expressApp = app.getHttpAdapter().getInstance();
 

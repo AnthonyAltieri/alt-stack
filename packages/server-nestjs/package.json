@@ -39,7 +39,6 @@
     "@types/supertest": "^6.0.3",
     "express": "^5.0.0",
     "oxlint": "^1.24.0",
-    "reflect-metadata": "^0.2.2",
     "supertest": "^7.1.4",
     "tsup": "^8.0.0",
     "typescript": "^5.9.2",
