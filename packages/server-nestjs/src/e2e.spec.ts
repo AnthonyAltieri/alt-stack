@@ -64,6 +64,8 @@ async function dispatch(
   options: DispatchOptions,
 ): Promise<{ status: number; body: string; headers: Record<string, string | string[]> }> {
   const socket = new PassThrough();
+  (socket as any).remoteAddress = "127.0.0.1";
+  (socket as any).remotePort = 0;
   const req = new http.IncomingMessage(socket as any);
   req.method = options.method;
   req.url = options.url;
@@ -93,13 +95,15 @@ async function dispatch(
     return originalEnd(chunk, ...args);
   };
 
+  const handler = "handle" in app ? (app as any).handle.bind(app) : (app as any);
+
   await new Promise<void>((resolve, reject) => {
     res.on("finish", resolve);
-    app(req, res, (error: unknown) => {
+    handler(req, res, (error: unknown) => {
       if (error) reject(error);
     });
 
-    process.nextTick(() => {
+    setImmediate(() => {
       if (payload) {
         req.emit("data", Buffer.from(payload));
       }
@@ -230,14 +234,16 @@ describe("NestJS E2E with Alt Stack router", () => {
     expect(firstId).not.toBe(secondId);
   });
 
-  it("returns validation errors for query/body input", async () => {
+  it("returns validation errors for query input", async () => {
     const queryRes = await dispatch(expressApp, {
       method: "GET",
       url: "/api/query?limit=0",
       headers: { "x-user-id": "u1" },
     });
     expect(queryRes.status).toBe(400);
+  });
 
+  it("returns validation errors for body input", async () => {
     const bodyRes = await dispatch(expressApp, {
       method: "POST",
       url: "/api/items",
