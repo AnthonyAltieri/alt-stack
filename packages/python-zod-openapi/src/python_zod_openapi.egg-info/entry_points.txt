@@ -1,0 +1,2 @@
+[console_scripts]
+python-zod-openapi = python_zod_openapi.cli:main

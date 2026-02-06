@@ -1,0 +1,98 @@
+Metadata-Version: 2.4
+Name: python-zod-openapi
+Version: 0.1.0
+Summary: Convert OpenAPI schemas to Pydantic models with Python code generation
+License: MIT
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: pydantic[email]>=2.7.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0.0; extra == "dev"
+Requires-Dist: ruff>=0.6.0; extra == "dev"
+Requires-Dist: ty>=0.0.0; extra == "dev"
+Dynamic: license-file
+
+# python-zod-openapi
+
+Convert OpenAPI 3.x schemas to Pydantic models with Python code generation.
+
+## Features
+
+- Converts OpenAPI schemas to Pydantic models and type aliases
+- Handles objects, arrays, enums, unions (`oneOf`), intersections (`allOf`)
+- Supports nullable fields and validation constraints
+- Route request/response lookup objects from OpenAPI paths
+- Custom format registry for mapping OpenAPI formats to custom Python types
+
+## Installation
+
+```bash
+uv pip install python-zod-openapi
+```
+
+## CLI Usage
+
+```bash
+python-zod-openapi <input> [options]
+```
+
+Options:
+
+- `-o, --output <file>`: output file path (default: `generated-types.py`)
+- `-r, --registry <file>`: registry file that registers custom schemas
+- `-i, --include <file>`: Python file to include at top of generated output
+
+Examples:
+
+```bash
+# Generate from local file
+python-zod-openapi openapi.json
+
+# Generate from URL
+python-zod-openapi http://localhost:3000/docs/openapi.json
+
+# Specify output file
+python-zod-openapi openapi.json -o src/api_types.py
+```
+
+## Programmatic Usage
+
+```python
+from python_zod_openapi import openapi_to_pydantic_code
+
+openapi = {
+    "components": {
+        "schemas": {
+            "User": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "integer"},
+                    "email": {"type": "string", "format": "email"},
+                },
+                "required": ["id", "email"],
+            }
+        }
+    }
+}
+
+code = openapi_to_pydantic_code(openapi, options={"include_routes": True})
+print(code)
+```
+
+## Custom String Formats
+
+```python
+from python_zod_openapi import register_pydantic_type_to_openapi_schema
+from pydantic import BaseModel
+
+class DateTimeSchema(BaseModel):
+    value: str
+
+register_pydantic_type_to_openapi_schema(DateTimeSchema, {
+    "schema_exported_variable_name": "DateTimeSchema",
+    "type": "string",
+    "format": "iso-date-time",
+})
+```
+
