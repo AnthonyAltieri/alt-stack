@@ -4,6 +4,7 @@ import {
   err,
   isOk,
   isErr,
+  isResult,
   map,
   flatMap,
   mapError,
@@ -110,6 +111,18 @@ describe("guards", () => {
     const result = err(new TestError("error"));
     expect(isErr(result)).toBe(true);
     expect(isOk(result)).toBe(false);
+  });
+
+  it("isResult returns true for Ok and Err", () => {
+    expect(isResult(ok(42))).toBe(true);
+    expect(isResult(err(new TestError("error")))).toBe(true);
+  });
+
+  it("isResult returns false for invalid shapes", () => {
+    expect(isResult(null)).toBe(false);
+    expect(isResult({})).toBe(false);
+    expect(isResult({ _tag: "Ok" })).toBe(false);
+    expect(isResult({ _tag: "Err", error: { _tag: "Test" } })).toBe(false);
   });
 
   it("type narrows correctly", () => {

@@ -6,12 +6,12 @@ import type {
   MiddlewareFunction,
   MiddlewareResultSuccess,
   Result,
-  ResultError,
 } from "@alt-stack/server-core";
 import {
   err as resultErr,
   findHttpStatusForError,
   isErr,
+  isResult,
   middlewareMarker,
   middlewareOk,
 } from "@alt-stack/server-core";
@@ -96,15 +96,6 @@ function normalizeMiddleware(input: AnyAltStackMiddleware): NormalizedMiddleware
   }
 
   return { middlewares: [input as any], flags: [false] };
-}
-
-function isResult(value: unknown): value is Result<unknown, ResultError> {
-  if (!value || typeof value !== "object") return false;
-  if (!("_tag" in value)) return false;
-  const tag = (value as any)._tag;
-  if (tag === "Ok") return "value" in value;
-  if (tag === "Err") return "error" in value;
-  return false;
 }
 
 function serializeTaggedError(error: Error & { _tag: string }): object {
@@ -359,4 +350,3 @@ export function createNestMiddleware(
     });
   };
 }
-
