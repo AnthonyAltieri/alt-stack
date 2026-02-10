@@ -225,19 +225,16 @@ export function createServer<TContext extends ExpressBaseContext = ExpressBaseCo
             });
 
             // Result-based middleware returns Result<MiddlewareResultSuccess, Error>
-            if (result && typeof result === "object" && "_tag" in result) {
-              if (result._tag === "Err") {
-                const error = result.error as Error & { _tag: string };
-                return { ok: false, error };
+            if (isResult(result)) {
+              if (isErr(result)) {
+                return { ok: false, error: result.error as Error & { _tag: string } };
               }
 
-              if (result._tag === "Ok") {
-                const value = result.value as MiddlewareResultSuccess<any>;
-                if (value && value.marker === middlewareMarker) {
-                  currentCtx = { ...currentCtx, ...value.ctx } as ProcedureContext;
-                }
-                return { ok: true, ctx: currentCtx };
+              const value = result.value as MiddlewareResultSuccess<any>;
+              if (value && value.marker === middlewareMarker) {
+                currentCtx = { ...currentCtx, ...value.ctx } as ProcedureContext;
               }
+              return { ok: true, ctx: currentCtx };
             }
 
             return { ok: true, ctx: currentCtx };
@@ -299,20 +296,16 @@ export function createServer<TContext extends ExpressBaseContext = ExpressBaseCo
 
           // Check if middleware returned a Result type (err() call)
           // This allows inline middleware to return err() even without being flagged
-          if (result && typeof result === "object" && "_tag" in result) {
-            const resultWithTag = result as { _tag: string; error?: unknown; value?: unknown };
-            if (resultWithTag._tag === "Err") {
-              const error = resultWithTag.error as Error & { _tag: string };
-              return { ok: false, error };
+          if (isResult(result)) {
+            if (isErr(result)) {
+              return { ok: false, error: result.error as Error & { _tag: string } };
             }
 
-            if (resultWithTag._tag === "Ok") {
-              const value = resultWithTag.value as MiddlewareResultSuccess<any>;
-              if (value && value.marker === middlewareMarker) {
-                currentCtx = { ...currentCtx, ...value.ctx } as ProcedureContext;
-              }
-              return { ok: true, ctx: currentCtx };
+            const value = result.value as MiddlewareResultSuccess<any>;
+            if (value && value.marker === middlewareMarker) {
+              currentCtx = { ...currentCtx, ...value.ctx } as ProcedureContext;
             }
+            return { ok: true, ctx: currentCtx };
           }
 
           if (result && typeof result === "object" && "marker" in result && "ok" in result) {

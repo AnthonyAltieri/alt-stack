@@ -5,7 +5,8 @@ import type { TelemetryOption } from "@alt-stack/server-core";
 import type { Router } from "@alt-stack/server-core";
 import { createDocsRouter, createServer } from "@alt-stack/server-express";
 import type { CreateDocsRouterOptions } from "@alt-stack/server-express";
-import type { NestBaseContext, NestServiceLocator } from "./types.js";
+import type { NestBaseContext } from "./types.js";
+import { createNestLocator } from "./nest-locator.js";
 import { readAltStackRequestContext } from "./request-context.js";
 
 export interface NestAppLike {
@@ -66,29 +67,6 @@ function getExpressInstance(app: NestAppLike): { use: (...args: any[]) => any } 
     );
   }
   return instance as any;
-}
-
-function createNestLocator(app: NestAppLike): NestServiceLocator {
-  const get = <T,>(token: unknown): T => {
-    try {
-      return app.get<T>(token, { strict: false });
-    } catch {
-      return app.get<T>(token);
-    }
-  };
-
-  const resolve = async <T,>(token: unknown): Promise<T> => {
-    if (typeof app.resolve === "function") {
-      try {
-        return await app.resolve<T>(token, undefined, { strict: false });
-      } catch {
-        return await app.resolve<T>(token);
-      }
-    }
-    return get<T>(token);
-  };
-
-  return { get, resolve };
 }
 
 export function registerAltStack<TCustomContext extends object = Record<string, never>>(

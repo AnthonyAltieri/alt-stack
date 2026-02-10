@@ -19,6 +19,7 @@ export {
   err,
   isOk,
   isErr,
+  isResult,
   map,
   flatMap,
   mapError,

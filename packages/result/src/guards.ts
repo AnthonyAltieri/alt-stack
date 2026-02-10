@@ -1,5 +1,6 @@
 import type { Result, Ok, Err, ResultError } from "./result.js";
 import { isResultError } from "./infer.js";
+import { hasResultBrand } from "./marker.js";
 
 /**
  * Type guard for Ok
@@ -58,12 +59,13 @@ export function isErr<A, E extends ResultError>(
 export function isResult(
   value: unknown,
 ): value is Result<unknown, ResultError> {
-  if (!value || typeof value !== "object") return false;
-  if (!("_tag" in value)) return false;
-  const tag = (value as any)._tag;
-  if (tag === "Ok") return "value" in value;
+  if (!hasResultBrand(value)) return false;
+  const candidate = value as Record<string, unknown>;
+  if (!("_tag" in candidate)) return false;
+  const tag = candidate._tag;
+  if (tag === "Ok") return "value" in candidate;
   if (tag === "Err") {
-    return "error" in value && isResultError((value as any).error);
+    return "error" in candidate && isResultError(candidate.error);
   }
   return false;
 }

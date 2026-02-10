@@ -14,7 +14,7 @@
   },
   "scripts": {
     "build": "tsup",
-    "check-types": "tsc --noEmit"
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [
     "kafka",

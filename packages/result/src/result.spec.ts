@@ -122,6 +122,8 @@ describe("guards", () => {
     expect(isResult(null)).toBe(false);
     expect(isResult({})).toBe(false);
     expect(isResult({ _tag: "Ok" })).toBe(false);
+    expect(isResult({ _tag: "Ok", value: 42 })).toBe(false);
+    expect(isResult({ _tag: "Err", error: new TestError("error") })).toBe(false);
     expect(isResult({ _tag: "Err", error: { _tag: "Test" } })).toBe(false);
   });
 

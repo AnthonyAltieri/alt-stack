@@ -559,3 +559,165 @@ Commit and push the current branch changes, then re-evaluate the open PR title/b
 - `git push`
 - `gh pr view --json number,title,body,url,headRefName,baseRefName`
 - `gh pr edit` (only if metadata changes are needed)
+
+# PR idiomatic/simplicity pass (2026-02-10)
+
+## Goal
+Confirm this PR is idiomatic and minimal, and simplify any obvious duplication without changing behavior.
+
+## Success criteria
+- Runtime behavior and tests remain green.
+- Obvious duplication removed.
+- Public adapter exports stay consistent for newly added result guards.
+
+## Assumptions / constraints
+- Keep changes scoped to the PR’s touched server/result adapter surface.
+- Prefer minimal refactors over structural rewrites.
+
+## Steps
+- [x] Review changed runtime/test files for complexity and behavior risks.
+- [x] Extract duplicated Nest service locator helper used by register + middleware.
+- [x] Ensure adapter `index.ts` re-exports include `isResult` for API parity.
+- [x] Run targeted lint and focused tests for touched files.
+- [x] Document review findings/results.
+
+## Risks / edge cases
+- Refactor could accidentally alter DI `strict: false` fallback behavior.
+- Export changes could surface type issues in adapter package entrypoints.
+
+## Verification plan
+- `pnpm exec oxlint packages/server-nestjs/src/register.ts`
+- `pnpm exec oxlint packages/server-nestjs/src/middleware.ts`
+- `pnpm exec oxlint packages/server-nestjs/src/nest-locator.ts`
+- `pnpm exec oxlint packages/server-express/src/index.ts packages/server-hono/src/index.ts packages/server-bun/src/index.ts packages/server-nestjs/src/index.ts`
+- `cd packages/server-nestjs && ../node_modules/.bin/vitest --run src/register.spec.ts src/middleware.spec.ts src/telemetry.spec.ts src/e2e.spec.ts`
+
+## Review notes
+- No high-severity correctness issues found in the reviewed PR runtime paths.
+- Simplified duplicate DI helper logic by extracting `createNestLocator` into `packages/server-nestjs/src/nest-locator.ts`.
+- Kept adapter API surface consistent by re-exporting `isResult` from adapter entrypoints.
+
+## Verification results
+- `pnpm exec oxlint packages/server-nestjs/src/register.ts`
+- `pnpm exec oxlint packages/server-nestjs/src/middleware.ts`
+- `pnpm exec oxlint packages/server-nestjs/src/nest-locator.ts`
+- `pnpm exec oxlint packages/server-express/src/index.ts`
+- `pnpm exec oxlint packages/server-hono/src/index.ts`
+- `pnpm exec oxlint packages/server-bun/src/index.ts`
+- `pnpm exec oxlint packages/server-nestjs/src/index.ts`
+- `pnpm -C packages/result test -- run src/result.spec.ts`
+- `cd packages/server-nestjs && ../node_modules/.bin/vitest --run src/register.spec.ts src/middleware.spec.ts src/telemetry.spec.ts src/e2e.spec.ts`
+- `pnpm -C packages/server-express check-types` (fails on existing `src/server.telemetry.spec.ts` strict-null issues)
+- `pnpm -C packages/server-hono check-types` (fails on existing `src/server.telemetry.spec.ts` strict-null issues)
+- `pnpm -C packages/server-bun check-types` (passes)
+- `pnpm -C packages/server-nestjs check-types` (fails on existing test typing issues in `src/e2e.spec.ts`)
+
+# Fix package typecheck failures (2026-02-10)
+
+## Goal
+Resolve current TypeScript `typecheck` failures in `server-express`, `server-hono`, and `server-nestjs` without changing runtime behavior, and rename scripts from `check-types` to `typecheck`.
+
+## Success criteria
+- `pnpm -C packages/server-express typecheck` passes.
+- `pnpm -C packages/server-hono typecheck` passes.
+- `pnpm -C packages/server-nestjs typecheck` passes.
+- Root `pnpm typecheck` pipeline is updated to use `typecheck` tasks.
+
+## Assumptions / constraints
+- Keep fixes scoped to type-level test issues.
+- Prefer minimal, idiomatic assertions and explicit generics.
+
+## Steps
+- [x] Fix strict-null span/event indexing in `server-express` telemetry spec.
+- [x] Fix strict-null span/event indexing in `server-hono` telemetry spec.
+- [x] Fix `server-nestjs` E2E typing (`ctx.nest.get/resolve`, router context generic).
+- [x] Run targeted lint on each touched file.
+- [x] Run package `typecheck` for all three packages.
+- [x] Record verification results.
+
+## Risks / edge cases
+- Overusing non-null assertions can hide real issues; keep assertions paired with length/defined checks.
+- Nest router generic fix must preserve middleware-injected `user` context typing.
+
+## Verification plan
+- `pnpm exec oxlint packages/server-express/src/server.telemetry.spec.ts`
+- `pnpm exec oxlint packages/server-hono/src/server.telemetry.spec.ts`
+- `pnpm exec oxlint packages/server-nestjs/src/e2e.spec.ts`
+- `pnpm -C packages/server-express typecheck`
+- `pnpm -C packages/server-hono typecheck`
+- `pnpm -C packages/server-nestjs typecheck`
+- `pnpm -C packages/server-bun typecheck`
+
+## Review notes
+- Replaced unsafe index access patterns in telemetry specs with explicit non-null assertions after cardinality checks.
+- Added explicit Nest DI generics in E2E (`ctx.nest.get<T>`, `ctx.nest.resolve<T>`) and aligned router/register context generics.
+- Renamed script/pipeline task name from `check-types` to `typecheck` across root/package scripts and turbo config.
+- Fixed additional strict-null indexing in `packages/server-core/src/telemetry.integration.spec.ts` discovered when running filtered root `pnpm typecheck`.
+
+## Verification results
+- `pnpm exec oxlint packages/server-express/src/server.telemetry.spec.ts`
+- `pnpm exec oxlint packages/server-hono/src/server.telemetry.spec.ts`
+- `pnpm exec oxlint packages/server-nestjs/src/e2e.spec.ts`
+- `pnpm exec oxlint packages/server-core/src/telemetry.integration.spec.ts`
+- `pnpm -C packages/server-express typecheck`
+- `pnpm -C packages/server-hono typecheck`
+- `pnpm -C packages/server-nestjs typecheck`
+- `pnpm -C packages/server-core typecheck`
+- `pnpm typecheck --filter=@alt-stack/server-express --filter=@alt-stack/server-hono --filter=@alt-stack/server-nestjs`
+
+# Address PR review findings (2026-02-10)
+
+## Goal
+Fix the two review blockers: missing tracked Nest locator module and Result-shape payload ambiguity in adapters.
+
+## Success criteria
+- `packages/server-nestjs/src/nest-locator.ts` is present in tracked sources.
+- Plain payloads shaped like `{ _tag: "Ok", value: ... }` are not treated as framework `Result` values.
+- Existing `ok()/err()` returns continue to work across adapters.
+
+## Assumptions / constraints
+- Keep behavior stable for typed `Result` via `ok/err` constructors.
+- Minimize surface area by fixing discrimination in `@alt-stack/result` once.
+
+## Steps
+- [x] Add runtime result branding in `@alt-stack/result` constructors.
+- [x] Update `isResult` guard to require branded values.
+- [x] Add regression tests for unbranded Result-shaped objects.
+- [x] Add adapter-level regression test for raw `_tag` payload behavior.
+- [x] Run targeted lint and focused tests/typecheck.
+- [x] Document results.
+
+## Risks / edge cases
+- Manual hand-crafted Result-like objects will no longer be accepted by `isResult`.
+- Ensure non-enumerable brand does not leak into JSON responses.
+
+## Verification plan
+- `pnpm exec oxlint packages/result/src/constructors.ts packages/result/src/guards.ts packages/result/src/result.spec.ts`
+- `pnpm exec oxlint packages/server-nestjs/src/e2e.spec.ts`
+- `pnpm -C packages/result test -- run src/result.spec.ts`
+- `cd packages/server-nestjs && ../node_modules/.bin/vitest --run src/e2e.spec.ts`
+- `pnpm -C packages/server-express typecheck`
+- `pnpm -C packages/server-hono typecheck`
+- `pnpm -C packages/server-nestjs typecheck`
+
+## Review notes
+- Added non-enumerable runtime branding for `ok()/err()` values and changed `isResult` to only accept branded objects.
+- Updated adapter middleware result parsing in Express/Hono/Bun to use the unified `isResult` guard instead of raw structural `_tag` checks.
+- Added regression coverage to ensure unbranded Result-shaped objects are rejected by `isResult` and treated as plain handler payloads.
+- Kept `packages/server-nestjs/src/nest-locator.ts` in the tracked change set to resolve the missing-module review finding.
+
+## Verification results
+- `pnpm exec oxlint packages/result/src/marker.ts`
+- `pnpm exec oxlint packages/result/src/constructors.ts`
+- `pnpm exec oxlint packages/result/src/guards.ts`
+- `pnpm exec oxlint packages/result/src/result.spec.ts`
+- `pnpm exec oxlint packages/server-bun/src/server.ts`
+- `pnpm exec oxlint packages/server-hono/src/server.ts`
+- `pnpm exec oxlint packages/server-express/src/server.ts`
+- `pnpm exec oxlint packages/server-nestjs/src/e2e.spec.ts`
+- `pnpm -C packages/result test -- run src/result.spec.ts`
+- `cd packages/server-nestjs && ../node_modules/.bin/vitest --run src/e2e.spec.ts`
+- `pnpm -C packages/result typecheck`
+- `pnpm -C packages/server-express typecheck`
+- `pnpm -C packages/server-hono typecheck`
+- `pnpm -C packages/server-nestjs typecheck`

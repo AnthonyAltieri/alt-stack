@@ -396,6 +396,6 @@ Sorts schemas topologically to ensure correct generation order.
 pnpm test
 
 # Type check
-pnpm check-types
+pnpm typecheck
 ```
 

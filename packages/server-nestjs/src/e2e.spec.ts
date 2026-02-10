@@ -16,6 +16,7 @@ import {
   ok,
   registerAltStack,
   router,
+  type NestBaseContext,
 } from "./index.js";
 
 class NotFoundError extends TaggedError {
@@ -142,12 +143,12 @@ describe("NestJS E2E with Alt Stack router", () => {
     expressApp.use("/api", createNestMiddleware(app, authMiddleware));
 
     const factory = init<{ user?: { id: string } }>();
-    const apiRouter = router({
+    const apiRouter = router<NestBaseContext & { user?: { id: string } }>({
       "/users/{id}": factory.procedure
         .input({ params: z.object({ id: z.string() }) })
         .output(z.object({ id: z.string(), name: z.string() }))
         .get(({ ctx, input }) => {
-          const users = ctx.nest.get(UsersService);
+          const users = ctx.nest.get<UsersService>(UsersService);
           return ok(users.findById(input.params.id));
         }),
       "/me": factory.procedure
@@ -156,7 +157,7 @@ describe("NestJS E2E with Alt Stack router", () => {
       "/scoped": factory.procedure
         .output(z.object({ requestId: z.number() }))
         .get(async ({ ctx }) => {
-          const scoped = await ctx.nest.resolve(RequestContextService);
+          const scoped = await ctx.nest.resolve<RequestContextService>(RequestContextService);
           return ok({ requestId: scoped.id });
         }),
       "/items": factory.procedure
@@ -174,9 +175,17 @@ describe("NestJS E2E with Alt Stack router", () => {
           404: z.object({ _tag: z.literal("NotFoundError"), message: z.string() }),
         })
         .get(() => err(new NotFoundError("missing"))),
+      "/raw-result-shape": factory.procedure
+        .output(
+          z.object({
+            _tag: z.literal("Ok"),
+            value: z.object({ data: z.string() }),
+          }),
+        )
+        .get(() => ({ _tag: "Ok" as const, value: { data: "domain-payload" } })),
     });
 
-    registerAltStack(app, { "/": apiRouter }, { mountPath: "/api" });
+    registerAltStack<{ user?: { id: string } }>(app, { "/": apiRouter }, { mountPath: "/api" });
 
     await app.init();
   });
@@ -262,6 +271,20 @@ describe("NestJS E2E with Alt Stack router", () => {
     expect(res.status).toBe(404);
     expect(JSON.parse(res.body)).toEqual({
       error: { _tag: "NotFoundError", code: "NotFoundError", message: "missing" },
+    });
+  });
+
+  it("treats raw Result-shaped payloads as plain output", async () => {
+    const res = await dispatch(expressApp, {
+      method: "GET",
+      url: "/api/raw-result-shape",
+      headers: { "x-user-id": "u1" },
+    });
+
+    expect(res.status).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({
+      _tag: "Ok",
+      value: { data: "domain-payload" },
     });
   });
 });

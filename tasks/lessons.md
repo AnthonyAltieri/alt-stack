@@ -9,3 +9,8 @@
 - What went wrong: Skipped E2E coverage when Nest deps were missing.
 - Why it happened: Assumed skipping in the sandbox was acceptable without confirming user intent.
 - Prevention rule: If the user asks to run tests or install deps, install in the sandbox (request escalation if needed) and do not skip tests.
+
+## 2026-02-10 - Incorporate newly added requirements into active plan immediately
+- What went wrong: Started a focused type-failure fix pass before accounting for the user's added `check-types` -> `typecheck` rename requirement.
+- Why it happened: Treated the new instruction as a follow-up detail instead of a concurrent acceptance criterion.
+- Prevention rule: When the user adds scope mid-task, update the active plan and verification commands first, then continue implementation.
