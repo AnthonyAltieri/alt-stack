@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "tsc",
-    "check-types": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
     "test:e2e": "vitest run",
     "test": "pnpm test:e2e"
   },

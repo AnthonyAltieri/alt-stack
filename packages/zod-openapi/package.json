@@ -19,7 +19,7 @@
   "scripts": {
     "build": "tsup",
     "test": "vitest",
-    "check-types": "tsc --noEmit"
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [
     "openapi",

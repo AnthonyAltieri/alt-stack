@@ -3,7 +3,7 @@ import { Hono as HonoClass } from "hono";
 import type { z } from "zod";
 import type { ZodError } from "zod";
 import type { TypedContext, InputConfig, TelemetryOption } from "@alt-stack/server-core";
-import type { Procedure, ReadyProcedure } from "@alt-stack/server-core";
+import type { Procedure } from "@alt-stack/server-core";
 import type { Router } from "@alt-stack/server-core";
 import {
   validateInput,
@@ -16,11 +16,10 @@ import {
   endSpanWithError,
   setSpanOk,
   withActiveSpan,
-  isOk,
   isErr,
+  isResult,
   ok as resultOk,
   err as resultErr,
-  extractTagsFromSchema,
   findHttpStatusForError,
 } from "@alt-stack/server-core";
 import type { MiddlewareResult, MiddlewareResultSuccess } from "@alt-stack/server-core";
@@ -53,7 +52,6 @@ function normalizePath(prefix: string, path: string): string {
   }
   return `${normalizedPrefix}${cleanPath}`;
 }
-
 
 /**
  * Serialize a ResultError for JSON response.
@@ -281,19 +279,16 @@ export function createServer<
             });
 
             // Result-based middleware returns Result<MiddlewareResultSuccess, Error>
-            if (result && typeof result === "object" && "_tag" in result) {
-              if (result._tag === "Err") {
-                const error = result.error as Error & { _tag: string };
-                return { ok: false, error };
+            if (isResult(result)) {
+              if (isErr(result)) {
+                return { ok: false, error: result.error as Error & { _tag: string } };
               }
 
-              if (result._tag === "Ok") {
-                const value = result.value as MiddlewareResultSuccess<any>;
-                if (value && value.marker === middlewareMarker) {
-                  currentCtx = { ...currentCtx, ...value.ctx } as ProcedureContext;
-                }
-                return { ok: true, ctx: currentCtx };
+              const value = result.value as MiddlewareResultSuccess<any>;
+              if (value && value.marker === middlewareMarker) {
+                currentCtx = { ...currentCtx, ...value.ctx } as ProcedureContext;
               }
+              return { ok: true, ctx: currentCtx };
             }
 
             return { ok: true, ctx: currentCtx };
@@ -357,20 +352,16 @@ export function createServer<
 
           // Check if middleware returned a Result type (err() call)
           // This allows inline middleware to return err() even without being flagged
-          if (result && typeof result === "object" && "_tag" in result) {
-            const resultWithTag = result as { _tag: string; error?: unknown; value?: unknown };
-            if (resultWithTag._tag === "Err") {
-              const error = resultWithTag.error as Error & { _tag: string };
-              return { ok: false, error };
+          if (isResult(result)) {
+            if (isErr(result)) {
+              return { ok: false, error: result.error as Error & { _tag: string } };
             }
 
-            if (resultWithTag._tag === "Ok") {
-              const value = resultWithTag.value as MiddlewareResultSuccess<any>;
-              if (value && value.marker === middlewareMarker) {
-                currentCtx = { ...currentCtx, ...value.ctx } as ProcedureContext;
-              }
-              return { ok: true, ctx: currentCtx };
+            const value = result.value as MiddlewareResultSuccess<any>;
+            if (value && value.marker === middlewareMarker) {
+              currentCtx = { ...currentCtx, ...value.ctx } as ProcedureContext;
             }
+            return { ok: true, ctx: currentCtx };
           }
 
           // Check if it's a MiddlewareResult wrapper
@@ -416,7 +407,8 @@ export function createServer<
 
         currentCtx = middlewareResult.ctx;
 
-        const result = await procedure.handler(currentCtx);
+        const handlerResult = await procedure.handler(currentCtx);
+        const result = isResult(handlerResult) ? handlerResult : resultOk(handlerResult);
 
         // Handle Result type - check if it's Ok or Err
         if (isErr(result)) {
@@ -539,4 +531,3 @@ export function createServer<
 
   return app;
 }
-

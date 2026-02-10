@@ -8,6 +8,7 @@ export {
   err,
   isOk,
   isErr,
+  isResult,
   map,
   flatMap,
   mapError,
@@ -69,4 +70,3 @@ export type {
   Span,
 } from "./telemetry.js";
 export { extractTagsFromSchema, findHttpStatusForError } from "./extract-tags.js";
-

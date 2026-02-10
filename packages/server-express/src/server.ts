@@ -3,7 +3,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import type { z } from "zod";
 import type { ZodError } from "zod";
 import type { TypedContext, InputConfig, TelemetryOption } from "@alt-stack/server-core";
-import type { Procedure, ReadyProcedure } from "@alt-stack/server-core";
+import type { Procedure } from "@alt-stack/server-core";
 import type { Router } from "@alt-stack/server-core";
 import {
   validateInput,
@@ -16,11 +16,10 @@ import {
   endSpanWithError,
   setSpanOk,
   withActiveSpan,
-  isOk,
   isErr,
+  isResult,
   ok as resultOk,
   err as resultErr,
-  extractTagsFromSchema,
   findHttpStatusForError,
 } from "@alt-stack/server-core";
 import type { MiddlewareResult, MiddlewareResultSuccess } from "@alt-stack/server-core";
@@ -49,7 +48,6 @@ function normalizePath(prefix: string, path: string): string {
   }
   return `${normalizedPrefix}${cleanPath}`;
 }
-
 
 /**
  * Serialize a ResultError for JSON response.
@@ -131,14 +129,16 @@ export function createServer<TContext extends ExpressBaseContext = ExpressBaseCo
 
     const handler = async (req: Request, res: Response, _next: NextFunction) => {
       // Create telemetry span if enabled
+      const urlPath = `${req.baseUrl ?? ""}${req.path}`;
+      const routePath = `${req.baseUrl ?? ""}${procedure.path}`;
       const shouldTrace =
         telemetryConfig.enabled &&
-        !shouldIgnoreRoute(procedure.path, telemetryConfig);
+        !shouldIgnoreRoute(routePath, telemetryConfig);
       const span = shouldTrace
         ? createRequestSpan(
             procedure.method,
-            procedure.path,
-            req.path,
+            routePath,
+            urlPath,
             telemetryConfig,
           )
         : undefined;
@@ -225,19 +225,16 @@ export function createServer<TContext extends ExpressBaseContext = ExpressBaseCo
             });
 
             // Result-based middleware returns Result<MiddlewareResultSuccess, Error>
-            if (result && typeof result === "object" && "_tag" in result) {
-              if (result._tag === "Err") {
-                const error = result.error as Error & { _tag: string };
-                return { ok: false, error };
+            if (isResult(result)) {
+              if (isErr(result)) {
+                return { ok: false, error: result.error as Error & { _tag: string } };
               }
 
-              if (result._tag === "Ok") {
-                const value = result.value as MiddlewareResultSuccess<any>;
-                if (value && value.marker === middlewareMarker) {
-                  currentCtx = { ...currentCtx, ...value.ctx } as ProcedureContext;
-                }
-                return { ok: true, ctx: currentCtx };
+              const value = result.value as MiddlewareResultSuccess<any>;
+              if (value && value.marker === middlewareMarker) {
+                currentCtx = { ...currentCtx, ...value.ctx } as ProcedureContext;
               }
+              return { ok: true, ctx: currentCtx };
             }
 
             return { ok: true, ctx: currentCtx };
@@ -299,20 +296,16 @@ export function createServer<TContext extends ExpressBaseContext = ExpressBaseCo
 
           // Check if middleware returned a Result type (err() call)
           // This allows inline middleware to return err() even without being flagged
-          if (result && typeof result === "object" && "_tag" in result) {
-            const resultWithTag = result as { _tag: string; error?: unknown; value?: unknown };
-            if (resultWithTag._tag === "Err") {
-              const error = resultWithTag.error as Error & { _tag: string };
-              return { ok: false, error };
+          if (isResult(result)) {
+            if (isErr(result)) {
+              return { ok: false, error: result.error as Error & { _tag: string } };
             }
 
-            if (resultWithTag._tag === "Ok") {
-              const value = resultWithTag.value as MiddlewareResultSuccess<any>;
-              if (value && value.marker === middlewareMarker) {
-                currentCtx = { ...currentCtx, ...value.ctx } as ProcedureContext;
-              }
-              return { ok: true, ctx: currentCtx };
+            const value = result.value as MiddlewareResultSuccess<any>;
+            if (value && value.marker === middlewareMarker) {
+              currentCtx = { ...currentCtx, ...value.ctx } as ProcedureContext;
             }
+            return { ok: true, ctx: currentCtx };
           }
 
           if (result && typeof result === "object" && "marker" in result && "ok" in result) {
@@ -352,7 +345,8 @@ export function createServer<TContext extends ExpressBaseContext = ExpressBaseCo
 
         currentCtx = middlewareResult.ctx;
 
-        const result = await procedure.handler(currentCtx);
+        const handlerResult = await procedure.handler(currentCtx);
+        const result = isResult(handlerResult) ? handlerResult : resultOk(handlerResult);
 
         // Handle Result type - check if it's Ok or Err
         if (isErr(result)) {
