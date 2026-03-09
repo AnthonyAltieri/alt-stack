@@ -732,7 +732,7 @@ importers:
         specifier: ^4.0.0
         version: 4.1.12
 
-  packages/zod-openapi:
+  packages/typescript-zod-openapi:
     dependencies:
       tsx:
         specifier: ^4.19.2
