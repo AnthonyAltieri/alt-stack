@@ -76,6 +76,7 @@ import type { ExpressBaseContext } from "./types.js";
 export function createServer<TContext extends ExpressBaseContext = ExpressBaseContext>(
   config: Record<string, Router<TContext> | Router<TContext>[]>,
   options?: {
+    basePath?: string;
     createContext?: (req: Request, res: Response) => Promise<Omit<TContext, "express" | "span">> | Omit<TContext, "express" | "span">;
     defaultErrorHandlers?: {
       default400Error: (
@@ -91,6 +92,10 @@ export function createServer<TContext extends ExpressBaseContext = ExpressBaseCo
 ): Express {
   const app = express();
   const telemetryConfig = resolveTelemetryConfig(options?.telemetry);
+  const telemetryBasePath =
+    options?.basePath && options.basePath !== "/"
+      ? normalizePrefix(options.basePath)
+      : "";
 
   // Initialize telemetry if enabled
   if (telemetryConfig.enabled) {

@@ -1,15 +1,20 @@
-import type { z } from "zod";
 import type { KyInstance, Options as KyOptions, KyResponse } from "ky";
-import { ApiClient, type ApiClientValidationErrorHandler } from "@alt-stack/http-client-core";
+import {
+  ApiClient,
+  type ApiClientLoggingOptions,
+  type ApiClientValidationErrorHandler,
+  type ApiRequestSchema,
+  type ApiResponseSchema,
+} from "@alt-stack/http-client-core";
 import { KyExecutor, type KyExecutorOptions } from "./executor.js";
 
 /**
  * Options for creating a ky-based API client
  */
 export interface KyClientOptions<
-  TRequest extends Record<string, Record<string, unknown>>,
-  TResponse extends Record<string, Record<string, Record<string, z.ZodTypeAny>>>,
-> {
+  TRequest extends ApiRequestSchema,
+  TResponse extends ApiResponseSchema,
+> extends ApiClientLoggingOptions {
   baseUrl: string;
   headers?: Record<string, unknown>;
   Request: TRequest;
@@ -35,8 +40,8 @@ export interface KyClientOptions<
  * The raw response type is the KyResponse object.
  */
 export type KyApiClient<
-  TRequest extends Record<string, Record<string, unknown>>,
-  TResponse extends Record<string, Record<string, Record<string, z.ZodTypeAny>>>,
+  TRequest extends ApiRequestSchema,
+  TResponse extends ApiResponseSchema,
 > = ApiClient<TRequest, TResponse, KyResponse>;
 
 /**
@@ -70,8 +75,8 @@ export type KyApiClient<
  * ```
  */
 export function createApiClient<
-  TRequest extends Record<string, Record<string, unknown>>,
-  TResponse extends Record<string, Record<string, Record<string, z.ZodTypeAny>>>,
+  TRequest extends ApiRequestSchema,
+  TResponse extends ApiResponseSchema,
 >(options: KyClientOptions<TRequest, TResponse>): KyApiClient<TRequest, TResponse> {
   const executor = new KyExecutor({
     ky: options.ky,
@@ -84,6 +89,7 @@ export function createApiClient<
     Request: options.Request,
     Response: options.Response,
     onValidationError: options.onValidationError,
+    logger: options.logger,
     executor,
   });
 }

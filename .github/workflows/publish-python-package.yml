@@ -1,0 +1,192 @@
+name: Publish Python Package
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Run in dry-run mode (build only; no publish or tagging)"
+        required: false
+        default: false
+        type: boolean
+
+env:
+  PACKAGE_DIR: packages/python-pydantic-openapi
+  DIST_DIR: dist/python-pydantic-openapi
+
+jobs:
+  detect-unpublished:
+    runs-on: ubuntu-latest
+    outputs:
+      dry_run: ${{ steps.detect.outputs.dry_run }}
+      package_name: ${{ steps.detect.outputs.package_name }}
+      package_version: ${{ steps.detect.outputs.package_version }}
+      should_publish: ${{ steps.detect.outputs.should_publish }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Detect unpublished package version
+        id: detect
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.dry_run }}" == "true" ]]; then
+            echo "dry_run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "dry_run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          python <<'PY'
+          import json
+          import os
+          import tomllib
+          import urllib.error
+          import urllib.request
+          from pathlib import Path
+
+          package_dir = Path(os.environ["PACKAGE_DIR"])
+          metadata = tomllib.loads(package_dir.joinpath("pyproject.toml").read_text())
+          project = metadata["project"]
+          package_name = project["name"]
+          package_version = project["version"]
+
+          version_exists = False
+          try:
+              with urllib.request.urlopen(f"https://pypi.org/pypi/{package_name}/json") as response:
+                  payload = json.load(response)
+          except urllib.error.HTTPError as error:
+              if error.code != 404:
+                  raise
+              payload = {"releases": {}}
+
+          version_exists = package_version in payload.get("releases", {})
+          should_publish = not version_exists
+
+          if version_exists:
+              print(f"✓ {package_name}@{package_version} is already on PyPI - skipping publish")
+          else:
+              print(f"📦 {package_name}@{package_version} is not on PyPI - will publish")
+
+          output = Path(os.environ["GITHUB_OUTPUT"])
+          with output.open("a", encoding="utf-8") as handle:
+              handle.write(f"package_name={package_name}\n")
+              handle.write(f"package_version={package_version}\n")
+              handle.write(f"should_publish={'true' if should_publish else 'false'}\n")
+          PY
+
+      - name: Detection summary
+        shell: bash
+        run: |
+          echo "### Python package release detection" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Package: \`${{ steps.detect.outputs.package_name }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Version: \`${{ steps.detect.outputs.package_version }}\`" >> "$GITHUB_STEP_SUMMARY"
+          if [[ "${{ steps.detect.outputs.should_publish }}" == "true" ]]; then
+            echo "- Result: version is unpublished and eligible for release" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- Result: version already exists on PyPI; no release needed" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  build:
+    needs: detect-unpublished
+    if: needs.detect-unpublished.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: ${{ env.PACKAGE_DIR }}/uv.lock
+
+      - name: Build distribution artifacts
+        shell: bash
+        run: |
+          rm -rf "${{ env.DIST_DIR }}"
+          uv build "${{ env.PACKAGE_DIR }}" --out-dir "${{ env.DIST_DIR }}"
+
+      - name: Check distribution metadata
+        shell: bash
+        run: uvx twine check "${{ env.DIST_DIR }}"/*
+
+      - name: List built artifacts
+        shell: bash
+        run: ls -lh "${{ env.DIST_DIR }}"
+
+      - name: Upload distribution artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-pydantic-openapi-dist
+          path: ${{ env.DIST_DIR }}/*
+          retention-days: 1
+
+      - name: Dry-run summary
+        if: needs.detect-unpublished.outputs.dry_run == 'true'
+        shell: bash
+        run: |
+          echo "### Python package dry run" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Built artifacts for \`${{ needs.detect-unpublished.outputs.package_name }}@${{ needs.detect-unpublished.outputs.package_version }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Publishing and git tagging were skipped because \`dry_run=true\`" >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    needs: [detect-unpublished, build]
+    if: needs.detect-unpublished.outputs.should_publish == 'true' && needs.detect-unpublished.outputs.dry_run != 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/${{ needs.detect-unpublished.outputs.package_name }}/
+    permissions:
+      id-token: write
+    steps:
+      - name: Download distribution artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-pydantic-openapi-dist
+          path: ${{ env.DIST_DIR }}
+
+      - name: Publish package to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: ${{ env.DIST_DIR }}
+          print-hash: true
+
+  tag-release:
+    needs: [detect-unpublished, publish]
+    if: needs.detect-unpublished.outputs.should_publish == 'true' && needs.detect-unpublished.outputs.dry_run != 'true' && needs.publish.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create and push git tag
+        shell: bash
+        run: |
+          TAG_NAME="${{ needs.detect-unpublished.outputs.package_name }}@${{ needs.detect-unpublished.outputs.package_version }}"
+          git tag -a "$TAG_NAME" -m "Release $TAG_NAME" 2>/dev/null || echo "Tag $TAG_NAME already exists"
+          git push origin "$TAG_NAME" || echo "Tag $TAG_NAME already exists on origin"
+
