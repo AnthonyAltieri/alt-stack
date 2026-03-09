@@ -1,14 +1,19 @@
-import type { z } from "zod";
-import { ApiClient, type ApiClientValidationErrorHandler, type Logger } from "@alt-stack/http-client-core";
+import {
+  ApiClient,
+  type ApiClientLoggingOptions,
+  type ApiClientValidationErrorHandler,
+  type ApiRequestSchema,
+  type ApiResponseSchema,
+} from "@alt-stack/http-client-core";
 import { FetchExecutor, type FetchExecutorOptions } from "./executor.js";
 
 /**
  * Options for creating a fetch-based API client
  */
 export interface FetchClientOptions<
-  TRequest extends Record<string, Record<string, unknown>>,
-  TResponse extends Record<string, Record<string, Record<string, z.ZodTypeAny>>>,
-> {
+  TRequest extends ApiRequestSchema,
+  TResponse extends ApiResponseSchema,
+> extends ApiClientLoggingOptions {
   baseUrl: string;
   headers?: Record<string, unknown>;
   Request: TRequest;
@@ -17,10 +22,6 @@ export interface FetchClientOptions<
    * Called when Zod validation fails for request or response data.
    */
   onValidationError?: ApiClientValidationErrorHandler<Response>;
-  /**
-   * Optional logger used for internal client logging.
-   */
-  logger?: Logger;
   /**
    * Additional fetch options to pass to every request.
    * Useful for credentials, cache, mode, etc.
@@ -33,8 +34,8 @@ export interface FetchClientOptions<
  * The raw response type is the native Response object.
  */
 export type FetchApiClient<
-  TRequest extends Record<string, Record<string, unknown>>,
-  TResponse extends Record<string, Record<string, Record<string, z.ZodTypeAny>>>,
+  TRequest extends ApiRequestSchema,
+  TResponse extends ApiResponseSchema,
 > = ApiClient<TRequest, TResponse, Response>;
 
 /**
@@ -62,8 +63,8 @@ export type FetchApiClient<
  * ```
  */
 export function createApiClient<
-  TRequest extends Record<string, Record<string, unknown>>,
-  TResponse extends Record<string, Record<string, Record<string, z.ZodTypeAny>>>,
+  TRequest extends ApiRequestSchema,
+  TResponse extends ApiResponseSchema,
 >(options: FetchClientOptions<TRequest, TResponse>): FetchApiClient<TRequest, TResponse> {
   const executor = new FetchExecutor({ fetchOptions: options.fetchOptions });
 
@@ -74,6 +75,7 @@ export function createApiClient<
     Response: options.Response,
     onValidationError: options.onValidationError,
     logger: options.logger,
+    debug: options.debug,
     executor,
   });
 }

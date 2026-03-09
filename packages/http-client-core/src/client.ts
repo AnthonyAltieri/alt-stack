@@ -1,6 +1,9 @@
 import { z } from "zod";
 import type {
   ApiResponse,
+  ApiRequestSchema,
+  ApiResponseSchema,
+  ApiClientLoggingOptions,
   RequestOptions,
   ExtractRequestBody,
   SuccessResponse,
@@ -10,19 +13,19 @@ import type {
   RetryContext,
   HttpExecutor,
   ExecuteResponse,
-  Logger,
 } from "./types.js";
 import { UnexpectedApiClientError, ValidationError } from "./errors.js";
+import { createInternalLogger } from "./logging.js";
 
 // ============================================================================
 // Types
 // ============================================================================
 
 export interface ApiClientOptions<
-  TRequest extends Record<string, Record<string, unknown>>,
-  TResponse extends Record<string, Record<string, Record<string, z.ZodTypeAny>>>,
+  TRequest extends ApiRequestSchema,
+  TResponse extends ApiResponseSchema,
   TRawResponse = unknown,
-> {
+> extends ApiClientLoggingOptions {
   baseUrl: string;
   headers?: Record<string, unknown>;
   Request: TRequest;
@@ -33,10 +36,6 @@ export interface ApiClientOptions<
    * not for other validation errors like missing path params.
    */
   onValidationError?: ApiClientValidationErrorHandler<TRawResponse>;
-  /**
-   * Optional logger used for internal client logging.
-   */
-  logger?: Logger;
   executor: HttpExecutor<TRawResponse>;
 }
 
@@ -116,30 +115,48 @@ function formatLogError(error: unknown): Record<string, unknown> {
   return { error };
 }
 
+function buildHeaders(
+  clientHeaders: Record<string, unknown> | undefined,
+  requestHeaders: Record<string, unknown>,
+): Record<string, string> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  for (const headerSet of [clientHeaders, requestHeaders]) {
+    if (!headerSet) continue;
+
+    for (const [key, value] of Object.entries(headerSet)) {
+      if (value !== undefined && value !== null) {
+        headers[key] = String(value);
+      }
+    }
+  }
+
+  return headers;
+}
+
 // ============================================================================
 // ApiClient Class
 // ============================================================================
 
 export class ApiClient<
-  TRequest extends Record<string, Record<string, unknown>>,
-  TResponse extends Record<string, Record<string, Record<string, z.ZodTypeAny>>>,
+  TRequest extends ApiRequestSchema,
+  TResponse extends ApiResponseSchema,
   TRawResponse = unknown,
 > {
-  constructor(public readonly options: ApiClientOptions<TRequest, TResponse, TRawResponse>) {}
+  private readonly internalLog: ReturnType<typeof createInternalLogger>;
+
+  constructor(public readonly options: ApiClientOptions<TRequest, TResponse, TRawResponse>) {
+    this.internalLog = createInternalLogger(options);
+  }
 
   private log(
     level: "error" | "warn" | "info" | "debug",
     message: string,
     meta?: Record<string, unknown>,
   ): void {
-    const logger = this.options.logger;
-    if (!logger) return;
-    try {
-      const formatted = logger.format ? logger.format(message, meta) : message;
-      logger[level](formatted, meta);
-    } catch {
-      // Never allow a user-provided logger to affect control-flow.
-    }
+    this.internalLog(level, message, meta);
   }
 
   private safeInvokeOnValidationError(
@@ -193,7 +210,7 @@ export class ApiClient<
     endpoint: TEndpoint,
     options: RequestOptions<TRequest, TEndpoint, "GET">,
   ): Promise<ApiResponse<TResponse, TEndpoint, "GET", TRawResponse>> {
-    return this.request("GET", endpoint as string, options);
+    return this.request("GET", endpoint, options);
   }
 
   /**
@@ -205,7 +222,7 @@ export class ApiClient<
       body: ExtractRequestBody<TRequest, TEndpoint, "POST">;
     },
   ): Promise<ApiResponse<TResponse, TEndpoint, "POST", TRawResponse>> {
-    return this.request("POST", endpoint as string, options);
+    return this.request("POST", endpoint, options);
   }
 
   /**
@@ -217,7 +234,7 @@ export class ApiClient<
       body: ExtractRequestBody<TRequest, TEndpoint, "PUT">;
     },
   ): Promise<ApiResponse<TResponse, TEndpoint, "PUT", TRawResponse>> {
-    return this.request("PUT", endpoint as string, options);
+    return this.request("PUT", endpoint, options);
   }
 
   /**
@@ -229,7 +246,7 @@ export class ApiClient<
       body: ExtractRequestBody<TRequest, TEndpoint, "PATCH">;
     },
   ): Promise<ApiResponse<TResponse, TEndpoint, "PATCH", TRawResponse>> {
-    return this.request("PATCH", endpoint as string, options);
+    return this.request("PATCH", endpoint, options);
   }
 
   /**
@@ -239,7 +256,7 @@ export class ApiClient<
     endpoint: TEndpoint,
     options: RequestOptions<TRequest, TEndpoint, "DELETE">,
   ): Promise<ApiResponse<TResponse, TEndpoint, "DELETE", TRawResponse>> {
-    return this.request("DELETE", endpoint as string, options);
+    return this.request("DELETE", endpoint, options);
   }
 
   /**
@@ -249,8 +266,8 @@ export class ApiClient<
     TEndpoint extends keyof TRequest & string,
     TMethod extends keyof TRequest[TEndpoint] & string,
   >(
-    method: string,
-    endpoint: string,
+    method: TMethod,
+    endpoint: TEndpoint,
     options: RequestOptions<TRequest, TEndpoint, TMethod> & {
       body?: ExtractRequestBody<TRequest, TEndpoint, TMethod>;
     },
@@ -282,21 +299,7 @@ export class ApiClient<
     const url = `${this.options.baseUrl}${interpolatedPath}${queryString}`;
 
     // Merge headers
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-    if (this.options.headers) {
-      for (const [key, value] of Object.entries(this.options.headers)) {
-        if (value !== undefined && value !== null) {
-          headers[key] = String(value);
-        }
-      }
-    }
-    for (const [key, value] of Object.entries(requestHeaders)) {
-      if (value !== undefined && value !== null) {
-        headers[key] = String(value);
-      }
-    }
+    const headers = buildHeaders(this.options.headers, requestHeaders);
 
     // Make request with retry logic
     let lastError: unknown;
@@ -440,10 +443,13 @@ export class ApiClient<
   /**
    * Validates path parameters against Request schema
    */
-  private validatePathParams(
-    endpoint: string,
+  private validatePathParams<
+    TEndpoint extends keyof TRequest & string,
+    TMethod extends keyof TRequest[TEndpoint] & string,
+  >(
+    endpoint: TEndpoint,
     params: Record<string, unknown>,
-    method: string,
+    method: TMethod,
   ): Record<string, unknown> {
     const requestDef = this.options.Request[endpoint]?.[method];
     if (!requestDef || typeof requestDef !== "object") {
@@ -497,9 +503,12 @@ export class ApiClient<
   /**
    * Validates query parameters against Request schema
    */
-  private validateQuery(
-    endpoint: string,
-    method: string,
+  private validateQuery<
+    TEndpoint extends keyof TRequest & string,
+    TMethod extends keyof TRequest[TEndpoint] & string,
+  >(
+    endpoint: TEndpoint,
+    method: TMethod,
     query: Record<string, unknown>,
   ): Record<string, unknown> {
     const requestDef = this.options.Request[endpoint]?.[method];
@@ -523,7 +532,10 @@ export class ApiClient<
   /**
    * Validates body against Request schema
    */
-  private validateBody(endpoint: string, method: string, body: unknown): void {
+  private validateBody<
+    TEndpoint extends keyof TRequest & string,
+    TMethod extends keyof TRequest[TEndpoint] & string,
+  >(endpoint: TEndpoint, method: TMethod, body: unknown): void {
     const requestDef = this.options.Request[endpoint]?.[method];
     if (!requestDef || typeof requestDef !== "object") {
       return;

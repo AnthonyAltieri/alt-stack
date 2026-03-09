@@ -17,11 +17,20 @@ export {
 
 // Types
 export type {
+  ApiRequestSchema,
+  ApiResponseSchema,
   // Executor interface
   HttpExecutor,
   ExecuteRequest,
   ExecuteResponse,
+  // Logging
+  LogLevel,
+  LogMeta,
+  LogHandler,
   Logger,
+  DebugLoggerInstance,
+  DebugLogger,
+  ApiClientLoggingOptions,
   // Request types
   ExtractPathParams,
   ExtractRequestParams,
