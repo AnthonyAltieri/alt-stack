@@ -6,8 +6,6 @@ import {
   TimeoutError,
   UnexpectedApiClientError,
   ValidationError,
-  type DebugLogger,
-  type DebugLoggerInstance,
 } from "./index.js";
 
 // Test schemas
@@ -60,26 +58,6 @@ function createMockFetch(response: unknown, status = 200, statusText = "OK") {
   });
 }
 
-function createMockDebugLogger() {
-  const createDebugger = (): DebugLoggerInstance => {
-    const debuggerInstance = vi.fn() as unknown as DebugLoggerInstance;
-    debuggerInstance.extend = vi.fn(() => debuggerInstance);
-    return debuggerInstance;
-  };
-
-  const levels = {
-    error: createDebugger(),
-    warn: createDebugger(),
-    info: createDebugger(),
-    debug: createDebugger(),
-  };
-
-  const debug = createDebugger();
-  debug.extend = vi.fn((namespace: string) => levels[namespace as keyof typeof levels]);
-
-  return { debug, levels };
-}
-
 describe("FetchApiClient", () => {
   let originalFetch: typeof globalThis.fetch;
 
@@ -111,7 +89,6 @@ describe("FetchApiClient", () => {
         error: vi.fn(),
         warn: vi.fn(),
         info: vi.fn(),
-        debug: vi.fn(),
       };
 
       const client = createApiClient({
@@ -134,54 +111,6 @@ describe("FetchApiClient", () => {
       );
     });
 
-    it("uses debug when provided without a logger", async () => {
-      globalThis.fetch = createMockFetch([]);
-
-      const { debug, levels } = createMockDebugLogger();
-      const client = createApiClient({
-        baseUrl: "https://api.example.com",
-        Request,
-        Response,
-        debug: debug as DebugLogger,
-      });
-
-      await expect(
-        client.get("/users/{id}", { params: { id: "not-a-uuid" } }),
-      ).rejects.toThrow(ValidationError);
-
-      expect(debug.extend).toHaveBeenCalledWith("error");
-      expect(levels.error).toHaveBeenCalledWith(
-        "%s %O",
-        "HTTP validation failed",
-        expect.objectContaining({
-          endpoint: "/users/{id}",
-          method: "GET",
-          location: "params",
-        }),
-      );
-    });
-
-    it("uses logger and debug together when both are provided", async () => {
-      globalThis.fetch = createMockFetch([]);
-
-      const logger = { error: vi.fn() };
-      const { levels, debug } = createMockDebugLogger();
-
-      const client = createApiClient({
-        baseUrl: "https://api.example.com",
-        Request,
-        Response,
-        logger,
-        debug: debug as DebugLogger,
-      });
-
-      await expect(
-        client.get("/users/{id}", { params: { id: "not-a-uuid" } }),
-      ).rejects.toThrow(ValidationError);
-
-      expect(logger.error).toHaveBeenCalledTimes(1);
-      expect(levels.error).toHaveBeenCalledTimes(1);
-    });
   });
 
   describe("GET requests", () => {

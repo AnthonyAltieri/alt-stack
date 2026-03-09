@@ -40,9 +40,6 @@ export type ApiResponseSchema = Record<string, Record<string, Record<string, z.Z
 // Logging Types
 // ============================================================================
 
-/**
- * Log levels used by the client.
- */
 export type LogLevel = "error" | "warn" | "info" | "debug";
 
 export type LogMeta = Record<string, unknown>;
@@ -54,21 +51,8 @@ export type LogHandler = (message: string, meta?: LogMeta) => void;
  */
 export type Logger = Partial<Record<LogLevel, LogHandler>>;
 
-export interface DebugLoggerInstance {
-  (formatter: unknown, ...args: unknown[]): void;
-  extend: (namespace: string) => DebugLoggerInstance;
-  enabled?: boolean;
-  namespace?: string;
-}
-
-/**
- * Either a debug namespace string or a pre-configured debug instance.
- */
-export type DebugLogger = DebugLoggerInstance | string;
-
 export interface ApiClientLoggingOptions {
   logger?: Logger;
-  debug?: DebugLogger;
 }
 
 // ============================================================================

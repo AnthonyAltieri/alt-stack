@@ -1,5 +1,6 @@
 // Client factory
 export { createApiClient } from "./client.js";
+export { HTTP_CLIENT_DEBUG_NAMESPACE } from "@alt-stack/http-client-core";
 export type { KyClientOptions, KyApiClient, KyInstance, KyOptions, KyResponse } from "./client.js";
 
 // Executor
@@ -26,8 +27,6 @@ export type {
   LogMeta,
   LogHandler,
   Logger,
-  DebugLoggerInstance,
-  DebugLogger,
   ApiClientLoggingOptions,
   HttpExecutor,
   ExecuteRequest,

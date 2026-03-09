@@ -1,5 +1,6 @@
 // Client
 export { ApiClient } from "./client.js";
+export { HTTP_CLIENT_DEBUG_NAMESPACE } from "./logging.js";
 export type {
   ApiClientOptions,
   ApiClientValidationErrorLocation,
@@ -28,8 +29,6 @@ export type {
   LogMeta,
   LogHandler,
   Logger,
-  DebugLoggerInstance,
-  DebugLogger,
   ApiClientLoggingOptions,
   // Request types
   ExtractPathParams,

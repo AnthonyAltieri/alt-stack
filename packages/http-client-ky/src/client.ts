@@ -90,7 +90,6 @@ export function createApiClient<
     Response: options.Response,
     onValidationError: options.onValidationError,
     logger: options.logger,
-    debug: options.debug,
     executor,
   });
 }

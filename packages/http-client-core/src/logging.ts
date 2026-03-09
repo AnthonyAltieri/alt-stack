@@ -1,8 +1,20 @@
 import createDebug from "debug";
-import type { ApiClientLoggingOptions, DebugLogger, LogLevel, LogMeta } from "./types.js";
+import type { ApiClientLoggingOptions, LogLevel, LogMeta } from "./types.js";
 
 type InternalLogger = (level: LogLevel, message: string, meta?: LogMeta) => void;
 type DebugLoggers = Partial<Record<LogLevel, (...args: unknown[]) => void>>;
+export const HTTP_CLIENT_DEBUG_NAMESPACE = "alt-stack:http-client";
+
+function createDebugLoggers(): DebugLoggers {
+  const debugLogger = createDebug(HTTP_CLIENT_DEBUG_NAMESPACE);
+
+  return {
+    error: debugLogger.extend("error"),
+    warn: debugLogger.extend("warn"),
+    info: debugLogger.extend("info"),
+    debug: debugLogger.extend("debug"),
+  };
+}
 
 function invokeLogger(
   logger: ApiClientLoggingOptions["logger"],
@@ -20,26 +32,13 @@ function invokeLogger(
   }
 }
 
-function createDebugLoggers(debug: DebugLogger | undefined): DebugLoggers | undefined {
-  if (!debug) return undefined;
-
-  const debuggerInstance = typeof debug === "string" ? createDebug(debug) : debug;
-
-  return {
-    error: debuggerInstance.extend("error"),
-    warn: debuggerInstance.extend("warn"),
-    info: debuggerInstance.extend("info"),
-    debug: debuggerInstance.extend("debug"),
-  };
-}
-
 function invokeDebug(
-  debugLoggers: DebugLoggers | undefined,
+  debugLoggers: DebugLoggers,
   level: LogLevel,
   message: string,
   meta?: LogMeta,
 ): void {
-  const debuggerInstance = debugLoggers?.[level];
+  const debuggerInstance = debugLoggers[level];
   if (!debuggerInstance) return;
 
   try {
@@ -55,7 +54,7 @@ function invokeDebug(
 }
 
 export function createInternalLogger(options: ApiClientLoggingOptions): InternalLogger {
-  const debugLoggers = createDebugLoggers(options.debug);
+  const debugLoggers = createDebugLoggers();
 
   return (level, message, meta) => {
     invokeLogger(options.logger, level, message, meta);
