@@ -6,7 +6,7 @@ export { TaggedError } from "./result.js";
 export { ok, err } from "./constructors.js";
 
 // Type guards
-export { isOk, isErr } from "./guards.js";
+export { isOk, isErr, isResult } from "./guards.js";
 
 // Transformations
 export { map, flatMap, mapError, catchError } from "./transformations.js";

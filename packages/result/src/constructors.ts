@@ -1,4 +1,5 @@
 import type { Ok, Err, ResultError } from "./result.js";
+import { brandResult } from "./marker.js";
 
 /**
  * Create a success Result
@@ -18,7 +19,7 @@ import type { Ok, Err, ResultError } from "./result.js";
 export function ok(): Ok<void>;
 export function ok<A>(value: A): Ok<A>;
 export function ok<A>(value?: A): Ok<A> {
-  return { _tag: "Ok", value: value as A };
+  return brandResult({ _tag: "Ok", value: value as A });
 }
 
 /**
@@ -41,5 +42,5 @@ export function ok<A>(value?: A): Ok<A> {
  * ```
  */
 export function err<E extends ResultError>(error: E): Err<E> {
-  return { _tag: "Err", error };
+  return brandResult({ _tag: "Err", error });
 }

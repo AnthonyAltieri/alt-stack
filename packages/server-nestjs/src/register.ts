@@ -1,22 +1,18 @@
 import type { Request, Response } from "express";
 import type { z } from "zod";
 import type { ZodError } from "zod";
-import type { TelemetryOption, Router } from "@alt-stack/server-core";
+import type { TelemetryOption } from "@alt-stack/server-core";
+import type { Router } from "@alt-stack/server-core";
 import { createDocsRouter, createServer } from "@alt-stack/server-express";
 import type { CreateDocsRouterOptions } from "@alt-stack/server-express";
+import type { NestBaseContext } from "./types.js";
 import { createNestLocator } from "./nest-locator.js";
 import { readAltStackRequestContext } from "./request-context.js";
-import type { NestBaseContext } from "./types.js";
 
 export interface NestAppLike {
   getHttpAdapter: () => { getInstance: () => unknown };
   get: <T = unknown>(token: unknown, options?: unknown) => T;
   resolve?: <T = unknown>(token: unknown, contextId?: unknown, options?: unknown) => Promise<T>;
-  registerRequestByContextId?: (request: unknown, contextId: unknown) => void;
-  getGlobalPrefix?: () => string;
-  config?: {
-    getGlobalPrefix?: () => string;
-  };
 }
 
 export interface DefaultErrorHandlers {
@@ -42,11 +38,6 @@ export interface RegisterAltStackOptions<TCustomContext extends object> {
   defaultErrorHandlers?: DefaultErrorHandlers;
   /** Enable OpenTelemetry tracing */
   telemetry?: TelemetryOption;
-  /**
-   * If `true` (default), prepend Nest's global prefix to `mountPath`
-   * while avoiding double-prefixing when `mountPath` already includes it.
-   */
-  respectGlobalPrefix?: boolean;
   /** Mount Swagger UI + OpenAPI JSON via the Express docs router */
   docs?: RegisterAltStackDocsOptions;
 }
@@ -70,53 +61,15 @@ function joinPaths(a: string, b: string): string {
 function getExpressInstance(app: NestAppLike): { use: (...args: any[]) => any } {
   const httpAdapter = app.getHttpAdapter?.();
   const instance = httpAdapter?.getInstance?.();
-  if (!instance || typeof (instance as { use?: unknown }).use !== "function") {
+  if (!instance || typeof (instance as any).use !== "function") {
     throw new Error(
       "@alt-stack/server-nestjs requires NestJS on the Express platform (@nestjs/platform-express).",
     );
   }
-  return instance as { use: (...args: any[]) => any };
+  return instance as any;
 }
 
-function readGlobalPrefix(app: NestAppLike): string | undefined {
-  const prefix =
-    app.getGlobalPrefix?.() ??
-    app.config?.getGlobalPrefix?.();
-
-  if (!prefix) {
-    return undefined;
-  }
-
-  const normalized = normalizeMountPath(prefix);
-  return normalized === "/" ? undefined : normalized;
-}
-
-function resolveMountPath(
-  app: NestAppLike,
-  mountPath: string | undefined,
-  respectGlobalPrefix: boolean,
-): string {
-  const normalizedMountPath = normalizeMountPath(mountPath);
-  if (!respectGlobalPrefix) {
-    return normalizedMountPath;
-  }
-
-  const globalPrefix = readGlobalPrefix(app);
-  if (!globalPrefix) {
-    return normalizedMountPath;
-  }
-
-  if (
-    normalizedMountPath === globalPrefix ||
-    normalizedMountPath.startsWith(`${globalPrefix}/`)
-  ) {
-    return normalizedMountPath;
-  }
-
-  return joinPaths(globalPrefix, normalizedMountPath);
-}
-
-export function registerAltStack<TCustomContext extends object = {}>(
+export function registerAltStack<TCustomContext extends object = Record<string, never>>(
   app: NestAppLike,
   config: Record<
     string,
@@ -125,21 +78,13 @@ export function registerAltStack<TCustomContext extends object = {}>(
   options?: RegisterAltStackOptions<TCustomContext>,
 ): void {
   const expressApp = getExpressInstance(app);
-  const mountPath = resolveMountPath(
-    app,
-    options?.mountPath,
-    options?.respectGlobalPrefix ?? true,
-  );
+  const mountPath = normalizeMountPath(options?.mountPath);
 
-  const altApp = createServer<NestBaseContext & TCustomContext>(config, {
-    basePath: mountPath,
+  const altApp = createServer<NestBaseContext & TCustomContext>(config as any, {
     createContext: async (req, res) => {
-      const nest = createNestLocator(app, req);
-      const extra = options?.createContext
-        ? await options.createContext(req, res)
-        : ({} as TCustomContext);
+      const nest = createNestLocator(app);
+      const extra = options?.createContext ? await options.createContext(req, res) : ({} as TCustomContext);
       const fromMiddleware = readAltStackRequestContext(req) ?? ({} as TCustomContext);
-
       return {
         ...extra,
         ...fromMiddleware,
@@ -155,7 +100,7 @@ export function registerAltStack<TCustomContext extends object = {}>(
   if (options?.docs) {
     const docsPath = options.docs.path ?? "/docs";
     const { path: _path, ...docsOptions } = options.docs;
-    const docsRouter = createDocsRouter(config, docsOptions);
+    const docsRouter = createDocsRouter(config as any, docsOptions);
     expressApp.use(joinPaths(mountPath, docsPath), docsRouter);
   }
 }

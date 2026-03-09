@@ -8,14 +8,18 @@ import {
 import type { InitOptions, InitResult } from "@alt-stack/server-core";
 import type { NestBaseContext } from "./types.js";
 
+// Re-export everything from server-core except Router/router/createRouter/mergeRouters/init (which we override)
 export {
+  // Init
   publicProcedure,
   default400ErrorSchema,
   default500ErrorSchema,
+  // Result utilities
   ok,
   err,
   isOk,
   isErr,
+  isResult,
   map,
   flatMap,
   mapError,
@@ -31,16 +35,21 @@ export {
   assertResultError,
   ResultAggregateError,
   TaggedError,
+  // Middleware
   createMiddleware,
   createMiddlewareWithErrors,
   middlewareMarker,
   middlewareOk,
+  // Procedure builders
   BaseProcedureBuilder,
   ProcedureBuilder,
+  // OpenAPI
   generateOpenAPISpec,
+  // Validation
   validateInput,
   parseSchema,
   mergeInputs,
+  // Telemetry
   resolveTelemetryConfig,
   shouldIgnoreRoute,
   initTelemetry,
@@ -48,6 +57,7 @@ export {
   endSpanWithError,
   setSpanOk,
   withActiveSpan,
+  // Error extraction
   extractTagsFromSchema,
   findHttpStatusForError,
 } from "@alt-stack/server-core";
@@ -60,8 +70,6 @@ export type {
   InferErrorTag,
   InferErrorTags,
   NarrowError,
-  InitOptions,
-  InitResult,
   MiddlewareFunction,
   MiddlewareBuilder,
   MiddlewareResult,
@@ -93,24 +101,20 @@ export type {
   ReadyProcedure,
   PendingProcedure,
   RouterConfigValue,
+  InitOptions,
+  InitResult,
 } from "@alt-stack/server-core";
 
 export { registerAltStack } from "./register.js";
-export type {
-  NestAppLike,
-  RegisterAltStackOptions,
-  RegisterAltStackDocsOptions,
-} from "./register.js";
+export type { NestAppLike, RegisterAltStackOptions, RegisterAltStackDocsOptions } from "./register.js";
+export type { NestBaseContext, NestServiceLocator } from "./types.js";
 export { createNestMiddleware } from "./middleware.js";
 export type { CreateNestMiddlewareOptions } from "./middleware.js";
-export type { NestBaseContext, NestServiceLocator } from "./types.js";
 
 export function init<TCustomContext extends object = Record<string, never>>(
   options?: InitOptions<NestBaseContext & TCustomContext>,
 ): InitResult<NestBaseContext & TCustomContext, typeof options> {
-  return baseInit<NestBaseContext & TCustomContext>(
-    options as InitOptions<any>,
-  ) as InitResult<NestBaseContext & TCustomContext, typeof options>;
+  return baseInit<NestBaseContext & TCustomContext>(options as InitOptions<any>) as any;
 }
 
 export class Router<

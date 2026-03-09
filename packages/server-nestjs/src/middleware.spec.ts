@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import { z } from "zod";
-import { TaggedError, createMiddlewareWithErrors, err } from "@alt-stack/server-core";
+import { TaggedError, err, createMiddlewareWithErrors } from "@alt-stack/server-core";
 import { createNestMiddleware } from "./middleware.js";
 import { readAltStackRequestContext } from "./request-context.js";
 
@@ -33,20 +33,12 @@ async function flush(): Promise<void> {
 }
 
 describe("createNestMiddleware()", () => {
-  test("persists ctx overrides onto req and reuses the request context id", async () => {
+  test("persists ctx overrides onto req and calls next()", async () => {
     const diGet = vi.fn(() => ({ svc: true }));
-    const diResolve = vi.fn(async (_token: unknown, contextId?: unknown) => ({ contextId }));
-    const registerRequestByContextId = vi.fn();
-    const app = {
-      get: diGet,
-      resolve: diResolve,
-      registerRequestByContextId,
-    } as any;
+    const app = { get: diGet } as any;
 
     const mw = createNestMiddleware(app, async ({ ctx, next }: any) => {
       ctx.nest.get("Token");
-      await ctx.nest.resolve("RequestScopedToken");
-      await ctx.nest.resolve("RequestScopedToken");
       return next({ ctx: { userId: "u1" } });
     });
 
@@ -59,16 +51,12 @@ describe("createNestMiddleware()", () => {
 
     expect(next).toHaveBeenCalledTimes(1);
     expect(diGet).toHaveBeenCalledTimes(1);
-    expect(registerRequestByContextId).toHaveBeenCalledTimes(1);
-    expect(diResolve).toHaveBeenCalledTimes(2);
-    expect(diResolve.mock.calls[0]?.[1]).toBe(diResolve.mock.calls[1]?.[1]);
     expect(readAltStackRequestContext(req)).toMatchObject({ userId: "u1" });
   });
 
   test("maps tagged errors to HTTP status using MiddlewareBuilderWithErrors schemas", async () => {
     class UnauthorizedError extends TaggedError {
       readonly _tag = "UnauthorizedError" as const;
-
       constructor(message = "Unauthorized") {
         super(message);
       }
@@ -78,7 +66,9 @@ describe("createNestMiddleware()", () => {
       .errors({
         401: z.object({ _tag: z.literal("UnauthorizedError") }),
       })
-      .fn(async () => err(new UnauthorizedError()));
+      .fn(async () => {
+        return err(new UnauthorizedError());
+      });
 
     const app = { get: vi.fn(() => ({})) } as any;
     const mw = createNestMiddleware(app, middlewareWithErrors);

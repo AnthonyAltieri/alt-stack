@@ -9,7 +9,7 @@
     "lint:fix": "oxlint packages apps --fix",
     "format": "oxlint packages apps --fix",
     "format:check": "oxlint packages apps",
-    "check-types": "turbo run check-types"
+    "typecheck": "turbo run typecheck"
   },
   "devDependencies": {
     "oxlint": "^1.24.0",

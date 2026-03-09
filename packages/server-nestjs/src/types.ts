@@ -8,3 +8,4 @@ export interface NestServiceLocator {
 export interface NestBaseContext extends ExpressBaseContext {
   nest: NestServiceLocator;
 }
+

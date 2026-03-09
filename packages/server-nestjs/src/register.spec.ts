@@ -8,26 +8,19 @@ vi.mock("@alt-stack/server-express", () => {
 });
 
 describe("registerAltStack()", () => {
-  test("mounts Alt Stack app with Nest global prefix and request-scoped locator", async () => {
+  test("mounts Alt Stack app and injects ctx.nest", async () => {
     const { registerAltStack } = await import("./register.js");
     const { createServer } = await import("@alt-stack/server-express");
     const { mergeAltStackRequestContext } = await import("./request-context.js");
 
     const expressUse = vi.fn();
     const diGet = vi.fn(() => ({ svc: true }));
-    const diResolve = vi.fn(async (_token: unknown, contextId?: unknown) => ({ contextId }));
-    const registerRequestByContextId = vi.fn();
 
     const app = {
       getHttpAdapter: () => ({
         getInstance: () => ({ use: expressUse }),
       }),
       get: diGet,
-      resolve: diResolve,
-      registerRequestByContextId,
-      config: {
-        getGlobalPrefix: () => "v1",
-      },
     };
 
     registerAltStack(app as any, { api: {} as any }, {
@@ -36,7 +29,7 @@ describe("registerAltStack()", () => {
     });
 
     expect(createServer).toHaveBeenCalledTimes(1);
-    expect(expressUse).toHaveBeenCalledWith("/v1/api", { __alt: true });
+    expect(expressUse).toHaveBeenCalledWith("/api", { __alt: true });
 
     const [, serverOptions] = (createServer as any).mock.calls[0] as [unknown, any];
     const req = {} as any;
@@ -45,20 +38,15 @@ describe("registerAltStack()", () => {
 
     expect(ctx.extra).toBe(123);
     expect(ctx.fromMiddleware).toBe(true);
+    expect(ctx.nest).toBeDefined();
     expect(typeof ctx.nest.get).toBe("function");
     expect(typeof ctx.nest.resolve).toBe("function");
 
     ctx.nest.get("Token");
-    await ctx.nest.resolve("Token");
-    await ctx.nest.resolve("Token");
-
-    expect(diGet).toHaveBeenCalledTimes(1);
-    expect(registerRequestByContextId).toHaveBeenCalledTimes(1);
-    expect(diResolve).toHaveBeenCalledTimes(2);
-    expect(diResolve.mock.calls[0]?.[1]).toBe(diResolve.mock.calls[1]?.[1]);
+    expect(diGet).toHaveBeenCalled();
   });
 
-  test("does not double-prefix routes or docs when mountPath already includes the global prefix", async () => {
+  test("can mount docs router", async () => {
     const { registerAltStack } = await import("./register.js");
     const { createDocsRouter } = await import("@alt-stack/server-express");
 
@@ -68,41 +56,15 @@ describe("registerAltStack()", () => {
         getInstance: () => ({ use: expressUse }),
       }),
       get: vi.fn(() => ({})),
-      config: {
-        getGlobalPrefix: () => "v1",
-      },
-    };
-
-    registerAltStack(app as any, { api: {} as any }, {
-      mountPath: "/v1/api",
-      docs: { enableDocs: false, openapiPath: "openapi.json", path: "/docs" },
-    });
-
-    expect(createDocsRouter).toHaveBeenCalledTimes(1);
-    expect(expressUse).toHaveBeenNthCalledWith(1, "/v1/api", { __alt: true });
-    expect(expressUse).toHaveBeenNthCalledWith(2, "/v1/api/docs", { __docs: true });
-  });
-
-  test("can ignore Nest global prefix when requested", async () => {
-    const { registerAltStack } = await import("./register.js");
-
-    const expressUse = vi.fn();
-    const app = {
-      getHttpAdapter: () => ({
-        getInstance: () => ({ use: expressUse }),
-      }),
-      get: vi.fn(() => ({})),
-      config: {
-        getGlobalPrefix: () => "v1",
-      },
     };
 
     registerAltStack(app as any, { api: {} as any }, {
       mountPath: "/api",
-      respectGlobalPrefix: false,
+      docs: { enableDocs: false, openapiPath: "openapi.json", path: "/docs" },
     });
 
-    expect(expressUse).toHaveBeenCalledWith("/api", { __alt: true });
+    expect(createDocsRouter).toHaveBeenCalledTimes(1);
+    expect(expressUse).toHaveBeenCalledWith("/api/docs", { __docs: true });
   });
 
   test("throws if the underlying platform is not Express", async () => {

@@ -155,12 +155,14 @@ export type ValidateErrorConfig<T extends Record<number, z.ZodTypeAny>> = {
 export type HandlerResult<
   TErrors extends Record<number, z.ZodTypeAny> | undefined,
   TOutput extends z.ZodTypeAny | undefined,
-> = Result<
-  TOutput extends z.ZodTypeAny ? InferOutput<TOutput> : unknown,
-  TErrors extends Record<number, z.ZodTypeAny>
-    ? TaggedResultError<ExtractErrorTags<TErrors>>
-    : ResultError
->;
+> =
+  | Result<
+      TOutput extends z.ZodTypeAny ? InferOutput<TOutput> : unknown,
+      TErrors extends Record<number, z.ZodTypeAny>
+        ? TaggedResultError<ExtractErrorTags<TErrors>>
+        : ResultError
+    >
+  | (TOutput extends z.ZodTypeAny ? InferOutput<TOutput> : unknown);
 
 // ============================================================================
 // String Input Validation Types
@@ -235,10 +237,9 @@ export interface BaseContext {
 
 export type TypedContext<
   TInput extends InputConfig,
-  TErrors extends Record<number, z.ZodTypeAny> | undefined,
+  _TErrors extends Record<number, z.ZodTypeAny> | undefined,
   TCustomContext extends object = Record<string, never>,
 > = BaseContext &
   TCustomContext & {
     input: InferInput<TInput>;
   };
-

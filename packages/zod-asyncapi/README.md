@@ -274,7 +274,7 @@ Clear all registered schemas in the global registry.
 pnpm test
 
 # Type check
-pnpm check-types
+pnpm typecheck
 ```
 
 

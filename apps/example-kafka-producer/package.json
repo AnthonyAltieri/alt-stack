@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "tsc",
-    "check-types": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
     "generate-spec": "tsx src/generate-spec.ts",
     "generate-sdk": "zod-asyncapi asyncapi.json -o generated-types.ts"
   },

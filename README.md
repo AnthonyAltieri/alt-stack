@@ -11,6 +11,7 @@ A type-safe full-stack framework built with Zod validation. Inspired by tRPC's b
 - `@alt-stack/server-core` - Framework-agnostic core
 - `@alt-stack/server-hono` - Hono adapter *(recommended)*
 - `@alt-stack/server-express` - Express adapter
+- `@alt-stack/server-nestjs` - NestJS adapter (Express platform)
 - `@alt-stack/server-bun` - Bun adapter
 
 ### Client

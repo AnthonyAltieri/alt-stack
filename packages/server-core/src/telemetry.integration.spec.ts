@@ -46,7 +46,7 @@ describe("telemetry integration", () => {
 
       const spans = exporter.getFinishedSpans();
       expect(spans).toHaveLength(1);
-      expect(spans[0].name).toBe("GET /users/{id}");
+      expect(spans[0]!.name).toBe("GET /users/{id}");
     });
 
     it("sets correct span attributes", () => {
@@ -59,7 +59,7 @@ describe("telemetry integration", () => {
       const spans = exporter.getFinishedSpans();
       expect(spans).toHaveLength(1);
 
-      const attributes = spans[0].attributes;
+      const attributes = spans[0]!.attributes;
       expect(attributes["http.request.method"]).toBe("POST");
       expect(attributes["http.route"]).toBe("/api/items");
       expect(attributes["url.path"]).toBe("/api/items");
@@ -78,7 +78,7 @@ describe("telemetry integration", () => {
       const spans = exporter.getFinishedSpans();
       expect(spans).toHaveLength(1);
       // The tracer name should match the service name
-      expect(spans[0].instrumentationScope.name).toBe("my-custom-service");
+      expect(spans[0]!.instrumentationScope.name).toBe("my-custom-service");
     });
   });
 
@@ -92,7 +92,7 @@ describe("telemetry integration", () => {
 
       const spans = exporter.getFinishedSpans();
       expect(spans).toHaveLength(1);
-      expect(spans[0].status.code).toBe(SpanStatusCode.OK);
+      expect(spans[0]!.status.code).toBe(SpanStatusCode.OK);
     });
 
     it("handles undefined span gracefully", () => {
@@ -111,7 +111,7 @@ describe("telemetry integration", () => {
 
       const spans = exporter.getFinishedSpans();
       expect(spans).toHaveLength(1);
-      expect(spans[0].status.code).toBe(SpanStatusCode.ERROR);
+      expect(spans[0]!.status.code).toBe(SpanStatusCode.ERROR);
     });
 
     it("records exception on span", () => {
@@ -125,10 +125,10 @@ describe("telemetry integration", () => {
       const spans = exporter.getFinishedSpans();
       expect(spans).toHaveLength(1);
 
-      const events = spans[0].events;
+      const events = spans[0]!.events;
       expect(events).toHaveLength(1);
-      expect(events[0].name).toBe("exception");
-      expect(events[0].attributes?.["exception.message"]).toBe("Test error message");
+      expect(events[0]!.name).toBe("exception");
+      expect(events[0]!.attributes?.["exception.message"]).toBe("Test error message");
     });
 
     it("handles string errors", () => {
@@ -140,11 +140,11 @@ describe("telemetry integration", () => {
 
       const spans = exporter.getFinishedSpans();
       expect(spans).toHaveLength(1);
-      expect(spans[0].status.code).toBe(SpanStatusCode.ERROR);
+      expect(spans[0]!.status.code).toBe(SpanStatusCode.ERROR);
 
-      const events = spans[0].events;
+      const events = spans[0]!.events;
       expect(events).toHaveLength(1);
-      expect(events[0].name).toBe("exception");
+      expect(events[0]!.name).toBe("exception");
     });
 
     it("handles undefined span gracefully", () => {
@@ -163,7 +163,7 @@ describe("telemetry integration", () => {
 
       const spans = exporter.getFinishedSpans();
       expect(spans).toHaveLength(1);
-      expect(spans[0].attributes["http.response.status_code"]).toBe(200);
+      expect(spans[0]!.attributes["http.response.status_code"]).toBe(200);
     });
   });
 });
