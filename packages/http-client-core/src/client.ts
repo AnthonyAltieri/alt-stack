@@ -1,6 +1,9 @@
 import { z } from "zod";
 import type {
   ApiResponse,
+  ApiRequestSchema,
+  ApiResponseSchema,
+  ApiClientLoggingOptions,
   RequestOptions,
   ExtractRequestBody,
   SuccessResponse,
@@ -12,16 +15,17 @@ import type {
   ExecuteResponse,
 } from "./types.js";
 import { UnexpectedApiClientError, ValidationError } from "./errors.js";
+import { createInternalLogger } from "./logging.js";
 
 // ============================================================================
 // Types
 // ============================================================================
 
 export interface ApiClientOptions<
-  TRequest extends Record<string, Record<string, unknown>>,
-  TResponse extends Record<string, Record<string, Record<string, z.ZodTypeAny>>>,
+  TRequest extends ApiRequestSchema,
+  TResponse extends ApiResponseSchema,
   TRawResponse = unknown,
-> {
+> extends ApiClientLoggingOptions {
   baseUrl: string;
   headers?: Record<string, unknown>;
   Request: TRequest;
@@ -104,16 +108,56 @@ function calculateBackoff(attempt: number, baseDelay: number = 1000): number {
   return Math.min(baseDelay * Math.pow(2, attempt), 30000); // Max 30 seconds
 }
 
+function formatLogError(error: unknown): Record<string, unknown> {
+  if (error instanceof Error) {
+    return { name: error.name, message: error.message };
+  }
+  return { error };
+}
+
+function buildHeaders(
+  clientHeaders: Record<string, unknown> | undefined,
+  requestHeaders: Record<string, unknown>,
+): Record<string, string> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  for (const headerSet of [clientHeaders, requestHeaders]) {
+    if (!headerSet) continue;
+
+    for (const [key, value] of Object.entries(headerSet)) {
+      if (value !== undefined && value !== null) {
+        headers[key] = String(value);
+      }
+    }
+  }
+
+  return headers;
+}
+
 // ============================================================================
 // ApiClient Class
 // ============================================================================
 
 export class ApiClient<
-  TRequest extends Record<string, Record<string, unknown>>,
-  TResponse extends Record<string, Record<string, Record<string, z.ZodTypeAny>>>,
+  TRequest extends ApiRequestSchema,
+  TResponse extends ApiResponseSchema,
   TRawResponse = unknown,
 > {
-  constructor(public readonly options: ApiClientOptions<TRequest, TResponse, TRawResponse>) {}
+  private readonly internalLog: ReturnType<typeof createInternalLogger>;
+
+  constructor(public readonly options: ApiClientOptions<TRequest, TResponse, TRawResponse>) {
+    this.internalLog = createInternalLogger(options);
+  }
+
+  private log(
+    level: "error" | "warn" | "info" | "debug",
+    message: string,
+    meta?: Record<string, unknown>,
+  ): void {
+    this.internalLog(level, message, meta);
+  }
 
   private safeInvokeOnValidationError(
     context: ApiClientValidationErrorContext<TRawResponse>,
@@ -146,6 +190,16 @@ export class ApiClient<
       zodError: parsed.error,
     });
 
+    this.log("error", "HTTP validation failed", {
+      kind: context.kind,
+      location: context.location,
+      endpoint: context.endpoint,
+      method: context.method,
+      status: context.status,
+      statusText: context.statusText,
+      message,
+    });
+
     throw new ValidationError(message, parsed.error.issues, context.endpoint, context.method);
   }
 
@@ -156,7 +210,7 @@ export class ApiClient<
     endpoint: TEndpoint,
     options: RequestOptions<TRequest, TEndpoint, "GET">,
   ): Promise<ApiResponse<TResponse, TEndpoint, "GET", TRawResponse>> {
-    return this.request("GET", endpoint as string, options);
+    return this.request("GET", endpoint, options);
   }
 
   /**
@@ -168,7 +222,7 @@ export class ApiClient<
       body: ExtractRequestBody<TRequest, TEndpoint, "POST">;
     },
   ): Promise<ApiResponse<TResponse, TEndpoint, "POST", TRawResponse>> {
-    return this.request("POST", endpoint as string, options);
+    return this.request("POST", endpoint, options);
   }
 
   /**
@@ -180,7 +234,7 @@ export class ApiClient<
       body: ExtractRequestBody<TRequest, TEndpoint, "PUT">;
     },
   ): Promise<ApiResponse<TResponse, TEndpoint, "PUT", TRawResponse>> {
-    return this.request("PUT", endpoint as string, options);
+    return this.request("PUT", endpoint, options);
   }
 
   /**
@@ -192,7 +246,7 @@ export class ApiClient<
       body: ExtractRequestBody<TRequest, TEndpoint, "PATCH">;
     },
   ): Promise<ApiResponse<TResponse, TEndpoint, "PATCH", TRawResponse>> {
-    return this.request("PATCH", endpoint as string, options);
+    return this.request("PATCH", endpoint, options);
   }
 
   /**
@@ -202,7 +256,7 @@ export class ApiClient<
     endpoint: TEndpoint,
     options: RequestOptions<TRequest, TEndpoint, "DELETE">,
   ): Promise<ApiResponse<TResponse, TEndpoint, "DELETE", TRawResponse>> {
-    return this.request("DELETE", endpoint as string, options);
+    return this.request("DELETE", endpoint, options);
   }
 
   /**
@@ -212,8 +266,8 @@ export class ApiClient<
     TEndpoint extends keyof TRequest & string,
     TMethod extends keyof TRequest[TEndpoint] & string,
   >(
-    method: string,
-    endpoint: string,
+    method: TMethod,
+    endpoint: TEndpoint,
     options: RequestOptions<TRequest, TEndpoint, TMethod> & {
       body?: ExtractRequestBody<TRequest, TEndpoint, TMethod>;
     },
@@ -245,21 +299,7 @@ export class ApiClient<
     const url = `${this.options.baseUrl}${interpolatedPath}${queryString}`;
 
     // Merge headers
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-    if (this.options.headers) {
-      for (const [key, value] of Object.entries(this.options.headers)) {
-        if (value !== undefined && value !== null) {
-          headers[key] = String(value);
-        }
-      }
-    }
-    for (const [key, value] of Object.entries(requestHeaders)) {
-      if (value !== undefined && value !== null) {
-        headers[key] = String(value);
-      }
-    }
+    const headers = buildHeaders(this.options.headers, requestHeaders);
 
     // Make request with retry logic
     let lastError: unknown;
@@ -285,6 +325,14 @@ export class ApiClient<
             response: { status: result.status, statusText: result.statusText, data: result.data },
           };
           if (shouldRetry(retryContext)) {
+            this.log("warn", "HTTP retry requested (response)", {
+              method,
+              endpoint,
+              status: result.status,
+              statusText: result.statusText,
+              attempt,
+              retries,
+            });
             lastResult = result;
             const delay = calculateBackoff(attempt);
             await sleep(delay);
@@ -313,6 +361,13 @@ export class ApiClient<
 
           if (shouldRetry) {
             if (shouldRetry(retryContext)) {
+              this.log("warn", "HTTP retry requested (error)", {
+                method,
+                endpoint,
+                attempt,
+                retries,
+                ...formatLogError(error),
+              });
               const delay = calculateBackoff(attempt);
               await sleep(delay);
               attempt++;
@@ -329,10 +384,23 @@ export class ApiClient<
             error.code >= 400 &&
             error.code < 500
           ) {
+            this.log("error", "HTTP request failed with non-retriable status", {
+              method,
+              endpoint,
+              status: error.code,
+              ...formatLogError(error),
+            });
             throw error;
           }
 
           // Default: retry on network errors
+          this.log("warn", "HTTP retrying after error", {
+            method,
+            endpoint,
+            attempt,
+            retries,
+            ...formatLogError(error),
+          });
           const delay = calculateBackoff(attempt);
           await sleep(delay);
           attempt++;
@@ -353,6 +421,13 @@ export class ApiClient<
     }
 
     // If we get here, all retries failed
+    this.log("error", "HTTP request failed after retries", {
+      method,
+      endpoint,
+      attempts: attempt,
+      retries,
+      ...formatLogError(lastError),
+    });
     if (lastError instanceof Error) {
       throw lastError;
     }
@@ -368,16 +443,24 @@ export class ApiClient<
   /**
    * Validates path parameters against Request schema
    */
-  private validatePathParams(
-    endpoint: string,
+  private validatePathParams<
+    TEndpoint extends keyof TRequest & string,
+    TMethod extends keyof TRequest[TEndpoint] & string,
+  >(
+    endpoint: TEndpoint,
     params: Record<string, unknown>,
-    method: string,
+    method: TMethod,
   ): Record<string, unknown> {
     const requestDef = this.options.Request[endpoint]?.[method];
     if (!requestDef || typeof requestDef !== "object") {
       // No schema, but check if path has params
       const requiredParams = this.getPathParamNames(endpoint);
       if (requiredParams.length > 0 && Object.keys(params).length === 0) {
+        this.log("error", "HTTP request validation failed", {
+          method,
+          endpoint,
+          missing: requiredParams,
+        });
         throw new ValidationError(
           `Missing required path parameters: ${requiredParams.join(", ")}`,
           { missing: requiredParams },
@@ -401,6 +484,11 @@ export class ApiClient<
     // Check if endpoint requires params but none provided
     const requiredParams = this.getPathParamNames(endpoint);
     if (requiredParams.length > 0 && Object.keys(params).length === 0) {
+      this.log("error", "HTTP request validation failed", {
+        method,
+        endpoint,
+        missing: requiredParams,
+      });
       throw new ValidationError(
         `Missing required path parameters: ${requiredParams.join(", ")}`,
         { missing: requiredParams },
@@ -415,9 +503,12 @@ export class ApiClient<
   /**
    * Validates query parameters against Request schema
    */
-  private validateQuery(
-    endpoint: string,
-    method: string,
+  private validateQuery<
+    TEndpoint extends keyof TRequest & string,
+    TMethod extends keyof TRequest[TEndpoint] & string,
+  >(
+    endpoint: TEndpoint,
+    method: TMethod,
     query: Record<string, unknown>,
   ): Record<string, unknown> {
     const requestDef = this.options.Request[endpoint]?.[method];
@@ -441,7 +532,10 @@ export class ApiClient<
   /**
    * Validates body against Request schema
    */
-  private validateBody(endpoint: string, method: string, body: unknown): void {
+  private validateBody<
+    TEndpoint extends keyof TRequest & string,
+    TMethod extends keyof TRequest[TEndpoint] & string,
+  >(endpoint: TEndpoint, method: TMethod, body: unknown): void {
     const requestDef = this.options.Request[endpoint]?.[method];
     if (!requestDef || typeof requestDef !== "object") {
       return;
@@ -496,6 +590,12 @@ export class ApiClient<
           raw,
         } as SuccessResponse<unknown, string, TRawResponse>;
       }
+      this.log("error", "HTTP error response", {
+        method,
+        endpoint,
+        status,
+        statusText,
+      });
       return {
         success: false,
         error: new UnexpectedApiClientError(
@@ -537,6 +637,12 @@ export class ApiClient<
         } as SuccessResponse<unknown, string, TRawResponse>;
       }
 
+      this.log("error", "HTTP error response", {
+        method,
+        endpoint,
+        status,
+        statusText,
+      });
       return {
         success: false,
         error: validated,

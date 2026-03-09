@@ -32,6 +32,29 @@ export interface HttpExecutor<TRawResponse = unknown> {
   execute(request: ExecuteRequest): Promise<ExecuteResponse<TRawResponse>>;
 }
 
+export type ApiRequestSchema = Record<string, Record<string, unknown>>;
+
+export type ApiResponseSchema = Record<string, Record<string, Record<string, z.ZodTypeAny>>>;
+
+// ============================================================================
+// Logging Types
+// ============================================================================
+
+export type LogLevel = "error" | "warn" | "info" | "debug";
+
+export type LogMeta = Record<string, unknown>;
+
+export type LogHandler = (message: string, meta?: LogMeta) => void;
+
+/**
+ * Optional structured logger for internal client logging.
+ */
+export type Logger = Partial<Record<LogLevel, LogHandler>>;
+
+export interface ApiClientLoggingOptions {
+  logger?: Logger;
+}
+
 // ============================================================================
 // Path Parameter Extraction
 // ============================================================================
@@ -54,7 +77,7 @@ export type ExtractPathParams<T extends string> = T extends `${string}{${infer P
  * Extracts params type from Request object
  */
 export type ExtractRequestParams<
-  TRequest extends Record<string, Record<string, unknown>>,
+  TRequest extends ApiRequestSchema,
   TEndpoint extends keyof TRequest,
   TMethod extends keyof TRequest[TEndpoint],
 > = TRequest[TEndpoint][TMethod] extends { params: infer P }
@@ -69,7 +92,7 @@ export type ExtractRequestParams<
  * Extracts query type from Request object
  */
 export type ExtractRequestQuery<
-  TRequest extends Record<string, Record<string, unknown>>,
+  TRequest extends ApiRequestSchema,
   TEndpoint extends keyof TRequest,
   TMethod extends keyof TRequest[TEndpoint],
 > = TRequest[TEndpoint][TMethod] extends { query: infer Q }
@@ -82,7 +105,7 @@ export type ExtractRequestQuery<
  * Extracts body type from Request object
  */
 export type ExtractRequestBody<
-  TRequest extends Record<string, Record<string, unknown>>,
+  TRequest extends ApiRequestSchema,
   TEndpoint extends keyof TRequest,
   TMethod extends keyof TRequest[TEndpoint],
 > = TRequest[TEndpoint][TMethod] extends { body: infer B }
@@ -95,7 +118,7 @@ export type ExtractRequestBody<
  * Helper to determine if params are required
  */
 export type ParamsRequired<
-  TRequest extends Record<string, Record<string, unknown>>,
+  TRequest extends ApiRequestSchema,
   TEndpoint extends keyof TRequest,
   TMethod extends keyof TRequest[TEndpoint],
 > = TRequest[TEndpoint][TMethod] extends { params: z.ZodTypeAny }
@@ -108,7 +131,7 @@ export type ParamsRequired<
  * Helper to determine if body is required
  */
 export type BodyRequired<
-  TRequest extends Record<string, Record<string, unknown>>,
+  TRequest extends ApiRequestSchema,
   TEndpoint extends keyof TRequest,
   TMethod extends keyof TRequest[TEndpoint],
 > = TRequest[TEndpoint][TMethod] extends { body: z.ZodTypeAny } ? true : false;
@@ -117,7 +140,7 @@ export type BodyRequired<
  * Extracts endpoints that have a specific HTTP method
  */
 export type EndpointsWithMethod<
-  TRequest extends Record<string, Record<string, unknown>>,
+  TRequest extends ApiRequestSchema,
   TMethod extends string,
 > = {
   [K in keyof TRequest]: TMethod extends keyof TRequest[K] ? K : never;
@@ -132,7 +155,7 @@ export type EndpointsWithMethod<
  * Extracts all status codes from Response object for an endpoint/method
  */
 export type ExtractStatusCodes<
-  TResponse extends Record<string, Record<string, Record<string, z.ZodTypeAny>>>,
+  TResponse extends ApiResponseSchema,
   TEndpoint extends keyof TResponse,
   TMethod extends keyof TResponse[TEndpoint],
 > =
@@ -144,7 +167,7 @@ export type ExtractStatusCodes<
  * Extracts success status codes (2xx) from Response object
  */
 export type ExtractSuccessCodes<
-  TResponse extends Record<string, Record<string, Record<string, z.ZodTypeAny>>>,
+  TResponse extends ApiResponseSchema,
   TEndpoint extends keyof TResponse,
   TMethod extends keyof TResponse[TEndpoint],
 > =
@@ -160,7 +183,7 @@ export type ExtractSuccessCodes<
  * Extracts error status codes (non-2xx) from Response object
  */
 export type ExtractErrorCodes<
-  TResponse extends Record<string, Record<string, Record<string, z.ZodTypeAny>>>,
+  TResponse extends ApiResponseSchema,
   TEndpoint extends keyof TResponse,
   TMethod extends keyof TResponse[TEndpoint],
 > =
@@ -176,7 +199,7 @@ export type ExtractErrorCodes<
  * Extracts response schema for a specific status code
  */
 export type ExtractResponseSchema<
-  TResponse extends Record<string, Record<string, Record<string, z.ZodTypeAny>>>,
+  TResponse extends ApiResponseSchema,
   TEndpoint extends keyof TResponse,
   TMethod extends keyof TResponse[TEndpoint],
   TCode extends string,
@@ -191,7 +214,7 @@ export type ExtractResponseSchema<
  * Infers the success response body type (uses first success code, typically 200)
  */
 export type ExtractSuccessBody<
-  TResponse extends Record<string, Record<string, Record<string, z.ZodTypeAny>>>,
+  TResponse extends ApiResponseSchema,
   TEndpoint extends keyof TResponse,
   TMethod extends keyof TResponse[TEndpoint],
 > =
@@ -241,7 +264,7 @@ export type UnexpectedErrorResponse<TRawResponse = unknown> = {
  * Builds the complete discriminated union response type
  */
 export type ApiResponse<
-  TResponse extends Record<string, Record<string, Record<string, z.ZodTypeAny>>>,
+  TResponse extends ApiResponseSchema,
   TEndpoint extends string,
   TMethod extends string,
   TRawResponse = unknown,
@@ -306,7 +329,7 @@ export type RetryContext = {
  * Request options with conditional required fields
  */
 export type RequestOptions<
-  TRequest extends Record<string, Record<string, unknown>>,
+  TRequest extends ApiRequestSchema,
   TEndpoint extends keyof TRequest,
   TMethod extends keyof TRequest[TEndpoint],
 > = {
@@ -326,4 +349,3 @@ export type RequestOptions<
   (BodyRequired<TRequest, TEndpoint, TMethod> extends true
     ? { body: ExtractRequestBody<TRequest, TEndpoint, TMethod> }
     : { body?: ExtractRequestBody<TRequest, TEndpoint, TMethod> });
-

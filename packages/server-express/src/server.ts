@@ -2,8 +2,8 @@ import express from "express";
 import type { Express, Request, Response, NextFunction } from "express";
 import type { z } from "zod";
 import type { ZodError } from "zod";
-import type { TypedContext, InputConfig, TelemetryOption } from "@alt-stack/server-core";
-import type { Procedure, ReadyProcedure } from "@alt-stack/server-core";
+import type { TypedContext, InputConfig, Result, TelemetryOption } from "@alt-stack/server-core";
+import type { Procedure } from "@alt-stack/server-core";
 import type { Router } from "@alt-stack/server-core";
 import {
   validateInput,
@@ -16,11 +16,8 @@ import {
   endSpanWithError,
   setSpanOk,
   withActiveSpan,
-  isOk,
   isErr,
-  ok as resultOk,
   err as resultErr,
-  extractTagsFromSchema,
   findHttpStatusForError,
 } from "@alt-stack/server-core";
 import type { MiddlewareResult, MiddlewareResultSuccess } from "@alt-stack/server-core";
@@ -50,7 +47,6 @@ function normalizePath(prefix: string, path: string): string {
   return `${normalizedPrefix}${cleanPath}`;
 }
 
-
 /**
  * Serialize a ResultError for JSON response.
  * Extracts error properties beyond the base Error fields.
@@ -78,6 +74,7 @@ import type { ExpressBaseContext } from "./types.js";
 export function createServer<TContext extends ExpressBaseContext = ExpressBaseContext>(
   config: Record<string, Router<TContext> | Router<TContext>[]>,
   options?: {
+    basePath?: string;
     createContext?: (req: Request, res: Response) => Promise<Omit<TContext, "express" | "span">> | Omit<TContext, "express" | "span">;
     defaultErrorHandlers?: {
       default400Error: (
@@ -93,6 +90,10 @@ export function createServer<TContext extends ExpressBaseContext = ExpressBaseCo
 ): Express {
   const app = express();
   const telemetryConfig = resolveTelemetryConfig(options?.telemetry);
+  const telemetryBasePath =
+    options?.basePath && options.basePath !== "/"
+      ? normalizePrefix(options.basePath)
+      : "";
 
   // Initialize telemetry if enabled
   if (telemetryConfig.enabled) {
@@ -131,14 +132,16 @@ export function createServer<TContext extends ExpressBaseContext = ExpressBaseCo
 
     const handler = async (req: Request, res: Response, _next: NextFunction) => {
       // Create telemetry span if enabled
+      const routePath = `${req.baseUrl || telemetryBasePath}${procedure.path}`;
+      const urlPath = req.originalUrl ?? req.path;
       const shouldTrace =
         telemetryConfig.enabled &&
-        !shouldIgnoreRoute(procedure.path, telemetryConfig);
+        !shouldIgnoreRoute(routePath, telemetryConfig);
       const span = shouldTrace
         ? createRequestSpan(
             procedure.method,
-            procedure.path,
-            req.path,
+            routePath,
+            urlPath,
             telemetryConfig,
           )
         : undefined;
@@ -352,7 +355,8 @@ export function createServer<TContext extends ExpressBaseContext = ExpressBaseCo
 
         currentCtx = middlewareResult.ctx;
 
-        const result = await procedure.handler(currentCtx);
+        const result =
+          await procedure.handler(currentCtx) as Result<unknown, Error & { _tag: string }>;
 
         // Handle Result type - check if it's Ok or Err
         if (isErr(result)) {

@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { z } from "zod";
-import { createApiClient, ApiClient, TimeoutError, UnexpectedApiClientError, ValidationError } from "./index.js";
+import {
+  createApiClient,
+  ApiClient,
+  TimeoutError,
+  UnexpectedApiClientError,
+  ValidationError,
+} from "./index.js";
 
 // Test schemas
 const Request = {
@@ -73,6 +79,38 @@ describe("FetchApiClient", () => {
       });
       expect(client).toBeInstanceOf(ApiClient);
     });
+  });
+
+  describe("logging", () => {
+    it("uses the provided logger for validation errors", async () => {
+      globalThis.fetch = createMockFetch([]);
+
+      const logger = {
+        error: vi.fn(),
+        warn: vi.fn(),
+        info: vi.fn(),
+      };
+
+      const client = createApiClient({
+        baseUrl: "https://api.example.com",
+        Request,
+        Response,
+        logger,
+      });
+
+      await expect(
+        client.get("/users/{id}", { params: { id: "not-a-uuid" } }),
+      ).rejects.toThrow(ValidationError);
+      expect(logger.error).toHaveBeenCalledWith(
+        "HTTP validation failed",
+        expect.objectContaining({
+          endpoint: "/users/{id}",
+          method: "GET",
+          location: "params",
+        }),
+      );
+    });
+
   });
 
   describe("GET requests", () => {
