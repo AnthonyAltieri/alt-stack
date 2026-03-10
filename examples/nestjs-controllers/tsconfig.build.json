@@ -6,8 +6,8 @@
     "src/controller-app.ts",
     "src/dtos.ts",
     "src/schemas.ts",
-    "src/shared.ts",
-    "src/shared-result.ts"
+    "src/services.ts",
+    "src/services-result.ts"
   ],
   "exclude": ["dist", "src/e2e.spec.ts"]
 }

@@ -7,8 +7,8 @@ This example compares the same small task workflow implemented three ways:
 - `src/alt-stack-result-app.ts`: Alt Stack routes mounted into NestJS with the same Zod boundary and a `Result`-based service layer
 - `src/dtos.ts`: DTO and domain models that the controller and shared services use
 - `src/schemas.ts`: Alt Stack-only Zod schemas layered on top of the existing DTO-shaped services
-- `src/shared.ts`: throw-based services that the controller and first Alt Stack variant share
-- `src/shared-result.ts`: `Result`-based services and workflow helpers used by the third variant
+- `src/services.ts`: throw-based services that the controller and first Alt Stack variant use
+- `src/services-result.ts`: `Result`-based services and workflow helpers used by the third variant
 
 All three apps expose the same API shape under `/v1/api/tasks`, use the same in-memory task domain, and differ mainly in validation style, error flow, and route composition.
 
@@ -57,9 +57,9 @@ The route complexity is intentionally moderate: several routes coordinate multip
 
 | Variant | Service layer | Route ergonomics | Error handling model |
 | --- | --- | --- | --- |
-| NestJS controller | DTO-shaped services in `shared.ts` throw typed errors | Controller methods orchestrate service calls directly | Global Nest exception filter maps tagged errors to HTTP exceptions |
-| Alt Stack + throw services | Same DTO-shaped services in `shared.ts` throw typed errors | Procedures use Zod input and small `try/catch` blocks to return declared errors | Tagged errors come from the shared domain and global `default500Error` handles unexpected plain errors |
-| Alt Stack + `Result` services | DTO-shaped services in `shared-result.ts` return `Result` | Procedures call one workflow helper and branch on `isErr(result)` | Tagged errors flow through the `Result` type and the same global `default500Error` handles unexpected plain errors |
+| NestJS controller | DTO-shaped services in `services.ts` throw typed errors | Controller methods orchestrate service calls directly | Global Nest exception filter maps tagged errors to HTTP exceptions |
+| Alt Stack + throw services | Same DTO-shaped services in `services.ts` throw typed errors | Procedures use Zod input and small `try/catch` blocks to return declared errors | Tagged errors come from the shared domain and global `default500Error` handles unexpected plain errors |
+| Alt Stack + `Result` services | DTO-shaped services in `services-result.ts` return `Result` | Procedures return workflow results directly once the middleware guarantees context | Tagged errors flow through the `Result` type and the same global `default500Error` handles unexpected plain errors |
 
 The controller example is intentionally run from compiled `dist` output. That keeps the global Nest validation pipe working with standard TypeScript decorator metadata and avoids showing any manual metadata patching in the source example.
 

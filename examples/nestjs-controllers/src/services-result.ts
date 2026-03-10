@@ -19,7 +19,7 @@ import {
   UnauthorizedError,
   seedTasks,
   seedUsers,
-} from "./shared.js";
+} from "./services.js";
 
 type UpdateTaskError = NotFoundError | ForbiddenError | InvalidTransitionError;
 type AssignTaskError = NotFoundError | ForbiddenError;
@@ -213,7 +213,7 @@ export class TaskWorkflowResultService {
   createTaskAsActor(
     actor: User,
     input: CreateTaskDto,
-  ): Task {
+  ): Result<Task, never> {
     const task = this.tasksService.create(input, actor.id);
     this.taskActivityService.record({
       taskId: task.id,
@@ -221,7 +221,7 @@ export class TaskWorkflowResultService {
       actorId: actor.id,
       details: `Task created with ${task.priority} priority`,
     });
-    return task;
+    return ok(task);
   }
 
   getTaskById(taskId: string): Result<Task, NotFoundError> {
@@ -234,18 +234,14 @@ export class TaskWorkflowResultService {
     patch: UpdateTaskDto,
   ): Result<Task, UpdateTaskError> {
     const taskResult = this.tasksService.findTaskResult(taskId);
-    if (isErr(taskResult)) {
-      return taskResult;
-    }
+    if (isErr(taskResult)) return taskResult;
 
     const policyResult = this.taskPolicyService.assertCanUpdate(
       taskResult.value,
       actor,
       patch.status,
     );
-    if (isErr(policyResult)) {
-      return policyResult;
-    }
+    if (isErr(policyResult)) return policyResult;
 
     const updatedTask = this.tasksService.update(taskResult.value, patch);
     if (taskResult.value.status !== TaskStatusDto.Completed && updatedTask.status === TaskStatusDto.Completed) {
@@ -265,19 +261,13 @@ export class TaskWorkflowResultService {
     input: AssignTaskDto,
   ): Result<Task, AssignTaskError> {
     const taskResult = this.tasksService.findTaskResult(taskId);
-    if (isErr(taskResult)) {
-      return taskResult;
-    }
+    if (isErr(taskResult)) return taskResult;
 
     const assigneeResult = this.usersService.findAssigneeResult(input.assigneeId);
-    if (isErr(assigneeResult)) {
-      return assigneeResult;
-    }
+    if (isErr(assigneeResult)) return assigneeResult;
 
     const policyResult = this.taskPolicyService.assertCanAssign(taskResult.value, actor);
-    if (isErr(policyResult)) {
-      return policyResult;
-    }
+    if (isErr(policyResult)) return policyResult;
 
     const updatedTask = this.tasksService.assign(taskResult.value, { assigneeId: assigneeResult.value.id });
     this.taskActivityService.record({

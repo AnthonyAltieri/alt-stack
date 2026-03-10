@@ -33,7 +33,7 @@ import {
   TaskWorkflowResultService,
   TasksResultService,
   UsersResultService,
-} from "./shared-result.js";
+} from "./services-result.js";
 
 type Actor = User;
 type AppContext = NestBaseContext & { actor?: Actor };
@@ -88,7 +88,7 @@ const apiRouter = router<AppContext>({
       })
       .post(({ ctx, input }) => {
         const workflow = ctx.nest.get<TaskWorkflowResultService>(TaskWorkflowResultService);
-        return ok(workflow.createTaskAsActor(ctx.actor, input.body));
+        return workflow.createTaskAsActor(ctx.actor, input.body);
       }),
   },
 
@@ -101,8 +101,7 @@ const apiRouter = router<AppContext>({
       })
       .get(({ ctx, input }) => {
         const workflow = ctx.nest.get<TaskWorkflowResultService>(TaskWorkflowResultService);
-        const result = workflow.getTaskById(input.params.id);
-        return isErr(result) ? err(result.error) : ok(result.value);
+        return workflow.getTaskById(input.params.id);
       }),
 
     patch: protectedProcedure
@@ -118,8 +117,7 @@ const apiRouter = router<AppContext>({
       })
       .patch(({ ctx, input }) => {
         const workflow = ctx.nest.get<TaskWorkflowResultService>(TaskWorkflowResultService);
-        const result = workflow.updateTaskAsActor(ctx.actor, input.params.id, input.body);
-        return isErr(result) ? err(result.error) : ok(result.value);
+        return workflow.updateTaskAsActor(ctx.actor, input.params.id, input.body);
       }),
   },
 
@@ -135,8 +133,7 @@ const apiRouter = router<AppContext>({
     })
     .post(({ ctx, input }) => {
       const workflow = ctx.nest.get<TaskWorkflowResultService>(TaskWorkflowResultService);
-      const result = workflow.assignTaskAsActor(ctx.actor, input.params.id, input.body);
-      return isErr(result) ? err(result.error) : ok(result.value);
+      return workflow.assignTaskAsActor(ctx.actor, input.params.id, input.body);
     }),
 });
 

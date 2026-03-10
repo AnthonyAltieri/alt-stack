@@ -22,13 +22,13 @@ import {
   requireAssignee,
   requireTask,
   requireUser,
-} from "./shared.js";
+} from "./services.js";
 import type {
   ForbiddenError,
   InvalidTransitionError,
   NotFoundError,
   UnauthorizedError,
-} from "./shared.js";
+} from "./services.js";
 import type { User } from "./dtos.js";
 import {
   AssignTaskBodySchema,

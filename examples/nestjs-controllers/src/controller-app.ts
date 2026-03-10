@@ -37,7 +37,7 @@ import {
   requireAssignee,
   requireTask,
   requireUser,
-} from "./shared.js";
+} from "./services.js";
 
 @Catch()
 class TaskDomainExceptionFilter
