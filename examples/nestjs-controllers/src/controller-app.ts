@@ -22,6 +22,7 @@ import {
   ValidationPipe,
 } from "@nestjs/common";
 import { BaseExceptionFilter, HttpAdapterHost, NestFactory } from "@nestjs/core";
+import { isResultError as isError } from "@alt-stack/server-nestjs";
 import {
   AssignTaskDto,
   CreateTaskDto,
@@ -29,42 +30,34 @@ import {
   UpdateTaskDto,
 } from "./dtos.js";
 import {
-  ForbiddenError,
-  InvalidTransitionError,
-  NotFoundError,
   TaskActivityService,
   TaskPolicyService,
   TasksService,
-  UnauthorizedError,
   UsersService,
   requireAssignee,
   requireTask,
   requireUser,
 } from "./shared.js";
 
-@Catch(UnauthorizedError, NotFoundError, ForbiddenError, InvalidTransitionError)
+@Catch()
 class TaskDomainExceptionFilter
   extends BaseExceptionFilter
   implements ExceptionFilter
 {
-  override catch(
-    exception:
-      | UnauthorizedError
-      | NotFoundError
-      | ForbiddenError
-      | InvalidTransitionError,
-    host: ArgumentsHost,
-  ) {
-    if (exception instanceof UnauthorizedError) {
+  override catch(exception: unknown, host: ArgumentsHost) {
+    if (isError(exception) && exception._tag === "UnauthorizedError") {
       return super.catch(new UnauthorizedException(exception.message), host);
     }
-    if (exception instanceof NotFoundError) {
+    if (isError(exception) && exception._tag === "NotFoundError") {
       return super.catch(new NotFoundException(exception.message), host);
     }
-    if (exception instanceof ForbiddenError) {
+    if (isError(exception) && exception._tag === "ForbiddenError") {
       return super.catch(new ForbiddenException(exception.message), host);
     }
-    return super.catch(new ConflictException(exception.message), host);
+    if (isError(exception) && exception._tag === "InvalidTransitionError") {
+      return super.catch(new ConflictException(exception.message), host);
+    }
+    return super.catch(exception, host);
   }
 }
 

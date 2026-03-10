@@ -8,23 +8,26 @@ import {
   type NestBaseContext,
   err,
   init,
+  isResultError as isError,
   ok,
   registerAltStack,
   router,
 } from "@alt-stack/server-nestjs";
 import { z } from "zod";
 import {
-  ForbiddenError,
-  InvalidTransitionError,
-  NotFoundError,
   TaskActivityService,
   TaskPolicyService,
   TasksService,
-  UnauthorizedError,
   UsersService,
   requireAssignee,
   requireTask,
   requireUser,
+} from "./shared.js";
+import type {
+  ForbiddenError,
+  InvalidTransitionError,
+  NotFoundError,
+  UnauthorizedError,
 } from "./shared.js";
 import type { User } from "./dtos.js";
 import {
@@ -41,8 +44,20 @@ import {
 
 type Actor = User;
 type AppContext = NestBaseContext & { actor?: Actor };
+type AppError =
+  | UnauthorizedError
+  | NotFoundError
+  | ForbiddenError
+  | InvalidTransitionError;
 
 const factory = init<{ actor?: Actor }>();
+
+function hasErrorTag<Tag extends AppError["_tag"]>(
+  error: unknown,
+  tag: Tag,
+): error is Extract<AppError, { readonly _tag: Tag }> {
+  return isError(error) && error._tag === tag;
+}
 
 const protectedProcedure = factory.procedure
   .errors({
@@ -59,7 +74,7 @@ const protectedProcedure = factory.procedure
       );
       return next({ ctx: { actor } });
     } catch (error) {
-      if (error instanceof UnauthorizedError) {
+      if (hasErrorTag(error, "UnauthorizedError")) {
         return err(error);
       }
       throw error;
@@ -110,7 +125,7 @@ const apiRouter = router<AppContext>({
         try {
           return ok(requireTask(ctx.nest.get<TasksService>(TasksService), input.params.id));
         } catch (error) {
-          if (error instanceof NotFoundError) {
+          if (hasErrorTag(error, "NotFoundError")) {
             return err(error);
           }
           throw error;
@@ -150,9 +165,9 @@ const apiRouter = router<AppContext>({
           return ok(updatedTask);
         } catch (error) {
           if (
-            error instanceof ForbiddenError ||
-            error instanceof NotFoundError ||
-            error instanceof InvalidTransitionError
+            hasErrorTag(error, "ForbiddenError") ||
+            hasErrorTag(error, "NotFoundError") ||
+            hasErrorTag(error, "InvalidTransitionError")
           ) {
             return err(error);
           }
@@ -191,7 +206,7 @@ const apiRouter = router<AppContext>({
         });
         return ok(updatedTask);
       } catch (error) {
-        if (error instanceof ForbiddenError || error instanceof NotFoundError) {
+        if (hasErrorTag(error, "ForbiddenError") || hasErrorTag(error, "NotFoundError")) {
           return err(error);
         }
         throw error;
