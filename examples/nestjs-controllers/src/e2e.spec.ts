@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import http from "node:http";
 import { PassThrough } from "node:stream";
 import { createAltStackApp } from "./alt-stack-app.js";
@@ -95,32 +95,36 @@ async function dispatch(
   };
 }
 
+const aliceHeaders = { "x-user-id": "u-alice" };
+const bobHeaders = { "x-user-id": "u-bob" };
+const unknownHeaders = { "x-user-id": "does-not-exist" };
+
 describe("NestJS controller replacement example", () => {
   let controllerApp: any;
   let altStackApp: any;
   let controllerServer: any;
   let altStackServer: any;
 
-  beforeAll(async () => {
+  beforeEach(async () => {
     controllerApp = await createControllerApp();
     altStackApp = await createAltStackApp();
     controllerServer = controllerApp.getHttpServer();
     altStackServer = altStackApp.getHttpServer();
   });
 
-  afterAll(async () => {
+  afterEach(async () => {
     await controllerApp.close();
     await altStackApp.close();
   });
 
-  it("returns the same payload for path params", async () => {
+  it("lists tasks with matching filtered payloads", async () => {
     const controllerRes = await dispatch(controllerServer, {
       method: "GET",
-      url: "/v1/api/users/123",
+      url: "/v1/api/tasks?status=todo&assigneeId=u-bob&limit=1",
     });
     const altStackRes = await dispatch(altStackServer, {
       method: "GET",
-      url: "/v1/api/users/123",
+      url: "/v1/api/tasks?status=todo&assigneeId=u-bob&limit=1",
     });
 
     expect(controllerRes.status).toBe(200);
@@ -128,67 +132,215 @@ describe("NestJS controller replacement example", () => {
     expect(altStackRes.body).toEqual(controllerRes.body);
   });
 
-  it("matches query validation status codes", async () => {
+  it("matches query validation failures", async () => {
     const controllerRes = await dispatch(controllerServer, {
       method: "GET",
-      url: "/v1/api/query?limit=0",
+      url: "/v1/api/tasks?limit=0",
     });
     const altStackRes = await dispatch(altStackServer, {
       method: "GET",
-      url: "/v1/api/query?limit=0",
+      url: "/v1/api/tasks?limit=0",
     });
 
     expect(controllerRes.status).toBe(400);
     expect(altStackRes.status).toBe(400);
   });
 
-  it("matches body validation status codes", async () => {
+  it("creates a task through a multi-service route", async () => {
+    const payload = {
+      title: "Write migration guide",
+      description: "Explain the example move and package rename.",
+      priority: "high",
+    };
+
     const controllerRes = await dispatch(controllerServer, {
       method: "POST",
-      url: "/v1/api/items",
-      body: { name: "" },
+      url: "/v1/api/tasks",
+      headers: aliceHeaders,
+      body: payload,
     });
     const altStackRes = await dispatch(altStackServer, {
       method: "POST",
-      url: "/v1/api/items",
-      body: { name: "" },
-    });
-
-    expect(controllerRes.status).toBe(400);
-    expect(altStackRes.status).toBe(400);
-  });
-
-  it("returns the same payload for valid POST bodies", async () => {
-    const controllerRes = await dispatch(controllerServer, {
-      method: "POST",
-      url: "/v1/api/items",
-      body: { name: "widget" },
-    });
-    const altStackRes = await dispatch(altStackServer, {
-      method: "POST",
-      url: "/v1/api/items",
-      body: { name: "widget" },
+      url: "/v1/api/tasks",
+      headers: aliceHeaders,
+      body: payload,
     });
 
     expect(controllerRes.status).toBe(201);
     expect(altStackRes.status).toBe(200);
-    expect(controllerRes.body).toEqual(altStackRes.body);
+    expect(altStackRes.body).toMatchObject({
+      title: payload.title,
+      priority: payload.priority,
+      ownerId: "u-alice",
+      assigneeId: null,
+      status: "todo",
+    });
+    expect(controllerRes.body).toMatchObject({
+      title: payload.title,
+      priority: payload.priority,
+      ownerId: "u-alice",
+      assigneeId: null,
+      status: "todo",
+    });
   });
 
-  it("returns 404 from both implementations", async () => {
+  it("rejects invalid create payloads in both implementations", async () => {
+    const controllerRes = await dispatch(controllerServer, {
+      method: "POST",
+      url: "/v1/api/tasks",
+      headers: aliceHeaders,
+      body: { title: "", priority: "urgent" },
+    });
+    const altStackRes = await dispatch(altStackServer, {
+      method: "POST",
+      url: "/v1/api/tasks",
+      headers: aliceHeaders,
+      body: { title: "", priority: "urgent" },
+    });
+
+    expect(controllerRes.status).toBe(400);
+    expect(altStackRes.status).toBe(400);
+  });
+
+  it("returns matching 404 behavior for a missing task", async () => {
     const controllerRes = await dispatch(controllerServer, {
       method: "GET",
-      url: "/v1/api/error",
+      url: "/v1/api/tasks/task-missing",
     });
     const altStackRes = await dispatch(altStackServer, {
       method: "GET",
-      url: "/v1/api/error",
+      url: "/v1/api/tasks/task-missing",
     });
 
     expect(controllerRes.status).toBe(404);
     expect(altStackRes.status).toBe(404);
     expect(altStackRes.body).toEqual({
-      error: { _tag: "NotFoundError", code: "NotFoundError", message: "missing" },
+      error: { _tag: "NotFoundError", code: "NotFoundError", message: "Task task-missing was not found" },
     });
+  });
+
+  it("assigns a task through a route that coordinates multiple services", async () => {
+    const controllerRes = await dispatch(controllerServer, {
+      method: "POST",
+      url: "/v1/api/tasks/task-1/assign",
+      headers: aliceHeaders,
+      body: { assigneeId: "u-chris" },
+    });
+    const altStackRes = await dispatch(altStackServer, {
+      method: "POST",
+      url: "/v1/api/tasks/task-1/assign",
+      headers: aliceHeaders,
+      body: { assigneeId: "u-chris" },
+    });
+
+    expect(controllerRes.status).toBe(201);
+    expect(altStackRes.status).toBe(200);
+    expect(controllerRes.body.assigneeId).toBe("u-chris");
+    expect(altStackRes.body.assigneeId).toBe("u-chris");
+  });
+
+  it("rejects assignment to an unknown user", async () => {
+    const controllerRes = await dispatch(controllerServer, {
+      method: "POST",
+      url: "/v1/api/tasks/task-1/assign",
+      headers: aliceHeaders,
+      body: { assigneeId: "u-missing" },
+    });
+    const altStackRes = await dispatch(altStackServer, {
+      method: "POST",
+      url: "/v1/api/tasks/task-1/assign",
+      headers: aliceHeaders,
+      body: { assigneeId: "u-missing" },
+    });
+
+    expect(controllerRes.status).toBe(404);
+    expect(altStackRes.status).toBe(404);
+  });
+
+  it("rejects assignment by an unauthorized caller", async () => {
+    const controllerRes = await dispatch(controllerServer, {
+      method: "POST",
+      url: "/v1/api/tasks/task-1/assign",
+      headers: bobHeaders,
+      body: { assigneeId: "u-chris" },
+    });
+    const altStackRes = await dispatch(altStackServer, {
+      method: "POST",
+      url: "/v1/api/tasks/task-1/assign",
+      headers: bobHeaders,
+      body: { assigneeId: "u-chris" },
+    });
+
+    expect(controllerRes.status).toBe(403);
+    expect(altStackRes.status).toBe(403);
+  });
+
+  it("allows a valid status transition by the assignee", async () => {
+    await dispatch(controllerServer, {
+      method: "POST",
+      url: "/v1/api/tasks/task-1/assign",
+      headers: aliceHeaders,
+      body: { assigneeId: "u-bob" },
+    });
+    await dispatch(altStackServer, {
+      method: "POST",
+      url: "/v1/api/tasks/task-1/assign",
+      headers: aliceHeaders,
+      body: { assigneeId: "u-bob" },
+    });
+
+    const controllerRes = await dispatch(controllerServer, {
+      method: "PATCH",
+      url: "/v1/api/tasks/task-1",
+      headers: bobHeaders,
+      body: { status: "in_progress" },
+    });
+    const altStackRes = await dispatch(altStackServer, {
+      method: "PATCH",
+      url: "/v1/api/tasks/task-1",
+      headers: bobHeaders,
+      body: { status: "in_progress" },
+    });
+
+    expect(controllerRes.status).toBe(200);
+    expect(altStackRes.status).toBe(200);
+    expect(controllerRes.body.status).toBe("in_progress");
+    expect(altStackRes.body.status).toBe("in_progress");
+  });
+
+  it("rejects invalid transitions with matching conflict semantics", async () => {
+    const controllerRes = await dispatch(controllerServer, {
+      method: "PATCH",
+      url: "/v1/api/tasks/task-1",
+      headers: bobHeaders,
+      body: { status: "completed" },
+    });
+    const altStackRes = await dispatch(altStackServer, {
+      method: "PATCH",
+      url: "/v1/api/tasks/task-1",
+      headers: bobHeaders,
+      body: { status: "completed" },
+    });
+
+    expect(controllerRes.status).toBe(409);
+    expect(altStackRes.status).toBe(409);
+  });
+
+  it("rejects unknown callers consistently", async () => {
+    const controllerRes = await dispatch(controllerServer, {
+      method: "POST",
+      url: "/v1/api/tasks",
+      headers: unknownHeaders,
+      body: { title: "Should fail", priority: "low" },
+    });
+    const altStackRes = await dispatch(altStackServer, {
+      method: "POST",
+      url: "/v1/api/tasks",
+      headers: unknownHeaders,
+      body: { title: "Should fail", priority: "low" },
+    });
+
+    expect(controllerRes.status).toBe(401);
+    expect(altStackRes.status).toBe(401);
   });
 });

@@ -1,15 +1,82 @@
 import { Type } from "class-transformer";
-import { IsInt, IsString, Min, MinLength } from "class-validator";
+import {
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+} from "class-validator";
 
-export class QueryDto {
+export enum TaskStatusDto {
+  Todo = "todo",
+  InProgress = "in_progress",
+  Completed = "completed",
+}
+
+export enum TaskPriorityDto {
+  Low = "low",
+  Medium = "medium",
+  High = "high",
+}
+
+export class ListTasksQueryDto {
+  @IsOptional()
+  @IsEnum(TaskStatusDto)
+  status?: TaskStatusDto;
+
+  @IsOptional()
+  @IsString()
+  assigneeId?: string;
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  limit!: number;
+  @Max(50)
+  limit?: number;
 }
 
-export class CreateItemDto {
+export class CreateTaskDto {
   @IsString()
   @MinLength(1)
-  name!: string;
+  @MaxLength(120)
+  title!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+
+  @IsEnum(TaskPriorityDto)
+  priority!: TaskPriorityDto;
+}
+
+export class UpdateTaskDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  title?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+
+  @IsOptional()
+  @IsEnum(TaskPriorityDto)
+  priority?: TaskPriorityDto;
+
+  @IsOptional()
+  @IsEnum(TaskStatusDto)
+  status?: TaskStatusDto;
+}
+
+export class AssignTaskDto {
+  @IsString()
+  @MinLength(1)
+  assigneeId!: string;
 }
