@@ -2,10 +2,12 @@
   "extends": "./tsconfig.json",
   "include": [
     "src/alt-stack-app.ts",
+    "src/alt-stack-result-app.ts",
     "src/controller-app.ts",
     "src/dtos.ts",
     "src/schemas.ts",
-    "src/shared.ts"
+    "src/shared.ts",
+    "src/shared-result.ts"
   ],
   "exclude": ["dist", "src/e2e.spec.ts"]
 }

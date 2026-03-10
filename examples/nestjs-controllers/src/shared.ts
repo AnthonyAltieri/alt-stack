@@ -29,14 +29,20 @@ export class InvalidTransitionError extends TaggedError {
   readonly _tag = "InvalidTransitionError" as const;
 }
 
-const seedUsers: User[] = [
+export type TaskDomainError =
+  | UnauthorizedError
+  | NotFoundError
+  | ForbiddenError
+  | InvalidTransitionError;
+
+export const seedUsers: User[] = [
   { id: "u-admin", name: "Avery Admin", role: UserRoleDto.Admin },
   { id: "u-alice", name: "Alice Owner", role: UserRoleDto.Member },
   { id: "u-bob", name: "Bob Builder", role: UserRoleDto.Member },
   { id: "u-chris", name: "Chris Reviewer", role: UserRoleDto.Member },
 ];
 
-const seedTasks: Task[] = [
+export const seedTasks: Task[] = [
   {
     id: "task-1",
     title: "Prepare release notes",
