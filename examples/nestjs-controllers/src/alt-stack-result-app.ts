@@ -65,9 +65,7 @@ const protectedProcedure = factory.procedure
         : undefined,
     );
 
-    if (isErr(actorResult)) {
-      return err(actorResult.error);
-    }
+    if (isErr(actorResult)) return err(actorResult.error);
 
     return next({ ctx: { actor: actorResult.value } });
   });
@@ -90,7 +88,7 @@ const apiRouter = router<AppContext>({
       })
       .post(({ ctx, input }) => {
         const workflow = ctx.nest.get<TaskWorkflowResultService>(TaskWorkflowResultService);
-        return ok(workflow.createTaskAsActor(ctx.actor!, input.body));
+        return ok(workflow.createTaskAsActor(ctx.actor, input.body));
       }),
   },
 
@@ -120,7 +118,7 @@ const apiRouter = router<AppContext>({
       })
       .patch(({ ctx, input }) => {
         const workflow = ctx.nest.get<TaskWorkflowResultService>(TaskWorkflowResultService);
-        const result = workflow.updateTaskAsActor(ctx.actor!, input.params.id, input.body);
+        const result = workflow.updateTaskAsActor(ctx.actor, input.params.id, input.body);
         return isErr(result) ? err(result.error) : ok(result.value);
       }),
   },
@@ -137,7 +135,7 @@ const apiRouter = router<AppContext>({
     })
     .post(({ ctx, input }) => {
       const workflow = ctx.nest.get<TaskWorkflowResultService>(TaskWorkflowResultService);
-      const result = workflow.assignTaskAsActor(ctx.actor!, input.params.id, input.body);
+      const result = workflow.assignTaskAsActor(ctx.actor, input.params.id, input.body);
       return isErr(result) ? err(result.error) : ok(result.value);
     }),
 });
