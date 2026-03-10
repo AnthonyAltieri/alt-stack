@@ -4,9 +4,8 @@ import { pathToFileURL } from "node:url";
 import { Module } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import {
-  type NestBaseContext,
   type NestAppLike,
-  TaggedError,
+  type NestBaseContext,
   err,
   init,
   ok,
@@ -17,86 +16,29 @@ import { z } from "zod";
 import {
   AssignTaskBodySchema,
   CreateTaskBodySchema,
+  ForbiddenError,
+  ForbiddenErrorSchema,
+  InvalidTransitionError,
+  InvalidTransitionErrorSchema,
+  NotFoundError,
+  NotFoundErrorSchema,
   TaskActivityService,
   TaskListQuerySchema,
   TaskPolicyService,
   TaskSchema,
   TasksService,
+  UnauthorizedError,
+  UnauthorizedErrorSchema,
   UpdateTaskBodySchema,
+  UserSchema,
   UsersService,
   requireAssignee,
   requireTask,
   requireUser,
 } from "./shared.js";
 
-class UnauthorizedError extends TaggedError {
-  readonly _tag = "UnauthorizedError" as const;
-}
-
-class NotFoundError extends TaggedError {
-  readonly _tag = "NotFoundError" as const;
-}
-
-class ForbiddenError extends TaggedError {
-  readonly _tag = "ForbiddenError" as const;
-}
-
-class InvalidTransitionError extends TaggedError {
-  readonly _tag = "InvalidTransitionError" as const;
-}
-
-const UnauthorizedErrorSchema = z.object({
-  _tag: z.literal("UnauthorizedError"),
-  message: z.string(),
-});
-
-const NotFoundErrorSchema = z.object({
-  _tag: z.literal("NotFoundError"),
-  message: z.string(),
-});
-
-const ForbiddenErrorSchema = z.object({
-  _tag: z.literal("ForbiddenError"),
-  message: z.string(),
-});
-
-const InvalidTransitionErrorSchema = z.object({
-  _tag: z.literal("InvalidTransitionError"),
-  message: z.string(),
-});
-
-const ActorSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  role: z.enum(["member", "admin"]),
-});
-
-type Actor = z.infer<typeof ActorSchema>;
+type Actor = z.infer<typeof UserSchema>;
 type AppContext = NestBaseContext & { actor?: Actor };
-
-function mapDomainError(error: unknown): Error {
-  if (
-    error &&
-    typeof error === "object" &&
-    "tag" in error &&
-    "message" in error
-  ) {
-    const domainError = error as { tag: string; message: string };
-    if (domainError.tag === "UnauthorizedError") {
-      return new UnauthorizedError(domainError.message);
-    }
-    if (domainError.tag === "NotFoundError") {
-      return new NotFoundError(domainError.message);
-    }
-    if (domainError.tag === "ForbiddenError") {
-      return new ForbiddenError(domainError.message);
-    }
-    if (domainError.tag === "InvalidTransitionError") {
-      return new InvalidTransitionError(domainError.message);
-    }
-  }
-  return error as Error;
-}
 
 const factory = init<{ actor?: Actor }>();
 
@@ -115,7 +57,10 @@ const protectedProcedure = factory.procedure
       );
       return next({ ctx: { actor } });
     } catch (error) {
-      return err(mapDomainError(error) as UnauthorizedError);
+      if (error instanceof UnauthorizedError) {
+        return err(error);
+      }
+      throw error;
     }
   });
 
@@ -163,7 +108,10 @@ const apiRouter = router<AppContext>({
         try {
           return ok(requireTask(ctx.nest.get<TasksService>(TasksService), input.params.id));
         } catch (error) {
-          return err(mapDomainError(error) as NotFoundError);
+          if (error instanceof NotFoundError) {
+            return err(error);
+          }
+          throw error;
         }
       }),
 
@@ -199,12 +147,14 @@ const apiRouter = router<AppContext>({
           }
           return ok(updatedTask);
         } catch (error) {
-          return err(
-            mapDomainError(error) as
-              | ForbiddenError
-              | NotFoundError
-              | InvalidTransitionError,
-          );
+          if (
+            error instanceof ForbiddenError ||
+            error instanceof NotFoundError ||
+            error instanceof InvalidTransitionError
+          ) {
+            return err(error);
+          }
+          throw error;
         }
       }),
   },
@@ -239,7 +189,10 @@ const apiRouter = router<AppContext>({
         });
         return ok(updatedTask);
       } catch (error) {
-        return err(mapDomainError(error) as ForbiddenError | NotFoundError);
+        if (error instanceof ForbiddenError || error instanceof NotFoundError) {
+          return err(error);
+        }
+        throw error;
       }
     }),
 });

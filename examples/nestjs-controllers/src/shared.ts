@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { TaggedError } from "@alt-stack/server-nestjs";
 import { z } from "zod";
 
 export const TaskStatusSchema = z.enum(["todo", "in_progress", "completed"]);
@@ -52,24 +53,47 @@ export const ActivityEntrySchema = z.object({
   details: z.string(),
 });
 
+export class UnauthorizedError extends TaggedError {
+  readonly _tag = "UnauthorizedError" as const;
+}
+
+export class NotFoundError extends TaggedError {
+  readonly _tag = "NotFoundError" as const;
+}
+
+export class ForbiddenError extends TaggedError {
+  readonly _tag = "ForbiddenError" as const;
+}
+
+export class InvalidTransitionError extends TaggedError {
+  readonly _tag = "InvalidTransitionError" as const;
+}
+
+export const UnauthorizedErrorSchema = z.object({
+  _tag: z.literal("UnauthorizedError"),
+  message: z.string(),
+});
+
+export const NotFoundErrorSchema = z.object({
+  _tag: z.literal("NotFoundError"),
+  message: z.string(),
+});
+
+export const ForbiddenErrorSchema = z.object({
+  _tag: z.literal("ForbiddenError"),
+  message: z.string(),
+});
+
+export const InvalidTransitionErrorSchema = z.object({
+  _tag: z.literal("InvalidTransitionError"),
+  message: z.string(),
+});
+
 export type User = z.infer<typeof UserSchema>;
 export type Task = z.infer<typeof TaskSchema>;
 export type TaskStatus = z.infer<typeof TaskStatusSchema>;
 export type TaskPriority = z.infer<typeof TaskPrioritySchema>;
 export type ActivityEntry = z.infer<typeof ActivityEntrySchema>;
-
-export class DomainError extends Error {
-  constructor(
-    readonly tag:
-      | "UnauthorizedError"
-      | "NotFoundError"
-      | "ForbiddenError"
-      | "InvalidTransitionError",
-    message: string,
-  ) {
-    super(message);
-  }
-}
 
 const seedUsers: User[] = [
   { id: "u-admin", name: "Avery Admin", role: "admin" },
@@ -171,7 +195,7 @@ export class TaskPolicyService {
     if (actor.role === "admin" || actor.id === task.ownerId) {
       return;
     }
-    throw new DomainError("ForbiddenError", "Only the owner or an admin can assign this task");
+    throw new ForbiddenError("Only the owner or an admin can assign this task");
   }
 
   assertCanUpdate(task: Task, actor: User, nextStatus?: TaskStatus): void {
@@ -181,7 +205,7 @@ export class TaskPolicyService {
       }
       return;
     }
-    throw new DomainError("ForbiddenError", "You do not have access to update this task");
+    throw new ForbiddenError("You do not have access to update this task");
   }
 
   private assertValidTransition(task: Task, actor: User, nextStatus: TaskStatus): void {
@@ -189,8 +213,7 @@ export class TaskPolicyService {
       return;
     }
     if (nextStatus === "in_progress" && task.assigneeId !== actor.id && actor.role !== "admin") {
-      throw new DomainError(
-        "InvalidTransitionError",
+      throw new InvalidTransitionError(
         "Only the assigned user can move a task to in_progress",
       );
     }
@@ -198,8 +221,7 @@ export class TaskPolicyService {
       const canComplete = task.assigneeId === actor.id || actor.role === "admin";
       const validPreviousState = task.status === "in_progress";
       if (!canComplete || !validPreviousState) {
-        throw new DomainError(
-          "InvalidTransitionError",
+        throw new InvalidTransitionError(
           "Tasks can only be completed by the assignee after they are in progress",
         );
       }
@@ -226,12 +248,12 @@ export function requireUser(
   userId: string | undefined,
 ): User {
   if (!userId) {
-    throw new DomainError("UnauthorizedError", "x-user-id header is required");
+    throw new UnauthorizedError("x-user-id header is required");
   }
 
   const user = usersService.findById(userId);
   if (!user) {
-    throw new DomainError("UnauthorizedError", "Unknown user");
+    throw new UnauthorizedError("Unknown user");
   }
   return user;
 }
@@ -242,7 +264,7 @@ export function requireTask(
 ): Task {
   const task = tasksService.findById(taskId);
   if (!task) {
-    throw new DomainError("NotFoundError", `Task ${taskId} was not found`);
+    throw new NotFoundError(`Task ${taskId} was not found`);
   }
   return task;
 }
@@ -253,7 +275,7 @@ export function requireAssignee(
 ): User {
   const assignee = usersService.findById(assigneeId);
   if (!assignee) {
-    throw new DomainError("NotFoundError", `User ${assigneeId} was not found`);
+    throw new NotFoundError(`User ${assigneeId} was not found`);
   }
   return assignee;
 }

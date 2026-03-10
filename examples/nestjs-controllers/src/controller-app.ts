@@ -2,9 +2,12 @@ import "reflect-metadata";
 
 import { pathToFileURL } from "node:url";
 import {
+  ArgumentsHost,
   Body,
+  Catch,
   ConflictException,
   Controller,
+  ExceptionFilter,
   ForbiddenException,
   Get,
   Headers,
@@ -18,7 +21,7 @@ import {
   UnauthorizedException,
   ValidationPipe,
 } from "@nestjs/common";
-import { NestFactory } from "@nestjs/core";
+import { BaseExceptionFilter, HttpAdapterHost, NestFactory } from "@nestjs/core";
 import {
   AssignTaskDto,
   CreateTaskDto,
@@ -26,37 +29,43 @@ import {
   UpdateTaskDto,
 } from "./dtos.js";
 import {
+  ForbiddenError,
+  InvalidTransitionError,
+  NotFoundError,
   TaskActivityService,
   TaskPolicyService,
   TasksService,
+  UnauthorizedError,
   UsersService,
   requireAssignee,
   requireTask,
   requireUser,
 } from "./shared.js";
 
-function mapDomainError(error: unknown): never {
-  if (
-    error &&
-    typeof error === "object" &&
-    "tag" in error &&
-    "message" in error
+@Catch(UnauthorizedError, NotFoundError, ForbiddenError, InvalidTransitionError)
+class TaskDomainExceptionFilter
+  extends BaseExceptionFilter
+  implements ExceptionFilter
+{
+  override catch(
+    exception:
+      | UnauthorizedError
+      | NotFoundError
+      | ForbiddenError
+      | InvalidTransitionError,
+    host: ArgumentsHost,
   ) {
-    const domainError = error as { tag: string; message: string };
-    if (domainError.tag === "UnauthorizedError") {
-      throw new UnauthorizedException(domainError.message);
+    if (exception instanceof UnauthorizedError) {
+      return super.catch(new UnauthorizedException(exception.message), host);
     }
-    if (domainError.tag === "NotFoundError") {
-      throw new NotFoundException(domainError.message);
+    if (exception instanceof NotFoundError) {
+      return super.catch(new NotFoundException(exception.message), host);
     }
-    if (domainError.tag === "ForbiddenError") {
-      throw new ForbiddenException(domainError.message);
+    if (exception instanceof ForbiddenError) {
+      return super.catch(new ForbiddenException(exception.message), host);
     }
-    if (domainError.tag === "InvalidTransitionError") {
-      throw new ConflictException(domainError.message);
-    }
+    return super.catch(new ConflictException(exception.message), host);
   }
-  throw error;
 }
 
 @Controller("api/tasks")
@@ -94,28 +103,20 @@ class TasksController {
     )
     body: CreateTaskDto,
   ) {
-    try {
-      const actor = requireUser(this.usersService, userId);
-      const task = this.tasksService.create(body, actor.id);
-      this.taskActivityService.record({
-        taskId: task.id,
-        action: "created",
-        actorId: actor.id,
-        details: `Task created with ${task.priority} priority`,
-      });
-      return task;
-    } catch (error) {
-      mapDomainError(error);
-    }
+    const actor = requireUser(this.usersService, userId);
+    const task = this.tasksService.create(body, actor.id);
+    this.taskActivityService.record({
+      taskId: task.id,
+      action: "created",
+      actorId: actor.id,
+      details: `Task created with ${task.priority} priority`,
+    });
+    return task;
   }
 
   @Get(":id")
   getTask(@Param("id") id: string) {
-    try {
-      return requireTask(this.tasksService, id);
-    } catch (error) {
-      mapDomainError(error);
-    }
+    return requireTask(this.tasksService, id);
   }
 
   @Patch(":id")
@@ -131,23 +132,19 @@ class TasksController {
     )
     body: UpdateTaskDto,
   ) {
-    try {
-      const actor = requireUser(this.usersService, userId);
-      const existingTask = requireTask(this.tasksService, id);
-      this.taskPolicyService.assertCanUpdate(existingTask, actor, body.status);
-      const updatedTask = this.tasksService.update(existingTask, body);
-      if (existingTask.status !== "completed" && updatedTask.status === "completed") {
-        this.taskActivityService.record({
-          taskId: updatedTask.id,
-          action: "completed",
-          actorId: actor.id,
-          details: `${actor.name} completed the task`,
-        });
-      }
-      return updatedTask;
-    } catch (error) {
-      mapDomainError(error);
+    const actor = requireUser(this.usersService, userId);
+    const existingTask = requireTask(this.tasksService, id);
+    this.taskPolicyService.assertCanUpdate(existingTask, actor, body.status);
+    const updatedTask = this.tasksService.update(existingTask, body);
+    if (existingTask.status !== "completed" && updatedTask.status === "completed") {
+      this.taskActivityService.record({
+        taskId: updatedTask.id,
+        action: "completed",
+        actorId: actor.id,
+        details: `${actor.name} completed the task`,
+      });
     }
+    return updatedTask;
   }
 
   @Post(":id/assign")
@@ -163,22 +160,18 @@ class TasksController {
     )
     body: AssignTaskDto,
   ) {
-    try {
-      const actor = requireUser(this.usersService, userId);
-      const task = requireTask(this.tasksService, id);
-      const assignee = requireAssignee(this.usersService, body.assigneeId);
-      this.taskPolicyService.assertCanAssign(task, actor);
-      const updatedTask = this.tasksService.update(task, { assigneeId: assignee.id });
-      this.taskActivityService.record({
-        taskId: updatedTask.id,
-        action: "assigned",
-        actorId: actor.id,
-        details: `${actor.name} assigned the task to ${assignee.name}`,
-      });
-      return updatedTask;
-    } catch (error) {
-      mapDomainError(error);
-    }
+    const actor = requireUser(this.usersService, userId);
+    const task = requireTask(this.tasksService, id);
+    const assignee = requireAssignee(this.usersService, body.assigneeId);
+    this.taskPolicyService.assertCanAssign(task, actor);
+    const updatedTask = this.tasksService.update(task, { assigneeId: assignee.id });
+    this.taskActivityService.record({
+      taskId: updatedTask.id,
+      action: "assigned",
+      actorId: actor.id,
+      details: `${actor.name} assigned the task to ${assignee.name}`,
+    });
+    return updatedTask;
   }
 }
 
@@ -191,6 +184,8 @@ class ControllerExampleModule {}
 export async function createControllerApp() {
   const app = await NestFactory.create(ControllerExampleModule, { logger: false });
   app.setGlobalPrefix("v1");
+  const httpAdapterHost = app.get(HttpAdapterHost);
+  app.useGlobalFilters(new TaskDomainExceptionFilter(httpAdapterHost.httpAdapter));
   await app.init();
   return app;
 }

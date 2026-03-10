@@ -214,6 +214,11 @@ describe("NestJS controller replacement example", () => {
 
     expect(controllerRes.status).toBe(404);
     expect(altStackRes.status).toBe(404);
+    expect(controllerRes.body).toEqual({
+      error: "Not Found",
+      message: "Task task-missing was not found",
+      statusCode: 404,
+    });
     expect(altStackRes.body).toEqual({
       error: { _tag: "NotFoundError", code: "NotFoundError", message: "Task task-missing was not found" },
     });

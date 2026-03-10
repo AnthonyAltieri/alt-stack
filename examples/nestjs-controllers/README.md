@@ -7,6 +7,8 @@ This example compares the same small task workflow implemented two ways:
 
 Both apps expose the same API shape under `/v1/api/tasks`, use the same in-memory domain services, and differ mainly in route composition, validation style, and request-context wiring.
 
+The shared domain layer now throws the same concrete typed errors that the Alt Stack routes declare. That keeps the Alt Stack example honest: declared errors are the source of truth, not a wrapper around a generic domain error.
+
 ## Domain
 
 The example models a small task service with:
@@ -36,6 +38,7 @@ The route complexity is intentionally moderate: several routes coordinate multip
 | DTO classes like `ListTasksQueryDto`, `CreateTaskDto`, `UpdateTaskDto`, `AssignTaskDto` | Zod schemas like `TaskListQuerySchema`, `CreateTaskBodySchema`, `UpdateTaskBodySchema`, `AssignTaskBodySchema` |
 | `ValidationPipe` transforms and validates request data | `.input(...)` parses and validates inline with the route |
 | Validation is spread across decorators, DTO classes, and pipe setup | Validation remains colocated with route definitions |
+| Shared typed errors are translated to Nest HTTP exceptions through one exception filter | Shared typed errors are returned directly from procedures with `err(error)` |
 
 ## Request Context
 
@@ -45,6 +48,8 @@ Both implementations use an `x-user-id` header to identify the caller.
 - Alt Stack app resolves the actor in middleware and passes it through `ctx`
 
 This keeps the apps self-contained while still demonstrating ownership and authorization rules.
+
+The controller app still uses Nest-native HTTP exceptions at the boundary, but it gets there through a single exception filter. The shared layer itself stays aligned with the Alt Stack declared error model.
 
 ## Multi-Service Route Example
 
