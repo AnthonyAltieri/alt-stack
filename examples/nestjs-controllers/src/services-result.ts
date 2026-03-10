@@ -33,23 +33,17 @@ export class UsersResultService {
   }
 
   findUserResult(userId: string | undefined): Result<User, UnauthorizedError> {
-    if (!userId) {
-      return err(new UnauthorizedError("x-user-id header is required"));
-    }
+    if (!userId) return err(new UnauthorizedError("x-user-id header is required"));
 
     const user = this.findById(userId);
-    if (!user) {
-      return err(new UnauthorizedError("Unknown user"));
-    }
+    if (!user) return err(new UnauthorizedError("Unknown user"));
 
     return ok(user);
   }
 
   findAssigneeResult(assigneeId: string): Result<User, NotFoundError> {
     const assignee = this.findById(assigneeId);
-    if (!assignee) {
-      return err(new NotFoundError(`User ${assigneeId} was not found`));
-    }
+    if (!assignee) return err(new NotFoundError(`User ${assigneeId} was not found`));
 
     return ok(assignee);
   }
@@ -79,9 +73,7 @@ export class TasksResultService {
 
   findTaskResult(id: string): Result<Task, NotFoundError> {
     const task = this.findById(id);
-    if (!task) {
-      return err(new NotFoundError(`Task ${id} was not found`));
-    }
+    if (!task) return err(new NotFoundError(`Task ${id} was not found`));
 
     return ok(task);
   }

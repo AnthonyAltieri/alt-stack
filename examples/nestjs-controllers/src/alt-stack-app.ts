@@ -88,9 +88,7 @@ const protectedProcedure = factory.procedure
       );
       return next({ ctx: { actor } });
     } catch (error) {
-      if (hasErrorTag(error, "UnauthorizedError")) {
-        return err(error);
-      }
+      if (hasErrorTag(error, "UnauthorizedError")) return err(error);
       throw error;
     }
   });
@@ -139,9 +137,7 @@ const apiRouter = router<AppContext>({
         try {
           return ok(requireTask(ctx.nest.get<TasksService>(TasksService), input.params.id));
         } catch (error) {
-          if (hasErrorTag(error, "NotFoundError")) {
-            return err(error);
-          }
+          if (hasErrorTag(error, "NotFoundError")) return err(error);
           throw error;
         }
       }),
@@ -220,9 +216,7 @@ const apiRouter = router<AppContext>({
         });
         return ok(updatedTask);
       } catch (error) {
-        if (hasErrorTag(error, "ForbiddenError") || hasErrorTag(error, "NotFoundError")) {
-          return err(error);
-        }
+        if (hasErrorTag(error, "ForbiddenError") || hasErrorTag(error, "NotFoundError")) return err(error);
         throw error;
       }
     }),
