@@ -39,6 +39,7 @@ import {
   TaskListQuerySchema,
   TaskSchema,
   UnauthorizedErrorSchema,
+  UnexpectedTaskErrorSchema,
   UpdateTaskBodySchema,
 } from "./schemas.js";
 
@@ -50,7 +51,20 @@ type AppError =
   | ForbiddenError
   | InvalidTransitionError;
 
-const factory = init<{ actor?: Actor }>();
+const createFallback500Error = (
+  error: unknown,
+): [typeof UnexpectedTaskErrorSchema, z.infer<typeof UnexpectedTaskErrorSchema>] => [
+  UnexpectedTaskErrorSchema,
+  {
+    _tag: "UnexpectedTaskError",
+    message: "Unexpected task service failure",
+    details: [error instanceof Error ? error.message : String(error)],
+  },
+];
+
+const factory = init<{ actor?: Actor }>({
+  default500Error: createFallback500Error,
+});
 
 function hasErrorTag<Tag extends AppError["_tag"]>(
   error: unknown,
@@ -223,7 +237,10 @@ export async function createAltStackApp() {
   const app = await NestFactory.create(AltStackExampleModule, { logger: false });
   app.setGlobalPrefix("v1");
   const nestLikeApp = app as unknown as NestAppLike;
-  registerAltStack(nestLikeApp, { "/": apiRouter }, { mountPath: "/api" });
+  registerAltStack(nestLikeApp, { "/": apiRouter }, {
+    mountPath: "/api",
+    defaultErrorHandlers: factory.defaultErrorHandlers,
+  });
   await app.init();
   return app;
 }

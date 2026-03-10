@@ -69,3 +69,9 @@ export const InvalidTransitionErrorSchema = z.object({
   _tag: z.literal("InvalidTransitionError"),
   message: z.string(),
 });
+
+export const UnexpectedTaskErrorSchema = z.object({
+  _tag: z.literal("UnexpectedTaskError"),
+  message: z.string(),
+  details: z.array(z.string()),
+});

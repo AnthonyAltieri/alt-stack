@@ -46,6 +46,8 @@ The route complexity is intentionally moderate: several routes coordinate multip
 
 The controller example is intentionally run from compiled `dist` output. That keeps the global Nest validation pipe working with standard TypeScript decorator metadata and avoids showing any manual metadata patching in the source example.
 
+The Alt Stack example also shows the global fallback path for untagged errors: `init({ default500Error })` defines a single 500 serializer that converts unexpected non-tagged failures into an `UnexpectedTaskError` response shape for the whole router.
+
 ## Request Context
 
 Both implementations use an `x-user-id` header to identify the caller.
