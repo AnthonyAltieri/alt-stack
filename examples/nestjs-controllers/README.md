@@ -44,6 +44,8 @@ The route complexity is intentionally moderate: several routes coordinate multip
 | Validation is spread across decorators, DTO classes, and pipe setup | Validation stays in the Alt Stack boundary while the services remain unchanged |
 | Shared typed errors are translated to Nest HTTP exceptions through one exception filter | Shared typed errors are returned directly from procedures with `err(error)` |
 
+The controller example is intentionally run from compiled `dist` output. That keeps the global Nest validation pipe working with standard TypeScript decorator metadata and avoids showing any manual metadata patching in the source example.
+
 ## Request Context
 
 Both implementations use an `x-user-id` header to identify the caller.

@@ -145,29 +145,6 @@ class TasksController {
   }
 }
 
-// The tsx/vitest runtime used by this example does not preserve DTO param
-// metadata consistently, so we restore the intended Nest metatypes here for
-// the global ValidationPipe.
-Reflect.defineMetadata("design:paramtypes", [ListTasksQueryDto], TasksController.prototype, "listTasks");
-Reflect.defineMetadata(
-  "design:paramtypes",
-  [String, CreateTaskDto],
-  TasksController.prototype,
-  "createTask",
-);
-Reflect.defineMetadata(
-  "design:paramtypes",
-  [String, String, UpdateTaskDto],
-  TasksController.prototype,
-  "updateTask",
-);
-Reflect.defineMetadata(
-  "design:paramtypes",
-  [String, String, AssignTaskDto],
-  TasksController.prototype,
-  "assignTask",
-);
-
 @Module({
   controllers: [TasksController],
   providers: [UsersService, TasksService, TaskPolicyService, TaskActivityService],

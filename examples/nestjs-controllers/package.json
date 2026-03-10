@@ -4,11 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev:controllers": "tsx src/controller-app.ts",
-    "dev:altstack": "tsx src/alt-stack-app.ts",
-    "build": "tsc",
+    "dev:controllers": "pnpm build && node dist/controller-app.js",
+    "dev:altstack": "pnpm build && node dist/alt-stack-app.js",
+    "build": "tsc -p tsconfig.build.json",
     "check-types": "tsc --noEmit",
-    "test:e2e": "vitest run src/e2e.spec.ts",
+    "test:e2e": "pnpm build && vitest run src/e2e.spec.ts",
     "test": "pnpm test:e2e"
   },
   "dependencies": {

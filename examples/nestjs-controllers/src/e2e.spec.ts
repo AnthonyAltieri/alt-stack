@@ -1,8 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import http from "node:http";
 import { PassThrough } from "node:stream";
-import { createAltStackApp } from "./alt-stack-app.js";
-import { createControllerApp } from "./controller-app.js";
 
 type DispatchOptions = {
   method: string;
@@ -106,6 +104,8 @@ describe("NestJS controller replacement example", () => {
   let altStackServer: any;
 
   beforeEach(async () => {
+    const { createControllerApp } = await import("../dist/controller-app.js");
+    const { createAltStackApp } = await import("../dist/alt-stack-app.js");
     controllerApp = await createControllerApp();
     altStackApp = await createAltStackApp();
     controllerServer = controllerApp.getHttpServer();
