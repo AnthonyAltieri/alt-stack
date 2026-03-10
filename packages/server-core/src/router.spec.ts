@@ -1,7 +1,7 @@
 import { describe, it, expect, expectTypeOf } from "vitest";
 import { z } from "zod";
 import { Router, router, createRouter, mergeRouters, route, routerFromRoutes } from "./router.js";
-import { ok } from "@alt-stack/result";
+import { err, ok } from "@alt-stack/result";
 import type {
   ExtractPathParams,
   ValidateInputForPath,
@@ -111,6 +111,41 @@ describe("Router", () => {
 
       expect(r.getProcedures()).toHaveLength(1);
       expect(r.getProcedures()[0]?.path).toBe("/prefix/nested");
+    });
+
+    it("should preserve narrowed context from Result middleware in router config", () => {
+      type Actor = { id: string };
+
+      class UnauthorizedError extends Error {
+        readonly _tag = "UnauthorizedError" as const;
+      }
+
+      interface AppContext {
+        actor?: Actor;
+      }
+
+      const baseRouter = new Router<AppContext>();
+      const protectedProcedure = baseRouter.procedure.use(async ({ ctx, next }) => {
+        if (!ctx.actor) {
+          return err(new UnauthorizedError("Unauthorized"));
+        }
+
+        return next({ ctx: { actor: ctx.actor } });
+      });
+
+      const appRouter = router<AppContext>({
+        "/tasks": {
+          post: protectedProcedure
+            .output(z.object({ actorId: z.string() }))
+            .handler(({ ctx }) => {
+              expectTypeOf(ctx.actor).toEqualTypeOf<Actor>();
+              expectTypeOf(ctx.actor).not.toEqualTypeOf<Actor | undefined>();
+              return ok({ actorId: ctx.actor.id });
+            }),
+        },
+      });
+
+      expect(appRouter.getProcedures()).toHaveLength(1);
     });
   });
 

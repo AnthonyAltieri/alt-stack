@@ -1,29 +1,24 @@
 {
-  "name": "example-altstack-server",
-  "version": "1.1.0",
+  "name": "kafka-consumer",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "tsc",
-    "check-types": "tsc --noEmit",
-    "test:e2e": "vitest run",
-    "test": "pnpm test:e2e"
+    "check-types": "tsc --noEmit"
   },
   "dependencies": {
-    "@hono/node-server": "^1.0.0",
-    "@alt-stack/server-hono": "workspace:*",
-    "@alt-stack/http-client-fetch": "workspace:*",
+    "@alt-stack/kafka-core": "workspace:*",
     "@alt-stack/result": "workspace:*",
     "@t3-oss/env-core": "^0.9.0",
-    "hono": "^4.0.0",
+    "kafkajs": "^2.2.4",
     "zod": "^4.0.0"
   },
   "devDependencies": {
     "@alt-stack/typescript-config": "workspace:*",
     "@types/node": "^20.0.0",
     "tsx": "^4.0.0",
-    "typescript": "5.9.2",
-    "vitest": "^4.0.3"
+    "typescript": "5.9.2"
   }
 }

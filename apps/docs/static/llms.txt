@@ -1478,7 +1478,7 @@ Apply middleware to procedures to add cross-cutting concerns like authentication
 Apply middleware to specific procedures using `.use()`:
 
 ```typescript
-import { router, publicProcedure } from "@alt-stack/server-hono";
+import { router, publicProcedure, ok } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 export const userRouter = router({
@@ -1501,7 +1501,7 @@ export const userRouter = router({
       return next();
     })
     .post((opts) => {
-      return { id: "1" };
+      return ok({ id: "1" });
     }),
 });
 ```
@@ -1511,11 +1511,24 @@ export const userRouter = router({
 Middleware can extend the context by passing updated context to `next()`. This follows the tRPC pattern:
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server-hono";
+import { router, publicProcedure, init, ok, err, TaggedError } from "@alt-stack/server-hono";
+import { z } from "zod";
 
 interface AppContext {
   user: { id: string; name: string } | null;
 }
+
+class UnauthorizedError extends TaggedError {
+  readonly _tag = "UnauthorizedError" as const;
+  constructor(public readonly message: string = "Authentication required") {
+    super(message);
+  }
+}
+
+const UnauthorizedErrorSchema = z.object({
+  _tag: z.literal("UnauthorizedError"),
+  message: z.string(),
+});
 
 const factory = init<AppContext>();
 
@@ -1538,13 +1551,14 @@ const authMiddleware = async (opts: {
   const { ctx, next } = opts;
   const user = await authenticate(ctx.hono.req);
   if (!user) {
-    return ctx.hono.json({ error: "Unauthorized" }, 401);
+    return err(new UnauthorizedError());
   }
   // Extend context - user is now non-null in subsequent handlers
   return next({ ctx: { user } });
 };
 
 const protectedProcedure = factory.procedure
+  .errors({ 401: UnauthorizedErrorSchema })
   .use(loggerMiddleware)
   .use(authMiddleware);
 
@@ -1554,7 +1568,7 @@ export const appRouter = router({
     .get((opts) => {
       // opts.ctx.user is guaranteed to be non-null
       const { ctx } = opts;
-      return { id: ctx.user!.id, name: ctx.user!.name };
+      return ok({ id: ctx.user!.id, name: ctx.user!.name });
     }),
 });
 ```
@@ -1564,11 +1578,24 @@ export const appRouter = router({
 Chain multiple middleware on the same procedure:
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server-hono";
+import { router, publicProcedure, init, ok, err, TaggedError } from "@alt-stack/server-hono";
+import { z } from "zod";
 
 interface AppContext {
   user: { id: string; role: string } | null;
 }
+
+class ForbiddenError extends TaggedError {
+  readonly _tag = "ForbiddenError" as const;
+  constructor(public readonly message: string = "Access denied") {
+    super(message);
+  }
+}
+
+const ForbiddenErrorSchema = z.object({
+  _tag: z.literal("ForbiddenError"),
+  message: z.string(),
+});
 
 const factory = init<AppContext>();
 
@@ -1584,19 +1611,20 @@ const authMiddleware = async (opts: any) => {
 
 const adminMiddleware = async (opts: any) => {
   if (opts.ctx.user?.role !== "admin") {
-    return new Response("Forbidden", { status: 403 });
+    return err(new ForbiddenError("Admin access required"));
   }
   return opts.next();
 };
 
 const adminProcedure = factory.procedure
+  .errors({ 403: ForbiddenErrorSchema })
   .use(loggerMiddleware)
   .use(authMiddleware)
   .use(adminMiddleware);
 
 export const adminRouter = router({
   settings: adminProcedure.get(() => {
-    return { admin: true };
+    return ok({ admin: true });
   }),
 });
 ```
@@ -1608,29 +1636,43 @@ Middleware executes in the order they're defined.
 Create reusable procedures with middleware to reuse authentication or other middleware across multiple routes. See the [Reusable Procedures guide](/core-concepts/reusable-procedures) for details:
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server-hono";
+import { router, publicProcedure, init, ok, err, TaggedError } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 interface AppContext {
   user: { id: string; name: string } | null;
 }
 
+class UnauthorizedError extends TaggedError {
+  readonly _tag = "UnauthorizedError" as const;
+  constructor(public readonly message: string = "Authentication required") {
+    super(message);
+  }
+}
+
+const UnauthorizedErrorSchema = z.object({
+  _tag: z.literal("UnauthorizedError"),
+  message: z.string(),
+});
+
 const factory = init<AppContext>();
 
 // Create reusable procedures
 const publicProc = publicProcedure;
-const protectedProcedure = factory.procedure.use(async (opts) => {
-  // Auth middleware
-  const { ctx, next } = opts;
-  if (!ctx.user) {
-    return new Response("Unauthorized", { status: 401 });
-  }
-  return next({ ctx: { user: ctx.user } });
-});
+const protectedProcedure = factory.procedure
+  .errors({ 401: UnauthorizedErrorSchema })
+  .use(async (opts) => {
+    // Auth middleware
+    const { ctx, next } = opts;
+    if (!ctx.user) {
+      return err(new UnauthorizedError());
+    }
+    return next({ ctx: { user: ctx.user } });
+  });
 
 // Use procedures
 export const appRouter = router({
-  hello: publicProc.get(() => "hello"),
+  hello: publicProc.get(() => ok("hello")),
   profile: protectedProcedure
     .input({})
     .output(
@@ -1640,7 +1682,7 @@ export const appRouter = router({
       })
     )
     .get((opts) => {
-      return opts.ctx.user!;
+      return ok(opts.ctx.user!);
     }),
 });
 ```
@@ -1650,7 +1692,7 @@ export const appRouter = router({
 Middleware can chain together, with each middleware able to extend the context:
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server-hono";
+import { router, publicProcedure, init, ok } from "@alt-stack/server-hono";
 
 interface AppContext {
   user: { id: string; role: string } | null;
@@ -1689,11 +1731,11 @@ export const adminRouter = router({
     .get((opts) => {
       // All context extensions are available
       const { ctx } = opts;
-      return {
+      return ok({
         requestId: ctx.requestId,
         userId: ctx.user!.id,
         isAdmin: ctx.isAdmin,
-      };
+      });
     }),
 });
 ```
@@ -4528,15 +4570,28 @@ Follow the tRPC authorization pattern for type-safe protected routes. The middle
 
 ## Reusable Procedures Pattern (Recommended)
 
-The recommended way to create protected routes is using reusable procedures:
+The recommended way to create protected routes is using reusable procedures with the Result pattern:
 
 ```typescript
-import { router, publicProcedure, init, createServer } from "@alt-stack/server-hono";
+import { router, publicProcedure, init, createServer, ok, err, TaggedError } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 interface AppContext {
   user: { id: string; name: string } | null;
 }
+
+// Error class
+class UnauthorizedError extends TaggedError {
+  readonly _tag = "UnauthorizedError" as const;
+  constructor(public readonly message: string = "Authentication required") {
+    super(message);
+  }
+}
+
+const UnauthorizedErrorSchema = z.object({
+  _tag: z.literal("UnauthorizedError"),
+  message: z.string(),
+});
 
 const factory = init<AppContext>();
 
@@ -4544,22 +4599,12 @@ const factory = init<AppContext>();
 const publicProc = publicProcedure;
 const protectedProcedure = factory.procedure
   .errors({
-    401: z.object({
-      error: z.object({
-        code: z.literal("UNAUTHORIZED"),
-        message: z.string(),
-      }),
-    }),
+    401: UnauthorizedErrorSchema,
   })
   .use(async function isAuthed(opts) {
     const { ctx, next } = opts;
     if (!ctx.user) {
-      throw ctx.error({
-        error: {
-          code: "UNAUTHORIZED" as const,
-          message: "Authentication required",
-        },
-      });
+      return err(new UnauthorizedError("Authentication required"));
     }
     return next({
       ctx: {
@@ -4570,7 +4615,7 @@ const protectedProcedure = factory.procedure
 
 // Use procedures to create routes
 export const appRouter = router({
-  hello: publicProc.get(() => "hello world"),
+  hello: publicProc.get(() => ok("hello world")),
 
   secret: protectedProcedure
     .input({})
@@ -4579,7 +4624,7 @@ export const appRouter = router({
         secret: z.string(),
       })
     )
-    .get(() => ({
+    .get(() => ok({
       secret: "sauce",
     })),
 });
@@ -4594,12 +4639,24 @@ See the [Reusable Procedures guide](/core-concepts/reusable-procedures) for more
 The middleware can narrow the context type by passing an updated context to `next()`:
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server-hono";
+import { router, publicProcedure, init, ok, err, TaggedError } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 interface AppContext {
   user: { id: string; email: string; name: string } | null;
 }
+
+class UnauthorizedError extends TaggedError {
+  readonly _tag = "UnauthorizedError" as const;
+  constructor(public readonly message: string = "Authentication required") {
+    super(message);
+  }
+}
+
+const UnauthorizedErrorSchema = z.object({
+  _tag: z.literal("UnauthorizedError"),
+  message: z.string(),
+});
 
 const factory = init<AppContext>();
 
@@ -4614,23 +4671,13 @@ export const protectedRouter = router({
       })
     )
     .errors({
-      401: z.object({
-        error: z.object({
-          code: z.literal("UNAUTHORIZED"),
-          message: z.string(),
-        }),
-      }),
+      401: UnauthorizedErrorSchema,
     })
     .use(async function isAuthed(opts) {
       const { ctx, next } = opts;
       // `ctx.user` is nullable
       if (!ctx.user) {
-        throw ctx.error({
-          error: {
-            code: "UNAUTHORIZED" as const,
-            message: "Authentication required",
-          },
-        });
+        return err(new UnauthorizedError("Authentication required"));
       }
       // ✅ Pass updated context where user is non-null (tRPC pattern)
       // This allows the context to have user as non-null for subsequent handlers
@@ -4643,11 +4690,11 @@ export const protectedRouter = router({
     .get((opts) => {
       // ✅ opts.ctx.user is now guaranteed to be non-null after the middleware
       const { ctx } = opts;
-      return {
+      return ok({
         id: ctx.user!.id,
         email: ctx.user!.email,
         name: ctx.user!.name,
-      };
+      });
     }),
 });
 ```
@@ -4657,26 +4704,40 @@ export const protectedRouter = router({
 You can mix public and protected routes in the same router:
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server-hono";
+import { router, publicProcedure, init, ok, err, TaggedError } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 interface AppContext {
   user: { id: string; email: string } | null;
 }
 
+class UnauthorizedError extends TaggedError {
+  readonly _tag = "UnauthorizedError" as const;
+  constructor(public readonly message: string = "Authentication required") {
+    super(message);
+  }
+}
+
+const UnauthorizedErrorSchema = z.object({
+  _tag: z.literal("UnauthorizedError"),
+  message: z.string(),
+});
+
 const factory = init<AppContext>();
 
 const publicProc = publicProcedure;
-const protectedProcedure = factory.procedure.use(async (opts) => {
-  const { ctx, next } = opts;
-  if (!ctx.user) {
-    return new Response("Unauthorized", { status: 401 });
-  }
-  return next({ ctx: { user: ctx.user } });
-});
+const protectedProcedure = factory.procedure
+  .errors({ 401: UnauthorizedErrorSchema })
+  .use(async (opts) => {
+    const { ctx, next } = opts;
+    if (!ctx.user) {
+      return err(new UnauthorizedError());
+    }
+    return next({ ctx: { user: ctx.user } });
+  });
 
 export const appRouter = router({
-  public: publicProc.get(() => ({ message: "Public content" })),
+  public: publicProc.get(() => ok({ message: "Public content" })),
 
   private: protectedProcedure
     .input({})
@@ -4688,10 +4749,10 @@ export const appRouter = router({
     )
     .get((opts) => {
       const { ctx } = opts;
-      return {
+      return ok({
         id: ctx.user!.id,
         email: ctx.user!.email,
-      };
+      });
     }),
 });
 ```
@@ -4701,27 +4762,53 @@ export const appRouter = router({
 You can validate user roles, permissions, or other attributes:
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server-hono";
+import { router, publicProcedure, init, ok, err, TaggedError } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 interface AppContext {
   user: { id: string; role: string; permissions: string[] } | null;
 }
 
+class UnauthorizedError extends TaggedError {
+  readonly _tag = "UnauthorizedError" as const;
+  constructor(public readonly message: string = "Authentication required") {
+    super(message);
+  }
+}
+
+class ForbiddenError extends TaggedError {
+  readonly _tag = "ForbiddenError" as const;
+  constructor(public readonly message: string = "Access denied") {
+    super(message);
+  }
+}
+
+const UnauthorizedErrorSchema = z.object({
+  _tag: z.literal("UnauthorizedError"),
+  message: z.string(),
+});
+
+const ForbiddenErrorSchema = z.object({
+  _tag: z.literal("ForbiddenError"),
+  message: z.string(),
+});
+
 const factory = init<AppContext>();
 
 // Middleware that requires specific role
 const requireRole = (role: "admin" | "user" | "moderator") => {
-  return factory.procedure.use(async (opts) => {
-    const { ctx, next } = opts;
-    if (!ctx.user) {
-      return new Response("Unauthorized", { status: 401 });
-    }
-    if (ctx.user.role !== role) {
-      return new Response("Forbidden", { status: 403 });
-    }
-    return next({ ctx: { user: ctx.user } });
-  });
+  return factory.procedure
+    .errors({ 401: UnauthorizedErrorSchema, 403: ForbiddenErrorSchema })
+    .use(async (opts) => {
+      const { ctx, next } = opts;
+      if (!ctx.user) {
+        return err(new UnauthorizedError());
+      }
+      if (ctx.user.role !== role) {
+        return err(new ForbiddenError(`Requires ${role} role`));
+      }
+      return next({ ctx: { user: ctx.user } });
+    });
 };
 
 const adminProcedure = requireRole("admin");
@@ -4732,7 +4819,7 @@ export const adminRouter = router({
     .input({})
     .output(z.array(z.object({ id: z.string(), name: z.string() })))
     .get(() => {
-      return getAllUsers();
+      return ok(getAllUsers());
     }),
 });
 
@@ -4742,7 +4829,7 @@ export const moderatorRouter = router({
       body: z.object({ action: z.string() }),
     })
     .post(() => {
-      return { success: true };
+      return ok({ success: true });
     }),
 });
 ```
@@ -4752,7 +4839,7 @@ export const moderatorRouter = router({
 For better type safety, use Zod's type inference to create authenticated context types:
 
 ```typescript
-import { router, publicProcedure, init } from "@alt-stack/server-hono";
+import { router, publicProcedure, init, ok, err, TaggedError } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 // Your validated user schema
@@ -4770,20 +4857,34 @@ interface AppContext {
   user: User | null;
 }
 
+class UnauthorizedError extends TaggedError {
+  readonly _tag = "UnauthorizedError" as const;
+  constructor(public readonly message: string = "Authentication required") {
+    super(message);
+  }
+}
+
+const UnauthorizedErrorSchema = z.object({
+  _tag: z.literal("UnauthorizedError"),
+  message: z.string(),
+});
+
 const factory = init<AppContext>();
 
-const protectedProcedure = factory.procedure.use(async (opts) => {
-  const { ctx, next } = opts;
-  if (!ctx.user) {
-    return new Response("Unauthorized", { status: 401 });
-  }
+const protectedProcedure = factory.procedure
+  .errors({ 401: UnauthorizedErrorSchema })
+  .use(async (opts) => {
+    const { ctx, next } = opts;
+    if (!ctx.user) {
+      return err(new UnauthorizedError());
+    }
 
-  // Optionally re-validate to ensure type safety
-  const validatedUser = UserSchema.parse(ctx.user);
+    // Optionally re-validate to ensure type safety
+    const validatedUser = UserSchema.parse(ctx.user);
 
-  // Return context with validated user
-  return next({ ctx: { user: validatedUser } });
-});
+    // Return context with validated user
+    return next({ ctx: { user: validatedUser } });
+  });
 
 export const appRouter = router({
   profile: protectedProcedure
@@ -4792,7 +4893,7 @@ export const appRouter = router({
     .get((opts) => {
       // opts.ctx.user is validated and typed
       const { ctx } = opts;
-      return ctx.user!;
+      return ok(ctx.user!);
     }),
 });
 ```
@@ -4803,55 +4904,41 @@ export const appRouter = router({
 
 # OpenTelemetry Integration
 
-Altstack servers support [OpenTelemetry](https://opentelemetry.io/) for distributed tracing with minimal configuration. When enabled, every request is automatically traced with semantic HTTP attributes.
+Automatic distributed tracing for Altstack servers with [OpenTelemetry](https://opentelemetry.io/).
 
 ## Installation
 
-First, install the OpenTelemetry packages:
-
 ```bash
-pnpm add @opentelemetry/api @opentelemetry/sdk-trace-node @opentelemetry/exporter-trace-otlp-http
+pnpm add @opentelemetry/api @opentelemetry/sdk-node @opentelemetry/exporter-trace-otlp-http
 ```
 
 ## Quick Start
 
-Enable telemetry by passing `telemetry: true` to `createServer`:
-
 ```typescript
-import { createServer, router, init } from "@alt-stack/server-hono";
+import { createServer, router, init, ok } from "@alt-stack/server-hono";
 
 const { procedure } = init<AppContext>();
 
-const appRouter = router({
-  "/todos": procedure
-    .output(z.array(TodoSchema))
-    .get(async () => {
-      return await db.todos.findMany();
-    }),
-});
-
-const app = createServer({ api: appRouter }, {
-  createContext,
-  telemetry: true, // Enable OpenTelemetry
-});
+const app = createServer({
+  "/api": router({
+    "/todos": procedure
+      .output(z.array(TodoSchema))
+      .get(async () => ok(await db.todos.findMany())),
+  }),
+}, { telemetry: true });
 ```
 
-## Configuration Options
-
-For more control, pass a configuration object:
+## Configuration
 
 ```typescript
-const app = createServer({ api: appRouter }, {
-  createContext,
+createServer({ "/api": appRouter }, {
   telemetry: {
     enabled: true,
-    serviceName: "my-api",           // Custom service name (default: "altstack-server")
-    ignoreRoutes: ["/health", "/metrics"], // Routes to skip tracing
+    serviceName: "my-api",
+    ignoreRoutes: ["/health", "/metrics"],
   },
 });
 ```
-
-### Options
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
@@ -4861,123 +4948,78 @@ const app = createServer({ api: appRouter }, {
 
 ## Span Attributes
 
-Each request span includes these attributes following [OpenTelemetry HTTP semantic conventions](https://opentelemetry.io/docs/specs/semconv/http/http-spans/):
+Follows [OpenTelemetry HTTP semantic conventions](https://opentelemetry.io/docs/specs/semconv/http/http-spans/):
 
 | Attribute | Example | Description |
 |-----------|---------|-------------|
 | `http.request.method` | `GET` | HTTP method |
-| `http.route` | `/api/todos/{id}` | Route pattern (with path params) |
+| `http.route` | `/api/todos/{id}` | Route pattern |
 | `url.path` | `/api/todos/123` | Actual URL path |
-| `http.response.status_code` | `200` | Response status code |
+| `http.response.status_code` | `200` | Response status |
 
-## Custom Spans and Attributes
+## Custom Attributes
 
-Access the current span via `ctx.span` to add custom attributes or events:
+Access the span via `ctx.span`:
 
 ```typescript
-const todoRouter = router({
-  "/todos/{id}": procedure
-    .input({ params: z.object({ id: z.string() }) })
-    .get(async ({ input, ctx }) => {
-      // Add custom attributes
-      ctx.span?.setAttribute("todo.id", input.params.id);
-      
-      // Add events for significant operations
-      ctx.span?.addEvent("db-query-start");
-      const todo = await db.todos.findUnique({ 
-        where: { id: input.params.id } 
-      });
-      ctx.span?.addEvent("db-query-end");
-      
-      return todo;
-    }),
-});
+"/todos/{id}": procedure
+  .input({ params: z.object({ id: z.string() }) })
+  .get(async ({ input, ctx }) => {
+    ctx.span?.setAttribute("todo.id", input.params.id);
+    ctx.span?.addEvent("db-query");
+    const todo = await db.todos.findUnique({ where: { id: input.params.id } });
+    return ok(todo);
+  }),
 ```
 
-## Setting Up the OTel SDK
+## OTel SDK Setup
 
-Before your server starts, initialize the OpenTelemetry SDK. Here's a typical setup:
+Create `tracing.ts` and import it **first** in your entry point:
 
 ```typescript
-// tracing.ts - import this before your server starts
+// tracing.ts
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
-import { Resource } from "@opentelemetry/resources";
-import { ATTR_SERVICE_NAME } from "@opentelemetry/semantic-conventions";
 
-const sdk = new NodeSDK({
-  resource: new Resource({
-    [ATTR_SERVICE_NAME]: "my-api",
-  }),
-  traceExporter: new OTLPTraceExporter({
-    url: "http://localhost:4318/v1/traces", // OTLP HTTP endpoint
-  }),
-});
-
-sdk.start();
-
-// Graceful shutdown
-process.on("SIGTERM", () => {
-  sdk.shutdown().then(() => process.exit(0));
-});
-```
-
-Then import this file at the top of your main entry point:
-
-```typescript
-// index.ts
-import "./tracing.js"; // Must be first!
-import { createServer } from "@alt-stack/server-hono";
-// ... rest of your server code
-```
-
-## Example with Jaeger
-
-To visualize traces locally with [Jaeger](https://www.jaegertracing.io/):
-
-1. Run Jaeger with Docker:
-
-```bash
-docker run -d --name jaeger \
-  -p 16686:16686 \
-  -p 4318:4318 \
-  jaegertracing/all-in-one:latest
-```
-
-2. Configure the OTLP exporter to send to Jaeger:
-
-```typescript
 const sdk = new NodeSDK({
   traceExporter: new OTLPTraceExporter({
     url: "http://localhost:4318/v1/traces",
   }),
 });
+sdk.start();
+
+process.on("SIGTERM", () => sdk.shutdown().then(() => process.exit(0)));
 ```
 
-3. View traces at http://localhost:16686
+```typescript
+// index.ts
+import "./tracing.js"; // Must be first!
+import { createServer } from "@alt-stack/server-hono";
+```
+
+## Local Tracing with Jaeger
+
+```bash
+docker run -d --name jaeger -p 16686:16686 -p 4318:4318 jaegertracing/all-in-one:latest
+```
+
+View traces at http://localhost:16686
 
 ## Works with Both Adapters
-
-Telemetry works identically with both Hono and Express adapters:
 
 ```typescript
 // Hono
 import { createServer } from "@alt-stack/server-hono";
-const app = createServer({ api: router }, { telemetry: true });
+const app = createServer({ "/api": appRouter }, { telemetry: true });
 
 // Express
 import { createServer } from "@alt-stack/server-express";
-const app = createServer({ api: router }, { telemetry: true });
+const app = createServer({ "/api": appRouter }, { telemetry: true });
 ```
 
 ## Graceful Degradation
 
-If `@opentelemetry/api` is not installed, telemetry is silently disabled. This allows you to:
-
-- Use the same code in development (without OTel) and production (with OTel)
-- Keep `@opentelemetry/api` as a dev dependency in some environments
-
-The `ctx.span` will be `undefined` when telemetry is disabled or not installed, so always use optional chaining:
+If `@opentelemetry/api` is not installed, telemetry is silently disabled. `ctx.span` will be `undefined`, so use optional chaining:
 
 ```typescript
 ctx.span?.setAttribute("key", "value"); // Safe even without OTel
@@ -5910,7 +5952,7 @@ The authentication service handles user registration, login, and session managem
 ## Implementation
 
 ```typescript title="apps/backend-auth/src/index.ts"
-import { createDocsRouter, createServer, init, router, type HonoBaseContext } from "@alt-stack/server-hono";
+import { createDocsRouter, createServer, init, router, ok, err, TaggedError, type HonoBaseContext } from "@alt-stack/server-hono";
 import { z } from "zod";
 
 const UserSchema = z.object({
@@ -5923,6 +5965,31 @@ const SessionSchema = z.object({
   token: z.string(),
   userId: z.string(),
   expiresAt: z.string().datetime(),
+});
+
+// Error classes
+class EmailExistsError extends TaggedError {
+  readonly _tag = "EmailExistsError" as const;
+  constructor(public readonly message: string = "Email already registered") {
+    super(message);
+  }
+}
+
+const EmailExistsErrorSchema = z.object({
+  _tag: z.literal("EmailExistsError"),
+  message: z.string(),
+});
+
+class InvalidCredentialsError extends TaggedError {
+  readonly _tag = "InvalidCredentialsError" as const;
+  constructor(public readonly message: string = "Invalid email or password") {
+    super(message);
+  }
+}
+
+const InvalidCredentialsErrorSchema = z.object({
+  _tag: z.literal("InvalidCredentialsError"),
+  message: z.string(),
 });
 
 const factory = init<HonoBaseContext>();
@@ -5939,11 +6006,15 @@ const authRouter = router<HonoBaseContext>({
     })
     .output(z.object({ user: UserSchema, session: SessionSchema }))
     .errors({
-      409: z.object({ error: z.object({ code: z.literal("EMAIL_EXISTS"), message: z.string() }) }),
+      409: EmailExistsErrorSchema,
     })
-    .post(({ input, ctx }) => {
-      // Check if email exists, create user, create session
-      // ...
+    .post(({ input }) => {
+      const existing = users.find(u => u.email === input.body.email);
+      if (existing) {
+        return err(new EmailExistsError("Email already registered"));
+      }
+      // Create user and session...
+      return ok({ user: { id, email, name }, session: { token, userId, expiresAt } });
     }),
 
   "/login": publicProc
@@ -5955,11 +6026,15 @@ const authRouter = router<HonoBaseContext>({
     })
     .output(z.object({ user: UserSchema, session: SessionSchema }))
     .errors({
-      401: z.object({ error: z.object({ code: z.literal("INVALID_CREDENTIALS"), message: z.string() }) }),
+      401: InvalidCredentialsErrorSchema,
     })
-    .post(({ input, ctx }) => {
-      // Verify credentials, create session
-      // ...
+    .post(({ input }) => {
+      const user = users.find(u => u.email === input.body.email);
+      if (!user || !verifyPassword(input.body.password, user.passwordHash)) {
+        return err(new InvalidCredentialsError("Invalid email or password"));
+      }
+      // Create session...
+      return ok({ user: { id, email, name }, session: { token, userId, expiresAt } });
     }),
 
   // Internal endpoint for other services to validate tokens
@@ -5970,9 +6045,9 @@ const authRouter = router<HonoBaseContext>({
       const token = auth.replace("Bearer ", "");
       const session = sessions.get(token);
       if (!session || session.expiresAt < new Date()) {
-        return { valid: false };
+        return ok({ valid: false });
       }
-      return { valid: true, userId: session.userId };
+      return ok({ valid: true, userId: session.userId });
     }),
 });
 ```
@@ -6256,13 +6331,27 @@ async function validateToken(token: string): Promise<string | null> {
 
 ### 3. Protected Procedures with Middleware
 
-Create reusable authenticated procedures:
+Create reusable authenticated procedures using the Result pattern:
 
 ```typescript
+import { err, TaggedError } from "@alt-stack/server-hono";
+
+class UnauthorizedError extends TaggedError {
+  readonly _tag = "UnauthorizedError" as const;
+  constructor(public readonly message: string = "Authentication required") {
+    super(message);
+  }
+}
+
+const UnauthorizedErrorSchema = z.object({
+  _tag: z.literal("UnauthorizedError"),
+  message: z.string(),
+});
+
 const protectedProc = factory.procedure
-  .errors({ 401: z.object({ error: z.object({ code: z.literal("UNAUTHORIZED") }) }) })
+  .errors({ 401: UnauthorizedErrorSchema })
   .use(async ({ ctx, next }) => {
-    if (!ctx.userId) throw ctx.error({ error: { code: "UNAUTHORIZED", ... } });
+    if (!ctx.userId) return err(new UnauthorizedError());
     return next({ ctx: { userId: ctx.userId } }); // narrow type
   });
 ```
@@ -6413,19 +6502,58 @@ async function createContext(c: Context): Promise<AppContext> {
 ## Protected Procedures
 
 ```typescript
+import { ok, err, TaggedError } from "@alt-stack/server-hono";
+
 interface AppContext {
   userId: string | null;
 }
+
+// Error classes
+class UnauthorizedError extends TaggedError {
+  readonly _tag = "UnauthorizedError" as const;
+  constructor(public readonly message: string = "Authentication required") {
+    super(message);
+  }
+}
+
+const UnauthorizedErrorSchema = z.object({
+  _tag: z.literal("UnauthorizedError"),
+  message: z.string(),
+});
+
+class NotFoundError extends TaggedError {
+  readonly _tag = "NotFoundError" as const;
+  constructor(public readonly message: string = "Resource not found") {
+    super(message);
+  }
+}
+
+const NotFoundErrorSchema = z.object({
+  _tag: z.literal("NotFoundError"),
+  message: z.string(),
+});
+
+class ForbiddenError extends TaggedError {
+  readonly _tag = "ForbiddenError" as const;
+  constructor(public readonly message: string = "Access denied") {
+    super(message);
+  }
+}
+
+const ForbiddenErrorSchema = z.object({
+  _tag: z.literal("ForbiddenError"),
+  message: z.string(),
+});
 
 const factory = init<AppContext>();
 
 const protectedProc = factory.procedure
   .errors({
-    401: z.object({ error: z.object({ code: z.literal("UNAUTHORIZED"), message: z.string() }) }),
+    401: UnauthorizedErrorSchema,
   })
   .use(async ({ ctx, next }) => {
     if (!ctx.userId) {
-      throw ctx.error({ error: { code: "UNAUTHORIZED", message: "Authentication required" } });
+      return err(new UnauthorizedError("Authentication required"));
     }
     return next({ ctx: { userId: ctx.userId } });
   });
@@ -6469,7 +6597,7 @@ const taskRouter = router<AppContext>({
   "/": {
     get: factory.procedure
       .output(z.array(TaskSchema))
-      .handler(() => Array.from(tasks.values())),
+      .handler(() => ok(Array.from(tasks.values()))),
 
     post: protectedProc
       .input({
@@ -6482,7 +6610,7 @@ const taskRouter = router<AppContext>({
       .handler(async ({ input, ctx }) => {
         const task = createTask(input.body, ctx.userId);
         await workerClient.trigger("send-notification", { ... });
-        return task;
+        return ok(task);
       }),
   },
 
@@ -6490,11 +6618,11 @@ const taskRouter = router<AppContext>({
     get: factory.procedure
       .input({ params: z.object({ id: z.string().uuid() }) })
       .output(TaskSchema)
-      .errors({ 404: NotFoundError })
-      .handler(({ input, ctx }) => {
+      .errors({ 404: NotFoundErrorSchema })
+      .handler(({ input }) => {
         const task = tasks.get(input.params.id);
-        if (!task) throw ctx.error({ error: { code: "NOT_FOUND", message: "Task not found" } });
-        return task;
+        if (!task) return err(new NotFoundError("Task not found"));
+        return ok(task);
       }),
 
     put: protectedProc
@@ -6507,19 +6635,25 @@ const taskRouter = router<AppContext>({
         }),
       })
       .output(TaskSchema)
-      .errors({ 404: NotFoundError, 403: ForbiddenError })
+      .errors({ 404: NotFoundErrorSchema, 403: ForbiddenErrorSchema })
       .handler(async ({ input, ctx }) => {
-        // Update task, trigger report if completed
-        // ...
+        const task = tasks.get(input.params.id);
+        if (!task) return err(new NotFoundError("Task not found"));
+        if (task.userId !== ctx.userId) return err(new ForbiddenError("Not your task"));
+        // Update task, trigger report if completed...
+        return ok(updatedTask);
       }),
 
     delete: protectedProc
       .input({ params: z.object({ id: z.string().uuid() }) })
       .output(z.object({ success: z.boolean() }))
-      .errors({ 404: NotFoundError, 403: ForbiddenError })
+      .errors({ 404: NotFoundErrorSchema, 403: ForbiddenErrorSchema })
       .handler(({ input, ctx }) => {
-        // Delete task
-        // ...
+        const task = tasks.get(input.params.id);
+        if (!task) return err(new NotFoundError("Task not found"));
+        if (task.userId !== ctx.userId) return err(new ForbiddenError("Not your task"));
+        tasks.delete(input.params.id);
+        return ok({ success: true });
       }),
   },
 });
@@ -6722,7 +6856,7 @@ export const Response = {
   "/api/signup": {
     POST: {
       "200": z.object({ user: UserSchema, session: SessionSchema }),
-      "409": z.object({ error: z.object({ code: z.literal("EMAIL_EXISTS"), message: z.string() }) }),
+      "409": z.object({ _tag: z.literal("EmailExistsError"), message: z.string() }),
     },
   },
   // ...
@@ -6809,7 +6943,7 @@ Background job processing using WarpStream (Kafka-compatible).
 ## Job Definitions
 
 ```typescript title="apps/workers/src/index.ts"
-import { createWorker, init, workerRouter } from "@alt-stack/workers-warpstream";
+import { createWorker, init, workerRouter, ok } from "@alt-stack/workers-warpstream";
 import { z } from "zod";
 
 const { procedure } = init();
@@ -6827,6 +6961,7 @@ export const jobRouter = workerRouter({
     .task(async ({ input }) => {
       console.log(`[Notification] ${input.type} for user ${input.userId}`);
       // Send email, push notification, etc.
+      return ok({ success: true });
     }),
 
   "generate-report": procedure
@@ -6840,6 +6975,7 @@ export const jobRouter = workerRouter({
     .task(async ({ input }) => {
       console.log(`[Report] Generating report for task ${input.taskId}`);
       // Generate PDF, store in S3, etc.
+      return ok({ success: true });
     }),
 });
 ```
@@ -10192,3 +10328,265 @@ pnpm add @myorg/workers-sdk @alt-stack/workers-client-trigger
 - **Type-safe**: Full TypeScript support with autocomplete
 - **Validated**: Payloads are validated before sending
 - **Versioned**: SDK can be versioned independently
+
+---
+
+// File: workers-warpstream/guides/telemetry
+
+# OpenTelemetry Integration
+
+Distributed tracing and timing metrics for WarpStream workers using [OpenTelemetry](https://opentelemetry.io/).
+
+## Installation
+
+```bash
+pnpm add @opentelemetry/api @opentelemetry/sdk-node @opentelemetry/exporter-trace-otlp-http
+```
+
+## Tracing
+
+### Quick Start
+
+```typescript
+import { createWorker } from "@alt-stack/workers-warpstream";
+import { jobRouter } from "./jobs";
+
+const worker = await createWorker(jobRouter, {
+  kafka: { brokers: ["warpstream.example.com:9092"] },
+  groupId: "my-workers",
+  telemetry: true,
+});
+```
+
+### Configuration
+
+```typescript
+const worker = await createWorker(jobRouter, {
+  kafka: { brokers: ["..."] },
+  groupId: "my-workers",
+  telemetry: {
+    enabled: true,
+    serviceName: "email-worker",
+    ignoreJobs: ["health-check", "metrics-poll"],
+  },
+});
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `enabled` | `boolean` | `false` | Enable/disable tracing |
+| `serviceName` | `string` | `"altstack-worker"` | Service name for traces |
+| `ignoreJobs` | `string[]` | `[]` | Job names to exclude from tracing |
+
+### Span Attributes
+
+Each job creates a span with these attributes:
+
+| Attribute | Example | Description |
+|-----------|---------|-------------|
+| `job.name` | `send-welcome-email` | Job name from router |
+| `job.id` | `topic-0-12345` | Unique job identifier |
+| `job.attempt` | `1` | Attempt number |
+| `job.status` | `success` | Final status (success/error/retry) |
+
+### Custom Attributes
+
+Access the span via `ctx.span`:
+
+```typescript
+"process-order": procedure
+  .input({ payload: z.object({ orderId: z.string() }) })
+  .task(async ({ input, ctx }) => {
+    ctx.span?.setAttribute("order.id", input.orderId);
+    ctx.span?.addEvent("order.validated");
+
+    // Process order...
+
+    ctx.span?.addEvent("order.completed");
+    return ok({ processed: true });
+  }),
+```
+
+## Metrics
+
+### Quick Start
+
+```typescript
+const worker = await createWorker(jobRouter, {
+  kafka: { brokers: ["warpstream.example.com:9092"] },
+  groupId: "my-workers",
+  metrics: true,
+});
+```
+
+### Configuration
+
+```typescript
+const worker = await createWorker(jobRouter, {
+  kafka: { brokers: ["..."] },
+  groupId: "my-workers",
+  metrics: {
+    enabled: true,
+    serviceName: "email-worker",
+    ignoreJobs: ["health-check"],
+    histogramBuckets: [10, 50, 100, 500, 1000, 5000],
+  },
+});
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `enabled` | `boolean` | `false` | Enable/disable metrics |
+| `serviceName` | `string` | `"altstack-worker"` | Meter name |
+| `ignoreJobs` | `string[]` | `[]` | Job names to exclude from metrics |
+| `histogramBuckets` | `number[]` | `[10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]` | Histogram bucket boundaries (ms) |
+
+### Metrics Recorded
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `messaging.process.queue_time_ms` | Histogram | Time from job creation to processing start (ms) |
+| `messaging.process.duration_ms` | Histogram | Job handler execution duration (ms) |
+| `messaging.process.e2e_time_ms` | Histogram | End-to-end time from creation to completion (ms) |
+
+All metrics include these attributes:
+- `job.name`: The job name
+- `job.status`: `"success"` or `"error"` (for duration and e2e_time)
+
+### How Timing is Calculated
+
+**Timeline:**
+```
+[Job Created] ---queue_time---> [Processing Starts] ---duration---> [Processing Ends]
+|<-------------------------- e2e_time -------------------------->|
+```
+
+**Queue Time** - Recorded when message is received:
+```typescript
+const createdAt = parseInt(message.headers["x-created-at"]);
+const queueTimeMs = Date.now() - createdAt;
+```
+
+**Processing Time** - Recorded when handler completes:
+```typescript
+const startTime = Date.now();
+await handler(job);
+const durationMs = Date.now() - startTime;
+```
+
+**E2E Time** - Recorded when handler completes:
+```typescript
+const createdAt = parseInt(message.headers["x-created-at"]);
+await handler(job);
+const e2eTimeMs = Date.now() - createdAt;
+```
+
+### Retries and Timing
+
+Kafka/WarpStream handles retries at the consumer level. When a message fails:
+
+| Scenario | Queue Time | Duration | E2E Time |
+|----------|------------|----------|----------|
+| First attempt fails | Recorded | Recorded with `status: "error"` | Recorded with `status: "error"` |
+| Redelivered message | Includes original wait + retry delay | Fresh measurement | Includes all time since creation |
+
+**Important:** The `x-created-at` header persists across redeliveries, so:
+- Queue time accumulates (original wait + time in DLQ/retry topic)
+- E2E time reflects total time from original job creation
+- Duration is always the current attempt's execution time
+
+```typescript
+// On retry, queue_time grows:
+// Attempt 1: queue_time = 100ms (original)
+// Attempt 2: queue_time = 5100ms (100ms + 5s retry delay)
+
+// Duration is per-attempt:
+// Attempt 1: duration = 50ms (failed)
+// Attempt 2: duration = 45ms (succeeded)
+
+// E2E includes everything:
+// Attempt 2: e2e_time = 5145ms (queue + all durations)
+```
+
+### How Queue Time Works
+
+Queue time is measured using the `x-created-at` header automatically added by job clients. Both `createJobClient` and `createWarpStreamClient` add this header when enqueuing jobs.
+
+If you're using a custom producer, add the header manually:
+
+```typescript
+const message = {
+  value: JSON.stringify(payload),
+  headers: {
+    "x-created-at": Date.now().toString(),
+  },
+};
+```
+
+## Using Both Tracing and Metrics
+
+Enable both for comprehensive observability:
+
+```typescript
+const worker = await createWorker(jobRouter, {
+  kafka: { brokers: ["warpstream.example.com:9092"] },
+  groupId: "my-workers",
+  telemetry: true,  // Spans
+  metrics: true,    // Histograms
+});
+```
+
+## OTel SDK Setup
+
+Create `tracing.ts` and import it **first** in your entry point:
+
+```typescript
+// tracing.ts
+import { NodeSDK } from "@opentelemetry/sdk-node";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
+import { PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics";
+
+const sdk = new NodeSDK({
+  traceExporter: new OTLPTraceExporter({
+    url: "http://localhost:4318/v1/traces",
+  }),
+  metricReader: new PeriodicExportingMetricReader({
+    exporter: new OTLPMetricExporter({
+      url: "http://localhost:4318/v1/metrics",
+    }),
+  }),
+});
+
+sdk.start();
+
+process.on("SIGTERM", () => sdk.shutdown().then(() => process.exit(0)));
+```
+
+```typescript
+// index.ts
+import "./tracing.js"; // Must be first!
+import { createWorker } from "@alt-stack/workers-warpstream";
+```
+
+## Local Development with Jaeger
+
+```bash
+docker run -d --name jaeger \
+  -p 16686:16686 \
+  -p 4318:4318 \
+  jaegertracing/all-in-one:latest
+```
+
+View traces at http://localhost:16686
+
+## Graceful Degradation
+
+If `@opentelemetry/api` is not installed, telemetry is silently disabled. `ctx.span` will be `undefined`, so always use optional chaining:
+
+```typescript
+ctx.span?.setAttribute("key", "value");  // Safe even without OTel
+ctx.span?.addEvent("processing.started"); // No-op if undefined
+```
+
+Metrics recording functions are also safe to call - they become no-ops if the OTel API is not available.

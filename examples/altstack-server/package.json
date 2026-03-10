@@ -1,27 +1,29 @@
 {
-  "name": "example-kafka-producer",
-  "version": "1.0.0",
+  "name": "altstack-server",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "tsc",
     "check-types": "tsc --noEmit",
-    "generate-spec": "tsx src/generate-spec.ts",
-    "generate-sdk": "zod-asyncapi asyncapi.json -o generated-types.ts"
+    "test:e2e": "vitest run",
+    "test": "pnpm test:e2e"
   },
   "dependencies": {
-    "@alt-stack/kafka-core": "workspace:*",
+    "@hono/node-server": "^1.0.0",
+    "@alt-stack/server-hono": "workspace:*",
+    "@alt-stack/http-client-fetch": "workspace:*",
+    "@alt-stack/result": "workspace:*",
     "@t3-oss/env-core": "^0.9.0",
-    "kafkajs": "^2.2.4",
+    "hono": "^4.0.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {
     "@alt-stack/typescript-config": "workspace:*",
-    "@alt-stack/zod-asyncapi": "workspace:*",
     "@types/node": "^20.0.0",
     "tsx": "^4.0.0",
-    "typescript": "5.9.2"
+    "typescript": "5.9.2",
+    "vitest": "^4.0.3"
   }
 }
-

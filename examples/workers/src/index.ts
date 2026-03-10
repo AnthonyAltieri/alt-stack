@@ -40,7 +40,7 @@ export * from "./examples/enqueue-pipeline.js";
  * @example
  * ```typescript
  * import { tasks } from "@trigger.dev/sdk/v3";
- * import type { sendWelcomeEmail } from "example-workers";
+ * import type { sendWelcomeEmail } from "workers";
  *
  * // Trigger a task
  * const handle = await tasks.trigger<typeof sendWelcomeEmail>("send-welcome-email", {
@@ -55,7 +55,7 @@ export * from "./examples/enqueue-pipeline.js";
  * @example
  * ```typescript
  * import { tasks } from "@trigger.dev/sdk/v3";
- * import type { importCsvData } from "example-workers";
+ * import type { importCsvData } from "workers";
  *
  * // Trigger a data pipeline import
  * const handle = await tasks.trigger<typeof importCsvData>("import-csv-data", {

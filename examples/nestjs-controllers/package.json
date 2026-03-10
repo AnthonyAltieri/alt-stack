@@ -1,0 +1,35 @@
+{
+  "name": "nestjs-controllers",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:controllers": "pnpm build && node dist/controller-app.js",
+    "dev:altstack": "pnpm build && node dist/alt-stack-app.js",
+    "dev:altstack:result": "pnpm build && node dist/alt-stack-result-app.js",
+    "build": "tsc -p tsconfig.build.json",
+    "check-types": "tsc --noEmit",
+    "test:e2e": "pnpm build && vitest run src/e2e.spec.ts",
+    "test": "pnpm test:e2e"
+  },
+  "dependencies": {
+    "@alt-stack/server-nestjs": "workspace:*",
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@nestjs/platform-express": "^11.0.0",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.1",
+    "express": "^5.0.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@alt-stack/typescript-config": "workspace:*",
+    "@types/express": "^5.0.0",
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "5.9.2",
+    "vitest": "^4.0.3"
+  }
+}

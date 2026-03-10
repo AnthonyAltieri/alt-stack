@@ -1,11 +1,11 @@
 import type { z } from "zod";
 import type {
   InputConfig,
-  InputConfigForPath,
   ExtractPathParams,
   Procedure,
   ReadyProcedure,
   PendingProcedure,
+  TypedContext,
 } from "./types/index.js";
 import { BaseProcedureBuilder } from "./procedure-builder.js";
 
@@ -43,13 +43,17 @@ export class Router<TCustomContext extends object = Record<string, never>> {
   }
 
   // Helper method to register a ReadyProcedure with a path
-  registerProcedure<TPath extends string, TInput extends InputConfig>(
+  registerProcedure<
+    TPath extends string,
+    TInput extends InputConfig,
+    TProcedureContext extends TCustomContext,
+  >(
     path: TPath,
     readyProcedure: ReadyProcedure<
       TInput,
       z.ZodTypeAny | undefined,
       Record<number, z.ZodTypeAny> | undefined,
-      TCustomContext
+      TProcedureContext
     >,
   ): this {
     // Keep paths in OpenAPI format ({param}) - adapters will convert as needed
@@ -67,7 +71,11 @@ export class Router<TCustomContext extends object = Record<string, never>> {
         // Convert from TypedContext to tRPC-style opts
         return readyProcedure.handler({
           input: ctx.input,
-          ctx,
+          ctx: ctx as TypedContext<
+            TInput,
+            Record<number, z.ZodTypeAny> | undefined,
+            TProcedureContext
+          >,
         });
       },
       middleware: readyProcedure.middleware,
@@ -84,14 +92,18 @@ export class Router<TCustomContext extends object = Record<string, never>> {
   }
 
   // Helper method to register a PendingProcedure with a path and inferred HTTP method
-  registerPendingProcedure<TPath extends string, TInput extends InputConfig>(
+  registerPendingProcedure<
+    TPath extends string,
+    TInput extends InputConfig,
+    TProcedureContext extends TCustomContext,
+  >(
     path: TPath,
     method: string,
     pendingProcedure: PendingProcedure<
       TInput,
       z.ZodTypeAny | undefined,
       Record<number, z.ZodTypeAny> | undefined,
-      TCustomContext
+      TProcedureContext
     >,
   ): this {
     // Keep paths in OpenAPI format ({param}) - adapters will convert as needed
@@ -109,7 +121,11 @@ export class Router<TCustomContext extends object = Record<string, never>> {
         // Convert from TypedContext to tRPC-style opts
         return pendingProcedure.handler({
           input: ctx.input,
-          ctx,
+          ctx: ctx as TypedContext<
+            TInput,
+            Record<number, z.ZodTypeAny> | undefined,
+            TProcedureContext
+          >,
         });
       },
       middleware: pendingProcedure.middleware,
@@ -125,15 +141,22 @@ export class Router<TCustomContext extends object = Record<string, never>> {
     return this;
   }
 
-  register(
+  register<TProcedureContext extends TCustomContext>(
     procedure: Procedure<
       InputConfig,
       z.ZodTypeAny | undefined,
       Record<number, z.ZodTypeAny> | undefined,
-      TCustomContext
+      TProcedureContext
     >,
   ): this {
-    this.procedures.push(procedure);
+    this.procedures.push(
+      procedure as Procedure<
+        InputConfig,
+        z.ZodTypeAny | undefined,
+        Record<number, z.ZodTypeAny> | undefined,
+        TCustomContext
+      >,
+    );
     return this;
   }
 
@@ -177,23 +200,6 @@ export class Router<TCustomContext extends object = Record<string, never>> {
 type MethodKey = "get" | "post" | "put" | "patch" | "delete";
 
 /**
- * Procedure type constrained by path parameters.
- * For paths with params (e.g., "/users/{id}"), requires a params schema.
- * For paths without params, accepts any procedure.
- */
-type ProcedureForPath<TPath extends string, TCustomContext extends object> =
-  ExtractPathParams<TPath> extends never
-    ? PendingProcedure<any, any, any, TCustomContext>
-    : PendingProcedure<{ params: z.ZodType<Record<ExtractPathParams<TPath>, unknown>> }, any, any, TCustomContext>;
-
-/**
- * Methods object type constrained by path parameters.
- */
-type MethodsForPath<TPath extends string, TCustomContext extends object> = {
-  [M in MethodKey]?: ProcedureForPath<TPath, TCustomContext>;
-};
-
-/**
  * Helper function to define a route with compile-time validation.
  * Use this to get call-site errors when params schema is missing.
  *
@@ -224,10 +230,14 @@ type MethodsForPath<TPath extends string, TCustomContext extends object> = {
 export function route<
   TPath extends string,
   TCustomContext extends object = Record<string, never>,
+  const TMethods extends RouteMethods = RouteMethods,
 >(
   path: TPath,
-  methods: MethodsForPath<TPath, TCustomContext>,
-): { path: TPath; methods: MethodsForPath<TPath, TCustomContext> } {
+  methods: TMethods & ValidateMethodsForPath<TPath, TMethods, TCustomContext>,
+): {
+  path: TPath;
+  methods: TMethods & ValidateMethodsForPath<TPath, TMethods, TCustomContext>;
+} {
   return { path, methods };
 }
 
@@ -284,14 +294,16 @@ export type ValidateRouterConfig<T, TCustomContext extends object> = {
   [K in keyof T]: K extends string
     ? T[K] extends Router<TCustomContext>
       ? T[K]
-      : T[K] extends ReadyProcedure<infer TInput, any, any, any>
-        ? ExtractPathParams<K> extends never
-          ? T[K]  // No path params needed
-          : TInput extends { params: z.ZodTypeAny }
-            ? T[K]  // Has required params
-            : never  // Missing params - type error
+      : T[K] extends ReadyProcedure<infer TInput, any, any, infer TProcedureContext>
+        ? TProcedureContext extends TCustomContext
+          ? ExtractPathParams<K> extends never
+            ? T[K]  // No path params needed
+            : TInput extends { params: z.ZodTypeAny }
+              ? T[K]  // Has required params
+              : never  // Missing params - type error
+          : never
         : T[K] extends RouteMethods
-          ? ValidateMethodsForPath<K, T[K]>
+          ? ValidateMethodsForPath<K, T[K], TCustomContext>
           : T[K]
     : T[K];
 };
@@ -299,13 +311,19 @@ export type ValidateRouterConfig<T, TCustomContext extends object> = {
 /**
  * Validates each method in a RouteMethods object against path requirements.
  */
-type ValidateMethodsForPath<TPath extends string, T extends RouteMethods> = {
-  [M in keyof T]: T[M] extends PendingProcedure<infer TInput, any, any, any>
-    ? ExtractPathParams<TPath> extends never
-      ? T[M]  // No path params needed
-      : TInput extends { params: z.ZodTypeAny }
-        ? T[M]  // Has required params
-        : never  // Missing params - type error
+type ValidateMethodsForPath<
+  TPath extends string,
+  T extends RouteMethods,
+  TCustomContext extends object,
+> = {
+  [M in keyof T]: T[M] extends PendingProcedure<infer TInput, any, any, infer TProcedureContext>
+    ? TProcedureContext extends TCustomContext
+      ? ExtractPathParams<TPath> extends never
+        ? T[M]  // No path params needed
+        : TInput extends { params: z.ZodTypeAny }
+          ? T[M]  // Has required params
+          : never  // Missing params - type error
+      : never
     : T[M];
 };
 
@@ -397,4 +415,3 @@ export function mergeRouters<
   }
   return mergedRouter;
 }
-
