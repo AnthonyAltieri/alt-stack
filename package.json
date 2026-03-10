@@ -5,10 +5,10 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
-    "lint": "oxlint packages apps",
-    "lint:fix": "oxlint packages apps --fix",
-    "format": "oxlint packages apps --fix",
-    "format:check": "oxlint packages apps",
+    "lint": "oxlint packages apps examples",
+    "lint:fix": "oxlint packages apps examples --fix",
+    "format": "oxlint packages apps examples --fix",
+    "format:check": "oxlint packages apps examples",
     "check-types": "turbo run check-types"
   },
   "devDependencies": {

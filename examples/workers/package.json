@@ -1,18 +1,16 @@
 {
-  "name": "example-kafka-consumer",
+  "name": "workers",
   "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx src/index.ts",
+    "dev": "npx trigger dev",
     "build": "tsc",
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
-    "@alt-stack/kafka-core": "workspace:*",
-    "@alt-stack/result": "workspace:*",
-    "@t3-oss/env-core": "^0.9.0",
-    "kafkajs": "^2.2.4",
+    "@alt-stack/workers-trigger": "workspace:*",
+    "@trigger.dev/sdk": "^3.3.16",
     "zod": "^4.0.0"
   },
   "devDependencies": {
@@ -22,4 +20,3 @@
     "typescript": "5.9.2"
   }
 }
-

@@ -65,12 +65,12 @@ jobs:
           ALTSTACK_SERVER_CHANGED=false
           CHANGED_FILES=$(git diff --name-only HEAD^1 HEAD 2>/dev/null || echo "")
 
-          if echo "$CHANGED_FILES" | grep -q "^apps/example-kafka-producer/"; then
+          if echo "$CHANGED_FILES" | grep -q "^examples/kafka-producer/"; then
             KAFKA_PRODUCER_CHANGED=true
             echo "📦 Kafka producer app changed - will regenerate SDK"
           fi
 
-          if echo "$CHANGED_FILES" | grep -q "^apps/example-altstack-server/"; then
+          if echo "$CHANGED_FILES" | grep -q "^examples/altstack-server/"; then
             ALTSTACK_SERVER_CHANGED=true
             echo "📦 Altstack server app changed - will regenerate SDK"
           fi
@@ -92,12 +92,12 @@ jobs:
         if: steps.sdk-check.outputs.kafka_producer_changed == 'true'
         run: |
           echo "🔄 Regenerating Kafka Producer SDK..."
-          cd apps/example-kafka-producer
+          cd examples/kafka-producer
           pnpm generate-spec
           echo "✓ Generated AsyncAPI spec"
           cd ../..
           pnpm --filter @alt-stack/zod-asyncapi exec tsx src/cli.ts \
-            ${{ github.workspace }}/apps/example-kafka-producer/asyncapi.json \
+            ${{ github.workspace }}/examples/kafka-producer/asyncapi.json \
             -o ${{ github.workspace }}/packages/example-kafka-producer-sdk/src/index.ts
           echo "✓ Regenerated example-kafka-producer-sdk"
 
@@ -105,7 +105,7 @@ jobs:
         if: steps.sdk-check.outputs.altstack_server_changed == 'true'
         run: |
           echo "🔄 Regenerating Altstack Server SDK..."
-          cd apps/example-altstack-server
+          cd examples/altstack-server
           pnpm dev > server.log 2>&1 &
           SERVER_PID=$!
           MAX_ATTEMPTS=30

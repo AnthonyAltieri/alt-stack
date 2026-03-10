@@ -55,7 +55,7 @@ importers:
         specifier: ^0.52.1
         version: 0.52.1(@docusaurus/theme-common@3.9.2(@docusaurus/plugin-content-docs@3.9.2(@mdx-js/react@3.1.1(@types/react@19.2.2)(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.2))(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@mdx-js/react@3.1.1(@types/react@19.2.2)(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.2)
 
-  apps/example-altstack-server:
+  examples/altstack-server:
     dependencies:
       '@alt-stack/http-client-fetch':
         specifier: workspace:*
@@ -95,7 +95,7 @@ importers:
         specifier: ^4.0.3
         version: 4.0.3(@types/debug@4.1.12)(@types/node@20.19.24)(jiti@1.21.7)(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1)
 
-  apps/example-kafka-consumer:
+  examples/kafka-consumer:
     dependencies:
       '@alt-stack/kafka-core':
         specifier: workspace:*
@@ -126,7 +126,7 @@ importers:
         specifier: 5.9.2
         version: 5.9.2
 
-  apps/example-kafka-producer:
+  examples/kafka-producer:
     dependencies:
       '@alt-stack/kafka-core':
         specifier: workspace:*
@@ -157,7 +157,62 @@ importers:
         specifier: 5.9.2
         version: 5.9.2
 
-  apps/example-workers:
+  examples/nestjs-controllers:
+    dependencies:
+      '@alt-stack/server-nestjs':
+        specifier: workspace:*
+        version: link:../../packages/server-nestjs
+      '@nestjs/common':
+        specifier: ^11.0.0
+        version: 11.1.16(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestjs/core':
+        specifier: ^11.0.0
+        version: 11.1.16(@nestjs/common@11.1.16(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/platform-express@11.1.16)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestjs/platform-express':
+        specifier: ^11.0.0
+        version: 11.1.16(@nestjs/common@11.1.16(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.16)
+      express:
+        specifier: ^5.0.0
+        version: 5.2.1
+      reflect-metadata:
+        specifier: ^0.2.2
+        version: 0.2.2
+      rxjs:
+        specifier: ^7.8.2
+        version: 7.8.2
+      zod:
+        specifier: ^4.0.0
+        version: 4.1.12
+    devDependencies:
+      '@alt-stack/typescript-config':
+        specifier: workspace:*
+        version: link:../../packages/typescript-config
+      '@types/express':
+        specifier: ^5.0.0
+        version: 5.0.5
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.24
+      tsx:
+        specifier: ^4.0.0
+        version: 4.20.6
+      typescript:
+        specifier: 5.9.2
+        version: 5.9.2
+      vitest:
+        specifier: ^4.0.3
+        version: 4.0.3(@types/debug@4.1.12)(@types/node@20.19.24)(jiti@1.21.7)(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1)
+
+  examples/real-life:
+    devDependencies:
+      oxlint:
+        specifier: ^1.24.0
+        version: 1.24.0
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.2
+
+  examples/workers:
     dependencies:
       '@alt-stack/workers-trigger':
         specifier: workspace:*

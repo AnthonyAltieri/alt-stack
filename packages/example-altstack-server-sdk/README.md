@@ -1,6 +1,6 @@
 # @alt-stack/example-altstack-server-sdk
 
-Auto-generated TypeScript SDK for the example-altstack-server API.
+Auto-generated TypeScript SDK for the altstack-server API.
 
 ## Installation
 
@@ -30,7 +30,7 @@ const todo = Response['/api/todos/{id}'].GET['200'].parse(apiResponse);
 
 ## Generation
 
-This package is automatically generated from the `example-altstack-server` OpenAPI schema using the "Cut Example Server Version" GitHub Actions workflow.
+This package is automatically generated from the `altstack-server` OpenAPI schema using the "Cut Example Server Version" GitHub Actions workflow.
 
 **Do not manually edit `src/index.ts`** - changes will be overwritten on the next generation.
 
@@ -50,4 +50,3 @@ This package is automatically generated from the `example-altstack-server` OpenA
 ## License
 
 MIT
-

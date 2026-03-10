@@ -1,6 +1,6 @@
 # @alt-stack/example-kafka-producer-sdk
 
-Auto-generated TypeScript SDK for the example-kafka-producer Kafka topics.
+Auto-generated TypeScript SDK for the kafka-producer Kafka topics.
 
 ## Installation
 
@@ -43,7 +43,7 @@ const topicNames: TopicName[] = Object.keys(Topics) as TopicName[];
 
 ## Generation
 
-This package is automatically generated from the `example-kafka-producer` AsyncAPI schema using the "Cut Kafka Producer Version" GitHub Actions workflow.
+This package is automatically generated from the `kafka-producer` AsyncAPI schema using the "Cut Kafka Producer Version" GitHub Actions workflow.
 
 **Do not manually edit `src/index.ts`** - changes will be overwritten on the next generation.
 
@@ -63,4 +63,3 @@ This package is automatically generated from the `example-kafka-producer` AsyncA
 ## License
 
 MIT
-

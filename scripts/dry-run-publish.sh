@@ -28,12 +28,12 @@ ALTSTACK_SERVER_CHANGED=false
 # Get changed files (use HEAD~1 instead of HEAD^1 for zsh compatibility)
 CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "")
 
-if echo "$CHANGED_FILES" | grep -q "^apps/example-kafka-producer/"; then
+if echo "$CHANGED_FILES" | grep -q "^examples/kafka-producer/"; then
   KAFKA_PRODUCER_CHANGED=true
   echo "📦 Kafka producer app changed - would regenerate SDK"
 fi
 
-if echo "$CHANGED_FILES" | grep -q "^apps/example-altstack-server/"; then
+if echo "$CHANGED_FILES" | grep -q "^examples/altstack-server/"; then
   ALTSTACK_SERVER_CHANGED=true
   echo "📦 Altstack server app changed - would regenerate SDK"
 fi
@@ -130,8 +130,8 @@ for (const pkgDir of packageDirs) {
 }
 
 // If example apps changed, add their corresponding SDKs
-const kafkaProducerChanged = changedFiles.some(f => f.startsWith('apps/example-kafka-producer/'));
-const altStackServerChanged = changedFiles.some(f => f.startsWith('apps/example-altstack-server/'));
+const kafkaProducerChanged = changedFiles.some(f => f.startsWith('examples/kafka-producer/'));
+const altStackServerChanged = changedFiles.some(f => f.startsWith('examples/altstack-server/'));
 
 if (kafkaProducerChanged) {
   changedPackages.add('@alt-stack/example-kafka-producer-sdk');
@@ -180,8 +180,8 @@ const results = [];
 
 // SDK to source app mapping for commit analysis
 const sdkToAppDir = {
-  '@alt-stack/example-kafka-producer-sdk': 'apps/example-kafka-producer',
-  '@alt-stack/example-altstack-server-sdk': 'apps/example-altstack-server'
+  '@alt-stack/example-kafka-producer-sdk': 'examples/kafka-producer',
+  '@alt-stack/example-altstack-server-sdk': 'examples/altstack-server'
 };
 
 for (const pkgName of packages) {
@@ -372,4 +372,3 @@ rm -f changed-packages.json bump-results.json
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
