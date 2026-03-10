@@ -78,30 +78,14 @@ class TasksController {
   ) {}
 
   @Get()
-  listTasks(
-    @Query(
-      new ValidationPipe({
-        transform: true,
-        whitelist: true,
-        expectedType: ListTasksQueryDto,
-      }),
-    )
-    query: ListTasksQueryDto,
-  ) {
+  listTasks(@Query() query: ListTasksQueryDto) {
     return this.tasksService.list(query);
   }
 
   @Post()
   createTask(
     @Headers("x-user-id") userId: string | undefined,
-    @Body(
-      new ValidationPipe({
-        transform: true,
-        whitelist: true,
-        expectedType: CreateTaskDto,
-      }),
-    )
-    body: CreateTaskDto,
+    @Body() body: CreateTaskDto,
   ) {
     const actor = requireUser(this.usersService, userId);
     const task = this.tasksService.create(body, actor.id);
@@ -123,14 +107,7 @@ class TasksController {
   updateTask(
     @Param("id") id: string,
     @Headers("x-user-id") userId: string | undefined,
-    @Body(
-      new ValidationPipe({
-        transform: true,
-        whitelist: true,
-        expectedType: UpdateTaskDto,
-      }),
-    )
-    body: UpdateTaskDto,
+    @Body() body: UpdateTaskDto,
   ) {
     const actor = requireUser(this.usersService, userId);
     const existingTask = requireTask(this.tasksService, id);
@@ -151,14 +128,7 @@ class TasksController {
   assignTask(
     @Param("id") id: string,
     @Headers("x-user-id") userId: string | undefined,
-    @Body(
-      new ValidationPipe({
-        transform: true,
-        whitelist: true,
-        expectedType: AssignTaskDto,
-      }),
-    )
-    body: AssignTaskDto,
+    @Body() body: AssignTaskDto,
   ) {
     const actor = requireUser(this.usersService, userId);
     const task = requireTask(this.tasksService, id);
@@ -175,6 +145,29 @@ class TasksController {
   }
 }
 
+// The tsx/vitest runtime used by this example does not preserve DTO param
+// metadata consistently, so we restore the intended Nest metatypes here for
+// the global ValidationPipe.
+Reflect.defineMetadata("design:paramtypes", [ListTasksQueryDto], TasksController.prototype, "listTasks");
+Reflect.defineMetadata(
+  "design:paramtypes",
+  [String, CreateTaskDto],
+  TasksController.prototype,
+  "createTask",
+);
+Reflect.defineMetadata(
+  "design:paramtypes",
+  [String, String, UpdateTaskDto],
+  TasksController.prototype,
+  "updateTask",
+);
+Reflect.defineMetadata(
+  "design:paramtypes",
+  [String, String, AssignTaskDto],
+  TasksController.prototype,
+  "assignTask",
+);
+
 @Module({
   controllers: [TasksController],
   providers: [UsersService, TasksService, TaskPolicyService, TaskActivityService],
@@ -184,6 +177,12 @@ class ControllerExampleModule {}
 export async function createControllerApp() {
   const app = await NestFactory.create(ControllerExampleModule, { logger: false });
   app.setGlobalPrefix("v1");
+  app.useGlobalPipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+    }),
+  );
   const httpAdapterHost = app.get(HttpAdapterHost);
   app.useGlobalFilters(new TaskDomainExceptionFilter(httpAdapterHost.httpAdapter));
   await app.init();

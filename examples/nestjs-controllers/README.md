@@ -36,7 +36,7 @@ The route complexity is intentionally moderate: several routes coordinate multip
 | Controller app | Alt Stack app |
 | --- | --- |
 | DTO classes like `ListTasksQueryDto`, `CreateTaskDto`, `UpdateTaskDto`, `AssignTaskDto` | Zod schemas like `TaskListQuerySchema`, `CreateTaskBodySchema`, `UpdateTaskBodySchema`, `AssignTaskBodySchema` |
-| `ValidationPipe` transforms and validates request data | `.input(...)` parses and validates inline with the route |
+| One global Nest `ValidationPipe` transforms and validates request data from DTO metadata | `.input(...)` parses and validates inline with the route |
 | Validation is spread across decorators, DTO classes, and pipe setup | Validation remains colocated with route definitions |
 | Shared typed errors are translated to Nest HTTP exceptions through one exception filter | Shared typed errors are returned directly from procedures with `err(error)` |
 
