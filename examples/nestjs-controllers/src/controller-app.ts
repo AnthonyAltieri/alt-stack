@@ -2,7 +2,6 @@ import "reflect-metadata";
 
 import { pathToFileURL } from "node:url";
 import {
-  BadRequestException,
   Body,
   Controller,
   Get,
@@ -12,9 +11,11 @@ import {
   Param,
   Post,
   Query,
+  ValidationPipe,
 } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
-import { BodySchema, ItemSchema, QuerySchema, UsersService } from "./shared.js";
+import { CreateItemDto, QueryDto } from "./dtos.js";
+import { ItemSchema, UsersService } from "./shared.js";
 
 @Controller("api")
 class ApiController {
@@ -26,23 +27,33 @@ class ApiController {
   }
 
   @Get("query")
-  getQuery(@Query() query: Record<string, unknown>) {
-    const parsed = QuerySchema.safeParse(query);
-    if (!parsed.success) {
-      throw new BadRequestException(parsed.error.flatten());
-    }
-    return { limit: parsed.data.limit };
+  getQuery(
+    @Query(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        expectedType: QueryDto,
+      }),
+    )
+    query: QueryDto,
+  ) {
+    return { limit: query.limit };
   }
 
   @Post("items")
-  createItem(@Body() body: unknown) {
-    const parsed = BodySchema.safeParse(body);
-    if (!parsed.success) {
-      throw new BadRequestException(parsed.error.flatten());
-    }
+  createItem(
+    @Body(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        expectedType: CreateItemDto,
+      }),
+    )
+    body: CreateItemDto,
+  ) {
     return ItemSchema.parse({
-      id: `item-${parsed.data.name}`,
-      name: parsed.data.name,
+      id: `item-${body.name}`,
+      name: body.name,
     });
   }
 
