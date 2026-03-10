@@ -14,30 +14,32 @@ import {
 } from "@alt-stack/server-nestjs";
 import { z } from "zod";
 import {
-  AssignTaskBodySchema,
-  CreateTaskBodySchema,
   ForbiddenError,
-  ForbiddenErrorSchema,
   InvalidTransitionError,
-  InvalidTransitionErrorSchema,
   NotFoundError,
-  NotFoundErrorSchema,
   TaskActivityService,
-  TaskListQuerySchema,
   TaskPolicyService,
-  TaskSchema,
   TasksService,
   UnauthorizedError,
-  UnauthorizedErrorSchema,
-  UpdateTaskBodySchema,
-  UserSchema,
   UsersService,
   requireAssignee,
   requireTask,
   requireUser,
 } from "./shared.js";
+import type { User } from "./dtos.js";
+import {
+  AssignTaskBodySchema,
+  CreateTaskBodySchema,
+  ForbiddenErrorSchema,
+  InvalidTransitionErrorSchema,
+  NotFoundErrorSchema,
+  TaskListQuerySchema,
+  TaskSchema,
+  UnauthorizedErrorSchema,
+  UpdateTaskBodySchema,
+} from "./schemas.js";
 
-type Actor = z.infer<typeof UserSchema>;
+type Actor = User;
 type AppContext = NestBaseContext & { actor?: Actor };
 
 const factory = init<{ actor?: Actor }>();
@@ -180,7 +182,7 @@ const apiRouter = router<AppContext>({
         const task = requireTask(tasks, input.params.id);
         const assignee = requireAssignee(users, input.body.assigneeId);
         policy.assertCanAssign(task, actor);
-        const updatedTask = tasks.update(task, { assigneeId: assignee.id });
+        const updatedTask = tasks.assign(task, { assigneeId: assignee.id });
         activity.record({
           taskId: updatedTask.id,
           action: "assigned",

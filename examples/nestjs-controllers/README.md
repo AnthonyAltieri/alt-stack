@@ -4,10 +4,14 @@ This example compares the same small task workflow implemented two ways:
 
 - `src/controller-app.ts`: conventional NestJS controllers with DTOs validated by `class-validator` and `class-transformer`
 - `src/alt-stack-app.ts`: Alt Stack routes mounted into NestJS with request validation defined by Zod schemas
+- `src/dtos.ts`: DTO and domain models that the controller and shared services use
+- `src/schemas.ts`: Alt Stack-only Zod schemas layered on top of the existing DTO-shaped services
 
 Both apps expose the same API shape under `/v1/api/tasks`, use the same in-memory domain services, and differ mainly in route composition, validation style, and request-context wiring.
 
 The shared domain layer now throws the same concrete typed errors that the Alt Stack routes declare. That keeps the Alt Stack example honest: declared errors are the source of truth, not a wrapper around a generic domain error.
+
+The main teaching point is that the services stay DTO-shaped. The Alt Stack version adds `schemas.ts` as a thin parsing layer instead of forcing the shared services to be rewritten around Zod.
 
 ## Domain
 
@@ -35,9 +39,9 @@ The route complexity is intentionally moderate: several routes coordinate multip
 
 | Controller app | Alt Stack app |
 | --- | --- |
-| DTO classes like `ListTasksQueryDto`, `CreateTaskDto`, `UpdateTaskDto`, `AssignTaskDto` | Zod schemas like `TaskListQuerySchema`, `CreateTaskBodySchema`, `UpdateTaskBodySchema`, `AssignTaskBodySchema` |
+| DTO classes like `ListTasksQueryDto`, `CreateTaskDto`, `UpdateTaskDto`, `AssignTaskDto` drive the controller and shared services | Zod schemas like `TaskListQuerySchema`, `CreateTaskBodySchema`, `UpdateTaskBodySchema`, `AssignTaskBodySchema` live in `schemas.ts` only |
 | One global Nest `ValidationPipe` transforms and validates request data from DTO metadata | `.input(...)` parses and validates inline with the route |
-| Validation is spread across decorators, DTO classes, and pipe setup | Validation remains colocated with route definitions |
+| Validation is spread across decorators, DTO classes, and pipe setup | Validation stays in the Alt Stack boundary while the services remain unchanged |
 | Shared typed errors are translated to Nest HTTP exceptions through one exception filter | Shared typed errors are returned directly from procedures with `err(error)` |
 
 ## Request Context
@@ -63,6 +67,8 @@ The controller app still uses Nest-native HTTP exceptions at the boundary, but i
 6. record side effects with `TaskActivityService`
 
 That route is the clearest side-by-side example of controller DTO plumbing versus Alt Stack procedure + middleware composition.
+
+It also shows the migration story: `TasksService.assign(...)` still accepts DTO-shaped input, while the Alt Stack route just parses the request with Zod before handing that shape to the unchanged service.
 
 ## Behavior Highlights
 

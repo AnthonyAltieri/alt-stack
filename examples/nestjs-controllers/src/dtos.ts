@@ -22,6 +22,36 @@ export enum TaskPriorityDto {
   High = "high",
 }
 
+export enum UserRoleDto {
+  Member = "member",
+  Admin = "admin",
+}
+
+export interface User {
+  id: string;
+  name: string;
+  role: UserRoleDto;
+}
+
+export interface Task {
+  id: string;
+  title: string;
+  description?: string;
+  status: TaskStatusDto;
+  priority: TaskPriorityDto;
+  ownerId: string;
+  assigneeId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ActivityEntry {
+  taskId: string;
+  action: "created" | "assigned" | "completed";
+  actorId: string;
+  details: string;
+}
+
 export class ListTasksQueryDto {
   @IsOptional()
   @IsEnum(TaskStatusDto)

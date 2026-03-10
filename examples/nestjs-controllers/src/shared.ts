@@ -1,57 +1,17 @@
 import { Injectable } from "@nestjs/common";
 import { TaggedError } from "@alt-stack/server-nestjs";
-import { z } from "zod";
-
-export const TaskStatusSchema = z.enum(["todo", "in_progress", "completed"]);
-export const TaskPrioritySchema = z.enum(["low", "medium", "high"]);
-
-export const UserSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  role: z.enum(["member", "admin"]),
-});
-
-export const TaskSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  description: z.string().optional(),
-  status: TaskStatusSchema,
-  priority: TaskPrioritySchema,
-  ownerId: z.string(),
-  assigneeId: z.string().nullable(),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
-});
-
-export const TaskListQuerySchema = z.object({
-  status: TaskStatusSchema.optional(),
-  assigneeId: z.string().optional(),
-  limit: z.coerce.number().int().min(1).max(50).optional(),
-});
-
-export const CreateTaskBodySchema = z.object({
-  title: z.string().min(1).max(120),
-  description: z.string().max(500).optional(),
-  priority: TaskPrioritySchema,
-});
-
-export const UpdateTaskBodySchema = z.object({
-  title: z.string().min(1).max(120).optional(),
-  description: z.string().max(500).optional(),
-  status: TaskStatusSchema.optional(),
-  priority: TaskPrioritySchema.optional(),
-});
-
-export const AssignTaskBodySchema = z.object({
-  assigneeId: z.string(),
-});
-
-export const ActivityEntrySchema = z.object({
-  taskId: z.string(),
-  action: z.enum(["created", "assigned", "completed"]),
-  actorId: z.string(),
-  details: z.string(),
-});
+import {
+  type ActivityEntry,
+  AssignTaskDto,
+  type CreateTaskDto,
+  type ListTasksQueryDto,
+  type Task,
+  TaskPriorityDto,
+  TaskStatusDto,
+  type UpdateTaskDto,
+  type User,
+  UserRoleDto,
+} from "./dtos.js";
 
 export class UnauthorizedError extends TaggedError {
   readonly _tag = "UnauthorizedError" as const;
@@ -69,37 +29,11 @@ export class InvalidTransitionError extends TaggedError {
   readonly _tag = "InvalidTransitionError" as const;
 }
 
-export const UnauthorizedErrorSchema = z.object({
-  _tag: z.literal("UnauthorizedError"),
-  message: z.string(),
-});
-
-export const NotFoundErrorSchema = z.object({
-  _tag: z.literal("NotFoundError"),
-  message: z.string(),
-});
-
-export const ForbiddenErrorSchema = z.object({
-  _tag: z.literal("ForbiddenError"),
-  message: z.string(),
-});
-
-export const InvalidTransitionErrorSchema = z.object({
-  _tag: z.literal("InvalidTransitionError"),
-  message: z.string(),
-});
-
-export type User = z.infer<typeof UserSchema>;
-export type Task = z.infer<typeof TaskSchema>;
-export type TaskStatus = z.infer<typeof TaskStatusSchema>;
-export type TaskPriority = z.infer<typeof TaskPrioritySchema>;
-export type ActivityEntry = z.infer<typeof ActivityEntrySchema>;
-
 const seedUsers: User[] = [
-  { id: "u-admin", name: "Avery Admin", role: "admin" },
-  { id: "u-alice", name: "Alice Owner", role: "member" },
-  { id: "u-bob", name: "Bob Builder", role: "member" },
-  { id: "u-chris", name: "Chris Reviewer", role: "member" },
+  { id: "u-admin", name: "Avery Admin", role: UserRoleDto.Admin },
+  { id: "u-alice", name: "Alice Owner", role: UserRoleDto.Member },
+  { id: "u-bob", name: "Bob Builder", role: UserRoleDto.Member },
+  { id: "u-chris", name: "Chris Reviewer", role: UserRoleDto.Member },
 ];
 
 const seedTasks: Task[] = [
@@ -107,8 +41,8 @@ const seedTasks: Task[] = [
     id: "task-1",
     title: "Prepare release notes",
     description: "Summarize launch changes for the next deploy.",
-    status: "todo",
-    priority: "high",
+    status: TaskStatusDto.Todo,
+    priority: TaskPriorityDto.High,
     ownerId: "u-alice",
     assigneeId: "u-bob",
     createdAt: "2026-03-01T10:00:00.000Z",
@@ -118,8 +52,8 @@ const seedTasks: Task[] = [
     id: "task-2",
     title: "Audit rate limits",
     description: "Review API gateway thresholds.",
-    status: "in_progress",
-    priority: "medium",
+    status: TaskStatusDto.InProgress,
+    priority: TaskPriorityDto.Medium,
     ownerId: "u-admin",
     assigneeId: "u-chris",
     createdAt: "2026-03-02T09:00:00.000Z",
@@ -140,7 +74,7 @@ export class UsersService {
 export class TasksService {
   private readonly tasks = new Map(seedTasks.map((task) => [task.id, task]));
 
-  list(filters: z.infer<typeof TaskListQuerySchema>): Task[] {
+  list(filters: ListTasksQueryDto): Task[] {
     let tasks = Array.from(this.tasks.values());
     if (filters.status) {
       tasks = tasks.filter((task) => task.status === filters.status);
@@ -158,13 +92,13 @@ export class TasksService {
     return this.tasks.get(id) ?? null;
   }
 
-  create(input: z.infer<typeof CreateTaskBodySchema>, ownerId: string): Task {
+  create(input: CreateTaskDto, ownerId: string): Task {
     const now = new Date().toISOString();
     const task: Task = {
       id: crypto.randomUUID(),
       title: input.title,
       description: input.description,
-      status: "todo",
+      status: TaskStatusDto.Todo,
       priority: input.priority,
       ownerId,
       assigneeId: null,
@@ -175,13 +109,20 @@ export class TasksService {
     return task;
   }
 
-  update(
-    task: Task,
-    patch: Partial<Pick<Task, "title" | "description" | "status" | "priority" | "assigneeId">>,
-  ): Task {
+  update(task: Task, patch: UpdateTaskDto): Task {
     const updated: Task = {
       ...task,
       ...patch,
+      updatedAt: new Date().toISOString(),
+    };
+    this.tasks.set(updated.id, updated);
+    return updated;
+  }
+
+  assign(task: Task, input: AssignTaskDto): Task {
+    const updated: Task = {
+      ...task,
+      assigneeId: input.assigneeId,
       updatedAt: new Date().toISOString(),
     };
     this.tasks.set(updated.id, updated);
@@ -192,14 +133,18 @@ export class TasksService {
 @Injectable()
 export class TaskPolicyService {
   assertCanAssign(task: Task, actor: User): void {
-    if (actor.role === "admin" || actor.id === task.ownerId) {
+    if (actor.role === UserRoleDto.Admin || actor.id === task.ownerId) {
       return;
     }
     throw new ForbiddenError("Only the owner or an admin can assign this task");
   }
 
-  assertCanUpdate(task: Task, actor: User, nextStatus?: TaskStatus): void {
-    if (actor.role === "admin" || actor.id === task.ownerId || actor.id === task.assigneeId) {
+  assertCanUpdate(task: Task, actor: User, nextStatus?: TaskStatusDto): void {
+    if (
+      actor.role === UserRoleDto.Admin ||
+      actor.id === task.ownerId ||
+      actor.id === task.assigneeId
+    ) {
       if (nextStatus) {
         this.assertValidTransition(task, actor, nextStatus);
       }
@@ -208,18 +153,20 @@ export class TaskPolicyService {
     throw new ForbiddenError("You do not have access to update this task");
   }
 
-  private assertValidTransition(task: Task, actor: User, nextStatus: TaskStatus): void {
+  private assertValidTransition(task: Task, actor: User, nextStatus: TaskStatusDto): void {
     if (task.status === nextStatus) {
       return;
     }
-    if (nextStatus === "in_progress" && task.assigneeId !== actor.id && actor.role !== "admin") {
-      throw new InvalidTransitionError(
-        "Only the assigned user can move a task to in_progress",
-      );
+    if (
+      nextStatus === TaskStatusDto.InProgress &&
+      task.assigneeId !== actor.id &&
+      actor.role !== UserRoleDto.Admin
+    ) {
+      throw new InvalidTransitionError("Only the assigned user can move a task to in_progress");
     }
-    if (nextStatus === "completed") {
-      const canComplete = task.assigneeId === actor.id || actor.role === "admin";
-      const validPreviousState = task.status === "in_progress";
+    if (nextStatus === TaskStatusDto.Completed) {
+      const canComplete = task.assigneeId === actor.id || actor.role === UserRoleDto.Admin;
+      const validPreviousState = task.status === TaskStatusDto.InProgress;
       if (!canComplete || !validPreviousState) {
         throw new InvalidTransitionError(
           "Tasks can only be completed by the assignee after they are in progress",
@@ -243,10 +190,7 @@ export class TaskActivityService {
   }
 }
 
-export function requireUser(
-  usersService: UsersService,
-  userId: string | undefined,
-): User {
+export function requireUser(usersService: UsersService, userId: string | undefined): User {
   if (!userId) {
     throw new UnauthorizedError("x-user-id header is required");
   }
@@ -258,10 +202,7 @@ export function requireUser(
   return user;
 }
 
-export function requireTask(
-  tasksService: TasksService,
-  taskId: string,
-): Task {
+export function requireTask(tasksService: TasksService, taskId: string): Task {
   const task = tasksService.findById(taskId);
   if (!task) {
     throw new NotFoundError(`Task ${taskId} was not found`);
@@ -269,10 +210,7 @@ export function requireTask(
   return task;
 }
 
-export function requireAssignee(
-  usersService: UsersService,
-  assigneeId: string,
-): User {
+export function requireAssignee(usersService: UsersService, assigneeId: string): User {
   const assignee = usersService.findById(assigneeId);
   if (!assignee) {
     throw new NotFoundError(`User ${assigneeId} was not found`);

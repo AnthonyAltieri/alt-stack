@@ -134,7 +134,7 @@ class TasksController {
     const task = requireTask(this.tasksService, id);
     const assignee = requireAssignee(this.usersService, body.assigneeId);
     this.taskPolicyService.assertCanAssign(task, actor);
-    const updatedTask = this.tasksService.update(task, { assigneeId: assignee.id });
+    const updatedTask = this.tasksService.assign(task, { assigneeId: assignee.id });
     this.taskActivityService.record({
       taskId: updatedTask.id,
       action: "assigned",
