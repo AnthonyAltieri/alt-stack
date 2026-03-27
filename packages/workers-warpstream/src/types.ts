@@ -1,5 +1,11 @@
 import type { Kafka, KafkaConfig, ConsumerConfig, ProducerConfig, KafkaMessage } from "kafkajs";
-import type { BaseWorkerContext, WorkerRouter, WorkerTelemetryOption, WorkerMetricsOption } from "@alt-stack/workers-core";
+import type {
+  BaseWorkerContext,
+  Storage,
+  WorkerRouter,
+  WorkerTelemetryOption,
+  WorkerMetricsOption,
+} from "@alt-stack/workers-core";
 
 /** Routing strategy for job distribution */
 export type RoutingStrategy =
@@ -32,6 +38,8 @@ export interface CreateWorkerOptions<TCustomContext extends object = Record<stri
   createContext?: (baseCtx: WarpStreamContext) => Promise<TCustomContext> | TCustomContext;
   /** Error handler */
   onError?: (error: Error, ctx: WarpStreamContext) => void | Promise<void>;
+  /** Optional queue state backend for retry, DLQ, and redrive tracking */
+  storage?: Storage;
   /**
    * Enable OpenTelemetry tracing for jobs.
    * Set to true for default config, or provide a config object.
@@ -57,6 +65,8 @@ export interface CreateJobClientOptions {
   clientId?: string;
   /** Error callback */
   onError?: (error: Error) => void;
+  /** Optional queue state backend for enqueue tracking */
+  storage?: Storage;
 }
 
 /** Result of createWorker */
@@ -84,7 +94,7 @@ export type InferJobPayload<TRouter, TJobName extends string> =
     : undefined;
 
 /** Type-safe job client */
-export interface JobClient<TRouter extends WorkerRouter<object>> {
+export interface JobClient<TRouter extends WorkerRouter<any>> {
   /** Enqueue a job */
   enqueue<TJobName extends InferJobNames<TRouter>>(
     jobName: TJobName,
@@ -103,3 +113,26 @@ export interface EnqueueOptions {
   headers?: Record<string, string>;
 }
 
+export interface DispatchDueJobsOptions {
+  /** Kafka instance or config for WarpStream connection */
+  kafka: Kafka | KafkaConfig;
+  /** Durable queue state backend */
+  storage: Storage;
+  /** Routing strategy - must match producer and consumer */
+  routing?: RoutingStrategy;
+  /** Override default producer config */
+  producerConfig?: ProducerConfig;
+  /** Client ID */
+  clientId?: string;
+  /** Max due jobs to dispatch in one call */
+  limit?: number;
+  /** Override the effective current time for testing or backfills */
+  now?: Date;
+  /** Error callback for individual dispatch failures */
+  onError?: (error: Error, jobId: string) => void | Promise<void>;
+}
+
+export interface DispatchDueJobsResult {
+  dispatched: number;
+  jobIds: string[];
+}

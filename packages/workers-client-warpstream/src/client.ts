@@ -8,9 +8,7 @@ import type {
   TriggerResult,
 } from "@alt-stack/workers-client-core";
 import { ValidationError, TriggerError, ConnectionError } from "@alt-stack/workers-client-core";
-
-/** Header name for job creation timestamp (used for queue time metrics) */
-const JOB_CREATED_AT_HEADER = "x-created-at";
+import { buildQueueHeaders, createJobId } from "@alt-stack/workers-state-core";
 
 /**
  * Options for creating a WarpStream worker client.
@@ -62,10 +60,6 @@ class WarpStreamWorkerClient<T extends JobsMap> implements WorkerClient<T> {
     this._onError = onError;
   }
 
-  private generateJobId(): string {
-    return `job_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
-  }
-
   async trigger<K extends keyof T & string>(
     jobName: K,
     payload: z.infer<T[K]>,
@@ -86,14 +80,19 @@ class WarpStreamWorkerClient<T extends JobsMap> implements WorkerClient<T> {
       }
     }
 
-    const jobId = this.generateJobId();
+    const jobId = createJobId();
     const topic = `${this._topicPrefix}${jobName}`;
 
-    // Add creation timestamp header for queue time metrics
-    const headers: IHeaders = {
-      ...options?.metadata,
-      [JOB_CREATED_AT_HEADER]: Date.now().toString(),
-    };
+    const headers: IHeaders = buildQueueHeaders(
+      {
+        jobId,
+        attempt: 1,
+        queueName: jobName,
+        createdAt: Date.now().toString(),
+        dispatchKind: "initial",
+      },
+      options?.metadata,
+    );
 
     const kafkaMessage: Message = {
       value: JSON.stringify(payload),
@@ -145,18 +144,23 @@ class WarpStreamWorkerClient<T extends JobsMap> implements WorkerClient<T> {
     const topic = `${this._topicPrefix}${jobName}`;
     const results: TriggerResult[] = [];
 
-    // Add creation timestamp header for queue time metrics
     const createdAt = Date.now().toString();
     const kafkaMessages: Message[] = payloads.map((payload) => {
-      const jobId = this.generateJobId();
+      const jobId = createJobId();
       results.push({ id: jobId });
       return {
         value: JSON.stringify(payload),
         key: options?.idempotencyKey ?? null,
-        headers: {
-          ...options?.metadata,
-          [JOB_CREATED_AT_HEADER]: createdAt,
-        },
+        headers: buildQueueHeaders(
+          {
+            jobId,
+            attempt: 1,
+            queueName: jobName,
+            createdAt,
+            dispatchKind: "initial",
+          },
+          options?.metadata,
+        ),
       };
     });
 
@@ -240,4 +244,3 @@ export async function createWarpStreamClient<T extends JobsMap>(
     options.onError,
   );
 }
-

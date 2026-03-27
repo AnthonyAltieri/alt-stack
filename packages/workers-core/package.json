@@ -21,7 +21,8 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@alt-stack/result": "workspace:*"
+    "@alt-stack/result": "workspace:*",
+    "@alt-stack/workers-state-core": "workspace:*"
   },
   "peerDependencies": {
     "@opentelemetry/api": "^1.0.0",
