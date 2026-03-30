@@ -58,7 +58,11 @@ describe("workers-warpstream state backend", () => {
       storage,
     });
 
-    await client.enqueue("process-upload", { fileId: "file_1" } as never);
+    await client.enqueue(
+      "process-upload",
+      { fileId: "file_1" } as never,
+      { key: "tenant-1" },
+    );
 
     expect(producer.send).toHaveBeenCalledTimes(1);
     expect(storage.append).toHaveBeenCalledTimes(1);
@@ -66,6 +70,7 @@ describe("workers-warpstream state backend", () => {
     const appendedEvents = vi.mocked(storage.append).mock.calls[0]?.[0];
     expect(appendedEvents?.[0]?.type).toBe("job_enqueued");
     expect(appendedEvents?.[0]?.queueName).toBe("uploads");
+    expect(appendedEvents?.[0]?.key).toBe("tenant-1");
   });
 
   it("dispatches due retries and records the queued event", async () => {
@@ -92,6 +97,7 @@ describe("workers-warpstream state backend", () => {
         createdAt: "1711540800000",
         dispatchKind: "initial",
       }),
+      key: "tenant-1",
       dispatchKind: "retry",
     };
     const storage = createStorageMock({
@@ -112,9 +118,15 @@ describe("workers-warpstream state backend", () => {
     });
     expect(producer.send).toHaveBeenCalledTimes(1);
     expect(storage.append).toHaveBeenCalledTimes(1);
+    const sendCall = vi.mocked(producer.send).mock.calls[0] as
+      | [{ messages: Array<{ key?: string | Buffer | null }> }]
+      | undefined;
+    const producedMessage = sendCall?.[0]?.messages[0];
+    expect(producedMessage?.key).toBe("tenant-1");
     const event = vi.mocked(storage.append).mock.calls[0]?.[0]?.[0];
     expect(event?.type).toBe("job_enqueued");
     expect(event?.attempt).toBe(2);
+    expect(event?.key).toBe("tenant-1");
   });
 
   it("converts managed queue failures into retry state instead of rethrowing", async () => {
@@ -190,5 +202,75 @@ describe("workers-warpstream state backend", () => {
       "attempt_failed",
       "retry_scheduled",
     ]);
+  });
+
+  it("rethrows managed queue failures that have no retry or dead-letter policy", async () => {
+    const { router, procedure } = init();
+    const storage = createStorageMock();
+    const messageHeaders = buildQueueHeaders({
+      jobId: "job_2",
+      attempt: 1,
+      queueName: "uploads",
+      createdAt: Date.now().toString(),
+      dispatchKind: "initial",
+    });
+    const consumer = {
+      connect: vi.fn(async () => undefined),
+      subscribe: vi.fn(async () => undefined),
+      disconnect: vi.fn(async () => undefined),
+      run: vi.fn(async ({ eachMessage }: { eachMessage: (payload: {
+        topic: string;
+        partition: number;
+        message: {
+          offset: string;
+          key: Buffer;
+          value: Buffer;
+          headers: Record<string, string>;
+        };
+      }) => Promise<void> }) => {
+        await eachMessage({
+          topic: "process-upload",
+          partition: 0,
+          message: {
+            offset: "1",
+            key: Buffer.from("tenant-2"),
+            value: Buffer.from(JSON.stringify({ fileId: "file_2" })),
+            headers: messageHeaders,
+          },
+        });
+      }),
+    };
+    const kafka = {
+      consumer: () => consumer,
+    } as unknown as import("kafkajs").Kafka;
+
+    const workerRouter = router({
+      "process-upload": procedure
+        .input({ payload: z.object({ fileId: z.string() }) })
+        .queue(
+          {
+            name: "uploads",
+          },
+          async () => {
+            throw new Error("boom");
+          },
+        ),
+    });
+
+    await expect(
+      createWorker(workerRouter, {
+        kafka,
+        groupId: "workers",
+        storage,
+      }),
+    ).rejects.toThrow("boom");
+
+    expect(storage.append).toHaveBeenCalledTimes(2);
+    const eventTypes = vi
+      .mocked(storage.append)
+      .mock.calls.map((call: [QueueJobEvent[]]) => call[0][0]?.type);
+    expect(eventTypes).toEqual(["attempt_started", "attempt_failed"]);
+    const failedEvent = vi.mocked(storage.append).mock.calls[1]?.[0]?.[0];
+    expect(failedEvent?.key).toBe("tenant-2");
   });
 });

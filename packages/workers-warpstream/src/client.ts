@@ -73,6 +73,7 @@ class WarpStreamJobClient<TRouter extends WorkerRouter<any>> implements JobClien
     const createdAtIso = new Date(Number.parseInt(createdAtMs, 10)).toISOString();
     const jobId = createJobId();
     const queueName = procedure.queueConfig?.name ?? procedure.queue ?? jobName;
+    const partitionKey = options?.key;
 
     const managedHeaders = buildQueueHeaders(
       {
@@ -88,7 +89,7 @@ class WarpStreamJobClient<TRouter extends WorkerRouter<any>> implements JobClien
     const { topic, value } = buildMessage(jobName, payload, this.routing);
     const kafkaMessage: Message = {
       value,
-      key: options?.key ?? null,
+      key: partitionKey ?? null,
       headers: managedHeaders as IHeaders,
     };
 
@@ -113,6 +114,7 @@ class WarpStreamJobClient<TRouter extends WorkerRouter<any>> implements JobClien
             payload,
             queue: procedure.queueConfig,
             headers: managedHeaders,
+            key: partitionKey,
             dispatchKind: "initial",
           },
         ]);
@@ -187,6 +189,7 @@ export async function dispatchDueJobs(
           messages: [
             {
               value,
+              key: dueJob.key ?? null,
               headers: headers as IHeaders,
             },
           ],
@@ -210,6 +213,7 @@ export async function dispatchDueJobs(
                 payload: dueJob.payload,
                 queue: dueJob.queue,
                 headers,
+                key: dueJob.key,
                 dispatchKind: "retry" as const,
               }
             : {
@@ -226,6 +230,7 @@ export async function dispatchDueJobs(
                 payload: dueJob.payload,
                 queue: dueJob.queue,
                 headers,
+                key: dueJob.key,
                 dispatchKind: "redrive" as const,
               };
 

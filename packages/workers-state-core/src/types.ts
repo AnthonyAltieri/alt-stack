@@ -60,6 +60,7 @@ export interface DeadLetterReason {
 export type QueueJobState =
   | "queued"
   | "running"
+  | "failed"
   | "succeeded"
   | "retry_scheduled"
   | "dead_letter"
@@ -69,6 +70,7 @@ export interface QueueEventContext {
   payload: unknown;
   queue: NormalizedQueueDefinition;
   headers: Record<string, string>;
+  key?: string;
   dispatchKind: DispatchKind;
 }
 
@@ -195,6 +197,7 @@ export interface DueDispatch {
   payload: unknown;
   queue: NormalizedQueueDefinition;
   headers: Record<string, string>;
+  key?: string;
   dispatchKind: DispatchKind;
   redriveId?: string;
 }

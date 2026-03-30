@@ -22,10 +22,12 @@ CREATE TABLE IF NOT EXISTS ${tables.events} (
   job_name String,
   queue_name String,
   attempt UInt16,
+  next_attempt Nullable(UInt16),
   state LowCardinality(String),
   scheduled_at Nullable(DateTime64(3, 'UTC')),
   dispatch_kind LowCardinality(String),
   redrive_id Nullable(String),
+  partition_key Nullable(String),
   payload_json String,
   queue_json String,
   headers_json String,
@@ -49,6 +51,7 @@ CREATE TABLE IF NOT EXISTS ${tables.current} (
   scheduled_at Nullable(DateTime64(3, 'UTC')),
   dispatch_kind LowCardinality(String),
   redrive_id Nullable(String),
+  partition_key Nullable(String),
   payload_json String,
   queue_json String,
   headers_json String,
@@ -56,6 +59,18 @@ CREATE TABLE IF NOT EXISTS ${tables.current} (
   dead_letter_reason_json String
 ) ENGINE = ReplacingMergeTree(updated_at)
 ORDER BY (queue_name, job_id)
+    `.trim(),
+    `
+ALTER TABLE ${tables.events}
+ADD COLUMN IF NOT EXISTS next_attempt Nullable(UInt16)
+    `.trim(),
+    `
+ALTER TABLE ${tables.events}
+ADD COLUMN IF NOT EXISTS partition_key Nullable(String)
+    `.trim(),
+    `
+ALTER TABLE ${tables.current}
+ADD COLUMN IF NOT EXISTS partition_key Nullable(String)
     `.trim(),
   ];
 }

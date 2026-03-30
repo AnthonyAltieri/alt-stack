@@ -21,6 +21,7 @@ export function reduceQueueJobEvent(
     payload: event.payload,
     queue: event.queue,
     headers: event.headers,
+    key: event.key,
     dispatchKind: event.dispatchKind,
   };
 
@@ -48,7 +49,7 @@ export function reduceQueueJobEvent(
     case "attempt_failed":
       return {
         ...base,
-        state: previous?.state === "dead_letter" ? "dead_letter" : "running",
+        state: "failed",
         lastError: event.error,
         redriveId: event.redriveId,
       };

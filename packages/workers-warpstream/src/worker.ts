@@ -114,6 +114,7 @@ export async function createWorker<TCustomContext extends object = Record<string
       const dispatchKind = parsedHeaders?.dispatchKind ?? "initial";
       const queueName = queueConfig?.name ?? parsedHeaders?.queueName ?? procedure.queue ?? topic;
       const createdAtIso = resolveCreatedAtIso(metricCreatedAt);
+      const partitionKey = normalizeMessageKey(message.key);
       const normalizedHeaders = buildQueueHeaders(
         {
           jobId,
@@ -171,6 +172,7 @@ export async function createWorker<TCustomContext extends object = Record<string
             payload: jobInfo.payload,
             queue: queueConfig,
             headers: normalizedHeaders,
+            key: partitionKey,
             dispatchKind,
             scheduledAt: parsedHeaders?.scheduledAt,
             redriveId: parsedHeaders?.redriveId,
@@ -196,6 +198,7 @@ export async function createWorker<TCustomContext extends object = Record<string
                 payload: jobInfo.payload,
                 queue: queueConfig,
                 headers: normalizedHeaders,
+                key: partitionKey,
                 dispatchKind,
                 scheduledAt: parsedHeaders?.scheduledAt,
                 redriveId: parsedHeaders?.redriveId,
@@ -258,6 +261,7 @@ export async function createWorker<TCustomContext extends object = Record<string
             payload: jobInfo.payload,
             queue: queueConfig,
             headers: normalizedHeaders,
+            key: partitionKey,
             dispatchKind,
             scheduledAt: parsedHeaders?.scheduledAt,
             redriveId: parsedHeaders?.redriveId,
@@ -284,6 +288,7 @@ export async function createWorker<TCustomContext extends object = Record<string
               payload: jobInfo.payload,
               queue: queueConfig,
               headers: normalizedHeaders,
+              key: partitionKey,
               dispatchKind: "retry",
               scheduledAt: action.retryAt,
               redriveId: parsedHeaders?.redriveId,
@@ -305,6 +310,7 @@ export async function createWorker<TCustomContext extends object = Record<string
               payload: jobInfo.payload,
               queue: queueConfig,
               headers: normalizedHeaders,
+              key: partitionKey,
               dispatchKind,
               scheduledAt: parsedHeaders?.scheduledAt,
               redriveId: parsedHeaders?.redriveId,
@@ -319,6 +325,9 @@ export async function createWorker<TCustomContext extends object = Record<string
         endSpanWithError(span, normalizedError);
         span?.end();
         await options.onError?.(normalizedError, baseCtx);
+        if (action.type === "failure") {
+          throw normalizedError;
+        }
       }
     },
   });
@@ -528,6 +537,13 @@ function toStringHeaders(
     normalized[key] = Buffer.isBuffer(value) ? value.toString() : String(value);
   }
   return normalized;
+}
+
+function normalizeMessageKey(
+  key: KafkaMessage["key"],
+): string | undefined {
+  if (!key) return undefined;
+  return Buffer.isBuffer(key) ? key.toString() : String(key);
 }
 
 function resolveCreatedAtIso(createdAtHeader: string): string {

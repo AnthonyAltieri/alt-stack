@@ -80,4 +80,37 @@ describe("workers-state-core reducer", () => {
     expect(history?.state?.state).toBe("dead_letter");
     expect(history?.state?.deadLetterReason?.code).toBe("max_retries_exceeded");
   });
+
+  it("marks standalone attempt failures as failed", () => {
+    const jobId = createJobId();
+    const queue = normalizeQueueDefinition("uploads");
+    const headers = buildQueueHeaders({
+      jobId,
+      attempt: 1,
+      queueName: queue.name,
+      createdAt: "2026-03-27T12:00:00.000Z",
+      dispatchKind: "initial",
+    });
+
+    const history = buildQueueJobHistory([
+      {
+        eventId: "evt_1",
+        type: "attempt_failed",
+        occurredAt: "2026-03-27T12:00:01.000Z",
+        createdAt: "2026-03-27T12:00:00.000Z",
+        jobId,
+        jobName: "process-upload",
+        queueName: queue.name,
+        attempt: 1,
+        payload: { fileId: "file_1" },
+        queue,
+        headers,
+        dispatchKind: "initial",
+        error: { name: "Error", message: "boom" },
+      },
+    ]);
+
+    expect(history?.state?.state).toBe("failed");
+    expect(history?.state?.lastError?.message).toBe("boom");
+  });
 });

@@ -34,10 +34,12 @@ interface ClickHouseEventRow {
   job_name: string;
   queue_name: string;
   attempt: number;
+  next_attempt?: number | null;
   state: string;
   scheduled_at: string | null;
   dispatch_kind: string;
   redrive_id: string | null;
+  partition_key?: string | null;
   payload_json: string;
   queue_json: string;
   headers_json: string;
@@ -58,6 +60,7 @@ interface ClickHouseCurrentRow {
   scheduled_at: string | null;
   dispatch_kind: string;
   redrive_id: string | null;
+  partition_key?: string | null;
   payload_json: string;
   queue_json: string;
   headers_json: string;
@@ -207,6 +210,7 @@ FORMAT ${JSON_FORMAT}
         payload: snapshot.payload,
         queue: snapshot.queue,
         headers: snapshot.headers,
+        key: snapshot.key,
         dispatchKind: snapshot.dispatchKind,
         redriveId: snapshot.redriveId,
       };
@@ -241,6 +245,7 @@ FORMAT ${JSON_FORMAT}
       payload: currentState.payload,
       queue: currentState.queue,
       headers: currentState.headers,
+      key: currentState.key,
       dispatchKind: "redrive",
     };
 
@@ -324,15 +329,19 @@ FORMAT ${JSON_FORMAT}
       job_name: event.jobName,
       queue_name: event.queueName,
       attempt: event.attempt,
+      next_attempt: event.type === "retry_scheduled" ? event.nextAttempt : null,
       state: this.resolveState(event),
       scheduled_at: this.resolveScheduledAt(event),
       dispatch_kind: event.dispatchKind,
       redrive_id: event.redriveId ?? null,
+      partition_key: event.key ?? null,
       payload_json: JSON.stringify(event.payload),
       queue_json: JSON.stringify(event.queue),
       headers_json: JSON.stringify(event.headers),
       error_json: JSON.stringify("error" in event ? event.error : null),
-      dead_letter_reason_json: JSON.stringify("reason" in event ? event.reason : null),
+      dead_letter_reason_json: JSON.stringify(
+        event.type === "moved_to_dlq" ? event.reason : null,
+      ),
       requested_by: event.type === "redrive_requested" ? event.requestedBy : null,
       requested_reason: event.type === "redrive_requested" ? event.reason ?? null : null,
     };
@@ -350,11 +359,14 @@ FORMAT ${JSON_FORMAT}
       scheduled_at: this.resolveScheduledAt(event),
       dispatch_kind: event.dispatchKind,
       redrive_id: event.redriveId ?? null,
+      partition_key: event.key ?? null,
       payload_json: JSON.stringify(event.payload),
       queue_json: JSON.stringify(event.queue),
       headers_json: JSON.stringify(event.headers),
       error_json: JSON.stringify("error" in event ? event.error : null),
-      dead_letter_reason_json: JSON.stringify("reason" in event ? event.reason : null),
+      dead_letter_reason_json: JSON.stringify(
+        event.type === "moved_to_dlq" ? event.reason : null,
+      ),
     };
   }
 
@@ -369,6 +381,7 @@ FORMAT ${JSON_FORMAT}
       attempt: row.attempt,
       scheduledAt: row.scheduled_at ?? undefined,
       redriveId: row.redrive_id ?? undefined,
+      key: row.partition_key ?? undefined,
       payload: JSON.parse(row.payload_json),
       queue: JSON.parse(row.queue_json),
       headers: JSON.parse(row.headers_json),
@@ -393,7 +406,7 @@ FORMAT ${JSON_FORMAT}
           ...common,
           type: "retry_scheduled",
           error: JSON.parse(row.error_json),
-          nextAttempt: row.attempt,
+          nextAttempt: row.next_attempt ?? row.attempt + 1,
           retryAt: row.scheduled_at ?? row.event_time,
         };
       case "moved_to_dlq":
@@ -434,12 +447,13 @@ FORMAT ${JSON_FORMAT}
       updatedAt: row.updated_at,
       scheduledAt: row.scheduled_at ?? undefined,
       redriveId: row.redrive_id ?? undefined,
+      key: row.partition_key ?? undefined,
       payload: JSON.parse(row.payload_json),
       queue,
       headers,
       dispatchKind: row.dispatch_kind as QueueJobStateSnapshot["dispatchKind"],
-      lastError: JSON.parse(row.error_json),
-      deadLetterReason: JSON.parse(row.dead_letter_reason_json),
+      lastError: parseNullableJson(row.error_json),
+      deadLetterReason: parseNullableJson(row.dead_letter_reason_json),
     };
   }
 
@@ -468,6 +482,11 @@ FORMAT ${JSON_FORMAT}
 
 export function createClickHouseStorage(options: ClickHouseStorageOptions): Storage {
   return new ClickHouseStorage(options);
+}
+
+function parseNullableJson<T>(value: string): T | undefined {
+  const parsed = JSON.parse(value) as T | null;
+  return parsed ?? undefined;
 }
 
 function reduceRedriveRows(rows: ClickHouseRedriveRow[]): RedriveRecord[] {
