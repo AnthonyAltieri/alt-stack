@@ -846,6 +846,9 @@ importers:
         specifier: workspace:*
         version: link:../workers-core
     devDependencies:
+      '@alt-stack/workers-state-clickhouse':
+        specifier: workspace:*
+        version: link:../workers-state-clickhouse
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0

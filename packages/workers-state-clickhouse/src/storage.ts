@@ -323,15 +323,15 @@ FORMAT ${JSON_FORMAT}
     return {
       event_id: event.eventId,
       event_type: event.type,
-      event_time: event.occurredAt,
-      created_at: event.createdAt,
+      event_time: toClickHouseDateTime(event.occurredAt),
+      created_at: toClickHouseDateTime(event.createdAt),
       job_id: event.jobId,
       job_name: event.jobName,
       queue_name: event.queueName,
       attempt: event.attempt,
       next_attempt: event.type === "retry_scheduled" ? event.nextAttempt : null,
       state: this.resolveState(event),
-      scheduled_at: this.resolveScheduledAt(event),
+      scheduled_at: toClickHouseNullableDateTime(this.resolveScheduledAt(event)),
       dispatch_kind: event.dispatchKind,
       redrive_id: event.redriveId ?? null,
       partition_key: event.key ?? null,
@@ -352,11 +352,11 @@ FORMAT ${JSON_FORMAT}
       job_id: event.jobId,
       queue_name: event.queueName,
       job_name: event.jobName,
-      created_at: event.createdAt,
-      updated_at: event.occurredAt,
+      created_at: toClickHouseDateTime(event.createdAt),
+      updated_at: toClickHouseDateTime(event.occurredAt),
       state: this.resolveState(event),
       attempt: this.resolveAttempt(event),
-      scheduled_at: this.resolveScheduledAt(event),
+      scheduled_at: toClickHouseNullableDateTime(this.resolveScheduledAt(event)),
       dispatch_kind: event.dispatchKind,
       redrive_id: event.redriveId ?? null,
       partition_key: event.key ?? null,
@@ -373,13 +373,13 @@ FORMAT ${JSON_FORMAT}
   private fromEventRow(row: ClickHouseEventRow): QueueJobEvent {
     const common = {
       eventId: row.event_id,
-      occurredAt: row.event_time,
-      createdAt: row.created_at,
+      occurredAt: toIsoDateTime(row.event_time),
+      createdAt: toIsoDateTime(row.created_at),
       jobId: row.job_id,
       jobName: row.job_name,
       queueName: row.queue_name,
       attempt: row.attempt,
-      scheduledAt: row.scheduled_at ?? undefined,
+      scheduledAt: row.scheduled_at ? toIsoDateTime(row.scheduled_at) : undefined,
       redriveId: row.redrive_id ?? undefined,
       key: row.partition_key ?? undefined,
       payload: JSON.parse(row.payload_json),
@@ -407,7 +407,9 @@ FORMAT ${JSON_FORMAT}
           type: "retry_scheduled",
           error: JSON.parse(row.error_json),
           nextAttempt: row.next_attempt ?? row.attempt + 1,
-          retryAt: row.scheduled_at ?? row.event_time,
+          retryAt: row.scheduled_at
+            ? toIsoDateTime(row.scheduled_at)
+            : toIsoDateTime(row.event_time),
         };
       case "moved_to_dlq":
         return {
@@ -443,9 +445,9 @@ FORMAT ${JSON_FORMAT}
       queueName: row.queue_name,
       state: row.state as QueueJobStateSnapshot["state"],
       attempt: row.attempt,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      scheduledAt: row.scheduled_at ?? undefined,
+      createdAt: toIsoDateTime(row.created_at),
+      updatedAt: toIsoDateTime(row.updated_at),
+      scheduledAt: row.scheduled_at ? toIsoDateTime(row.scheduled_at) : undefined,
       redriveId: row.redrive_id ?? undefined,
       key: row.partition_key ?? undefined,
       payload: JSON.parse(row.payload_json),
@@ -487,6 +489,25 @@ export function createClickHouseStorage(options: ClickHouseStorageOptions): Stor
 function parseNullableJson<T>(value: string): T | undefined {
   const parsed = JSON.parse(value) as T | null;
   return parsed ?? undefined;
+}
+
+function toClickHouseNullableDateTime(value: string | null): string | null {
+  return value ? toClickHouseDateTime(value) : null;
+}
+
+function toClickHouseDateTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toISOString().replace("T", " ").replace("Z", "");
+}
+
+function toIsoDateTime(value: string): string {
+  const normalized = value.includes("T") ? value : `${value.replace(" ", "T")}Z`;
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? value : date.toISOString();
 }
 
 function reduceRedriveRows(rows: ClickHouseRedriveRow[]): RedriveRecord[] {

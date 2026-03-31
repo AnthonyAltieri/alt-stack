@@ -56,6 +56,7 @@ describe("ClickHouseStorage", () => {
     const secondInsertCall = fetchMock.mock.calls[1] as unknown as [unknown];
     const firstBody = String(firstInsertCall[1]?.body);
     expect(firstBody).toContain("\"event_type\":\"job_enqueued\"");
+    expect(firstBody).toContain("\"event_time\":\"2026-03-27 12:00:00.000\"");
     const secondUrl = String(secondInsertCall[0]);
     expect(secondUrl).toContain("queue_state_current");
   });
@@ -67,8 +68,8 @@ describe("ClickHouseStorage", () => {
           {
             event_id: "evt_1",
             event_type: "job_enqueued",
-            event_time: "2026-03-27T12:00:00.000Z",
-            created_at: "2026-03-27T12:00:00.000Z",
+            event_time: "2026-03-27 12:00:00.000",
+            created_at: "2026-03-27 12:00:00.000",
             job_id: "job_1",
             job_name: "process-upload",
             queue_name: "uploads",
@@ -90,15 +91,15 @@ describe("ClickHouseStorage", () => {
           {
             event_id: "evt_2",
             event_type: "retry_scheduled",
-            event_time: "2026-03-27T12:00:01.000Z",
-            created_at: "2026-03-27T12:00:00.000Z",
+            event_time: "2026-03-27 12:00:01.000",
+            created_at: "2026-03-27 12:00:00.000",
             job_id: "job_1",
             job_name: "process-upload",
             queue_name: "uploads",
             attempt: 1,
             next_attempt: 2,
             state: "retry_scheduled",
-            scheduled_at: "2026-03-27T12:00:05.000Z",
+            scheduled_at: "2026-03-27 12:00:05.000",
             dispatch_kind: "retry",
             redrive_id: null,
             partition_key: "tenant-1",
@@ -125,6 +126,10 @@ describe("ClickHouseStorage", () => {
 
     expect(retryEvent?.type).toBe("retry_scheduled");
     expect(retryEvent && "nextAttempt" in retryEvent ? retryEvent.nextAttempt : null).toBe(2);
+    expect(history?.events[0]?.occurredAt).toBe("2026-03-27T12:00:00.000Z");
+    expect(retryEvent && "retryAt" in retryEvent ? retryEvent.retryAt : null).toBe(
+      "2026-03-27T12:00:05.000Z",
+    );
     expect(history?.state?.attempt).toBe(2);
   });
 

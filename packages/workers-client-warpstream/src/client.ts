@@ -104,7 +104,7 @@ class WarpStreamWorkerClient<T extends JobsMap> implements WorkerClient<T> {
       await this._producer.send({
         topic,
         messages: [kafkaMessage],
-        compression: CompressionTypes.LZ4,
+        compression: CompressionTypes.None,
       });
 
       return { id: jobId };
@@ -168,7 +168,7 @@ class WarpStreamWorkerClient<T extends JobsMap> implements WorkerClient<T> {
       await this._producer.send({
         topic,
         messages: kafkaMessages,
-        compression: CompressionTypes.LZ4,
+        compression: CompressionTypes.None,
       });
 
       return results;

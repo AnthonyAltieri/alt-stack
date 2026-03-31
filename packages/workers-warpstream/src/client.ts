@@ -97,7 +97,7 @@ class WarpStreamJobClient<TRouter extends WorkerRouter<any>> implements JobClien
       await this.producer.send({
         topic,
         messages: [kafkaMessage],
-        compression: CompressionTypes.LZ4,
+        compression: CompressionTypes.None,
       });
 
       if (this.options.storage && procedure.type === "queue" && procedure.queueConfig) {
@@ -193,7 +193,7 @@ export async function dispatchDueJobs(
               headers: headers as IHeaders,
             },
           ],
-          compression: CompressionTypes.LZ4,
+          compression: CompressionTypes.None,
         });
 
         const createdAtIso = resolveCreatedAtIso(headers[JOB_CREATED_AT_HEADER]);
