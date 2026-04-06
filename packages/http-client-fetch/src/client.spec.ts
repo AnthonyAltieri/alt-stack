@@ -555,12 +555,19 @@ describe("FetchApiClient", () => {
       }
     });
 
-    it("returns undefined for empty responses with content-length 0", async () => {
+    it("returns undefined for content-length 0 regardless of parsed body content", async () => {
+      const json = vi.fn().mockResolvedValue({ ignored: true });
+      const text = vi.fn().mockResolvedValue("ignored");
+
       globalThis.fetch = vi.fn().mockResolvedValue({
         status: 200,
         statusText: "OK",
-        headers: new Headers({ "content-length": "0" }),
-        text: () => Promise.resolve(""),
+        headers: new Headers({
+          "content-length": "0",
+          "content-type": "application/json",
+        }),
+        json,
+        text,
       });
 
       const client = createApiClient({
@@ -574,6 +581,8 @@ describe("FetchApiClient", () => {
       if (result.success) {
         expect(result.body).toBeUndefined();
       }
+      expect(json).not.toHaveBeenCalled();
+      expect(text).not.toHaveBeenCalled();
     });
   });
 
