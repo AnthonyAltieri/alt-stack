@@ -555,11 +555,11 @@ describe("FetchApiClient", () => {
       }
     });
 
-    it("returns undefined for empty responses with content-type 0", async () => {
+    it("returns undefined for empty responses with content-length 0", async () => {
       globalThis.fetch = vi.fn().mockResolvedValue({
         status: 200,
         statusText: "OK",
-        headers: new Headers({ "content-type": "0" }),
+        headers: new Headers({ "content-length": "0" }),
         text: () => Promise.resolve(""),
       });
 

@@ -11,6 +11,7 @@ export interface FetchExecutorOptions {
 
 async function parseResponseData(response: Response): Promise<unknown> {
   const contentType = response.headers.get("content-type")?.trim();
+  const contentLength = response.headers.get("content-length")?.trim();
 
   let data: unknown;
   if (contentType?.includes("application/json")) {
@@ -23,7 +24,7 @@ async function parseResponseData(response: Response): Promise<unknown> {
     data = await response.text();
   }
 
-  if (contentType === "0" && data === "") {
+  if (contentLength === "0" && data === "") {
     return undefined;
   }
 
