@@ -9,6 +9,27 @@ export interface FetchExecutorOptions {
   fetchOptions?: Omit<RequestInit, "method" | "headers" | "body" | "signal">;
 }
 
+async function parseResponseData(response: Response): Promise<unknown> {
+  const contentType = response.headers.get("content-type")?.trim();
+
+  let data: unknown;
+  if (contentType?.includes("application/json")) {
+    try {
+      data = await response.json();
+    } catch {
+      data = await response.text();
+    }
+  } else {
+    data = await response.text();
+  }
+
+  if (contentType === "0" && data === "") {
+    return undefined;
+  }
+
+  return data;
+}
+
 /**
  * HTTP executor using native fetch API.
  * Exposes the raw Response object for advanced use cases.
@@ -37,18 +58,7 @@ export class FetchExecutor implements HttpExecutor<Response> {
       }
 
       const response = await fetch(request.url, fetchOptions);
-
-      let data: unknown;
-      const contentType = response.headers.get("content-type");
-      if (contentType?.includes("application/json")) {
-        try {
-          data = await response.json();
-        } catch {
-          data = await response.text();
-        }
-      } else {
-        data = await response.text();
-      }
+      const data = await parseResponseData(response);
 
       return {
         status: response.status,
@@ -74,4 +84,3 @@ export class FetchExecutor implements HttpExecutor<Response> {
     }
   }
 }
-

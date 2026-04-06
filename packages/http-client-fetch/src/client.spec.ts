@@ -554,6 +554,27 @@ describe("FetchApiClient", () => {
         expect(result.body).toBe("Hello, World!");
       }
     });
+
+    it("returns undefined for empty responses with content-type 0", async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        statusText: "OK",
+        headers: new Headers({ "content-type": "0" }),
+        text: () => Promise.resolve(""),
+      });
+
+      const client = createApiClient({
+        baseUrl: "https://api.example.com",
+        Request: { "/empty": { GET: {} } },
+        Response: { "/empty": { GET: { "200": z.undefined() } } },
+      });
+      const result = await client.get("/empty", {});
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.body).toBeUndefined();
+      }
+    });
   });
 
   describe("retry logic", () => {
