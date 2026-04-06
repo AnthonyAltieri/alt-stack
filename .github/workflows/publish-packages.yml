@@ -49,6 +49,22 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install nested workspace dependencies
+        shell: bash
+        run: |
+          mapfile -t workspaces < <(find . -mindepth 2 -name pnpm-workspace.yaml ! -path "./pnpm-workspace.yaml")
+
+          if [ ${#workspaces[@]} -eq 0 ]; then
+            echo "No nested pnpm workspaces found"
+            exit 0
+          fi
+
+          for workspace_file in "${workspaces[@]}"; do
+            workspace_dir=$(dirname "$workspace_file")
+            echo "📦 Installing nested workspace dependencies in ${workspace_dir}"
+            pnpm install --dir "$workspace_dir" --frozen-lockfile
+          done
+
       - name: Clean and rebuild all packages
         run: |
           echo "🧹 Cleaning all dist directories..."
