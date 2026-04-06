@@ -16,19 +16,15 @@ async function parseResponseData(response: Response): Promise<unknown> {
   }
 
   const contentType = response.headers.get("content-type")?.trim();
-
-  let data: unknown;
   if (contentType?.includes("application/json")) {
     try {
-      data = await response.json();
+      return await response.json();
     } catch {
-      data = await response.text();
+      return await response.text();
     }
-  } else {
-    data = await response.text();
   }
 
-  return data;
+  return await response.text();
 }
 
 /**
