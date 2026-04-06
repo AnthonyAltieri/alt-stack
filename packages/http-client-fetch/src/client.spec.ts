@@ -555,7 +555,7 @@ describe("FetchApiClient", () => {
       }
     });
 
-    it("returns undefined for content-length 0 regardless of parsed body content", async () => {
+    it("returns null for content-length 0 regardless of parsed body content", async () => {
       const json = vi.fn().mockResolvedValue({ ignored: true });
       const text = vi.fn().mockResolvedValue("ignored");
 
@@ -573,13 +573,13 @@ describe("FetchApiClient", () => {
       const client = createApiClient({
         baseUrl: "https://api.example.com",
         Request: { "/empty": { GET: {} } },
-        Response: { "/empty": { GET: { "200": z.undefined() } } },
+        Response: { "/empty": { GET: { "200": z.null() } } },
       });
       const result = await client.get("/empty", {});
 
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.body).toBeUndefined();
+        expect(result.body).toBeNull();
       }
       expect(json).not.toHaveBeenCalled();
       expect(text).not.toHaveBeenCalled();

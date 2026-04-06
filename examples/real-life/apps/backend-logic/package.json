@@ -10,8 +10,9 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.0.0",
-    "@alt-stack/server-hono": "^0.0.1",
-    "@alt-stack/workers-client-warpstream": "^0.1.0",
+    "@alt-stack/server-hono": "^0.4.5",
+    "@alt-stack/workers-client-warpstream": "^0.1.2",
+    "@t3-oss/env-core": "^0.9.0",
     "@real-life/workers-sdk": "workspace:*",
     "hono": "^4.0.0",
     "ky": "^1.0.0",

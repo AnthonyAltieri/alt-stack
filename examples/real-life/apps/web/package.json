@@ -8,7 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
-    "@alt-stack/http-client-ky": "^0.0.1",
+    "@alt-stack/http-client-ky": "^0.0.4",
     "@real-life/backend-auth-sdk": "workspace:*",
     "@real-life/backend-logic-sdk": "workspace:*",
     "next": "^15.0.0",
