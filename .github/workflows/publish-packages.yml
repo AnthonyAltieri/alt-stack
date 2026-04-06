@@ -19,6 +19,9 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       has_packages: ${{ steps.set-matrix.outputs.has_packages }}
+      probe_package: ${{ steps.set-matrix.outputs.probe_package }}
+      first_publish_candidates: ${{ steps.set-matrix.outputs.first_publish_candidates }}
+      skipped_private_packages: ${{ steps.set-matrix.outputs.skipped_private_packages }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -171,26 +174,65 @@ jobs:
               } catch { return false; }
             });
 
+          function getPublishedVersions(pkgName) {
+            try {
+              const raw = execSync(`npm view "${pkgName}" versions --json`, {
+                encoding: 'utf-8',
+                stdio: ['pipe', 'pipe', 'pipe']
+              }).trim();
+
+              if (!raw) {
+                return { kind: 'published', versions: [] };
+              }
+
+              const parsed = JSON.parse(raw);
+
+              return {
+                kind: 'published',
+                versions: Array.isArray(parsed) ? parsed : [parsed]
+              };
+            } catch (error) {
+              const stderr = String(error.stderr || error.message || '');
+
+              if (stderr.includes('E404')) {
+                return { kind: 'not-found', versions: [] };
+              }
+
+              return { kind: 'error', error: stderr || String(error) };
+            }
+          }
+
           const matrix = [];
+          const firstPublishCandidates = [];
+          const skippedPrivatePackages = [];
 
           for (const dir of packageDirs) {
             const pkgJson = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf-8'));
             const pkgName = pkgJson.name;
             const localVersion = pkgJson.version;
 
-            // Check if this version exists on npm
-            let npmVersion = null;
-            try {
-              npmVersion = execSync(`npm view "${pkgName}@${localVersion}" version 2>/dev/null`, {
-                encoding: 'utf-8',
-                stdio: ['pipe', 'pipe', 'pipe']
-              }).trim();
-            } catch {
-              // Version doesn't exist on npm
+            if (pkgJson.private) {
+              console.log(`🔒 ${pkgName}@${localVersion} is private - skipping publish detection`);
+              skippedPrivatePackages.push({ name: pkgName, directory: dir, version: localVersion });
+              continue;
             }
 
-            if (!npmVersion) {
-              console.log(`📦 ${pkgName}@${localVersion} not on npm - will publish`);
+            const published = getPublishedVersions(pkgName);
+
+            if (published.kind === 'error') {
+              console.error(`✗ Failed to inspect ${pkgName} on npm`);
+              console.error(published.error);
+              process.exit(1);
+            }
+
+            if (published.kind === 'not-found') {
+              console.log(`⚠️ ${pkgName}@${localVersion} is not on npm yet - skipping automatic first publish`);
+              firstPublishCandidates.push({ name: pkgName, directory: dir, version: localVersion });
+              continue;
+            }
+
+            if (!published.versions.includes(localVersion)) {
+              console.log(`📦 ${pkgName}@${localVersion} missing from npm - will publish`);
               matrix.push({ name: pkgName, directory: dir, version: localVersion });
             } else {
               console.log(`✓ ${pkgName}@${localVersion} already on npm - skipping`);
@@ -200,10 +242,90 @@ jobs:
           console.log('\nPackages to publish:', JSON.stringify(matrix, null, 2));
           fs.appendFileSync(process.env.GITHUB_OUTPUT, `matrix=${JSON.stringify({ include: matrix })}\n`);
           fs.appendFileSync(process.env.GITHUB_OUTPUT, `has_packages=${matrix.length > 0}\n`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `probe_package=${matrix[0]?.name ?? ''}\n`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `first_publish_candidates=${JSON.stringify(firstPublishCandidates)}\n`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `skipped_private_packages=${JSON.stringify(skippedPrivatePackages)}\n`);
           EOF
 
-  publish:
+      - name: Summarize skipped packages
+        shell: bash
+        env:
+          FIRST_PUBLISH_CANDIDATES: ${{ steps.set-matrix.outputs.first_publish_candidates }}
+          SKIPPED_PRIVATE_PACKAGES: ${{ steps.set-matrix.outputs.skipped_private_packages }}
+        run: |
+          node << 'EOF'
+          const fs = require('fs');
+
+          const firstPublishCandidates = JSON.parse(process.env.FIRST_PUBLISH_CANDIDATES || '[]');
+          const skippedPrivatePackages = JSON.parse(process.env.SKIPPED_PRIVATE_PACKAGES || '[]');
+          const lines = [];
+
+          if (skippedPrivatePackages.length > 0) {
+            lines.push('### Skipped private packages');
+            lines.push('');
+            for (const pkg of skippedPrivatePackages) {
+              lines.push(`- ${pkg.name}@${pkg.version}`);
+            }
+            lines.push('');
+          }
+
+          if (firstPublishCandidates.length > 0) {
+            lines.push('### Skipped first-time publishes');
+            lines.push('');
+            lines.push('These packages are not on npm yet, so the workflow will not attempt an automatic first publish.');
+            lines.push('Bootstrap them manually after confirming the npm token has write access to the `@alt-stack` scope.');
+            lines.push('');
+            for (const pkg of firstPublishCandidates) {
+              lines.push(`- ${pkg.name}@${pkg.version}`);
+            }
+            lines.push('');
+          }
+
+          if (lines.length > 0) {
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${lines.join('\n')}\n`);
+          }
+          EOF
+
+  verify-publish-access:
     needs: detect-unpublished
+    if: needs.detect-unpublished.outputs.has_packages == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org/'
+
+      - name: Verify npm token can manage the package scope
+        shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          PROBE_PACKAGE: ${{ needs.detect-unpublished.outputs.probe_package }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "Error: NPM_TOKEN secret is required"
+            exit 1
+          fi
+
+          if [ -z "$PROBE_PACKAGE" ]; then
+            echo "No published package requires an npm access probe"
+            exit 0
+          fi
+
+          NPM_ACCOUNT="$(npm whoami)"
+          echo "Authenticated to npm as ${NPM_ACCOUNT}"
+
+          if npm access list collaborators "$PROBE_PACKAGE" --json >/dev/null; then
+            echo "✓ Verified npm access for ${PROBE_PACKAGE}"
+            exit 0
+          fi
+
+          echo "::error::NPM account ${NPM_ACCOUNT} cannot manage ${PROBE_PACKAGE}. Update NPM_TOKEN with write access to the @alt-stack scope before rerunning this workflow."
+          exit 1
+
+  publish:
+    needs: [detect-unpublished, verify-publish-access]
     if: needs.detect-unpublished.outputs.has_packages == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -213,6 +335,7 @@ jobs:
       matrix: ${{ fromJson(needs.detect-unpublished.outputs.matrix) }}
     env:
       DRY_RUN: ${{ github.event.inputs.dry_run == 'true' }}
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -261,22 +384,16 @@ jobs:
             echo "No build script found for ${{ matrix.name }}, skipping build"
           fi
 
-      - name: Configure npm
-        if: env.DRY_RUN != 'true'
-        shell: bash
-        run: |
-          if [ -z "${{ secrets.NPM_TOKEN }}" ]; then
-            echo "Error: NPM_TOKEN secret is required"
-            exit 1
-          fi
-          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
-
       - name: Publish package
         shell: bash
         run: |
           if [ "$DRY_RUN" == "true" ]; then
             echo "🧪 [DRY-RUN] Would publish ${{ matrix.name }}@${{ matrix.version }}"
           else
+            if [ -z "$NODE_AUTH_TOKEN" ]; then
+              echo "Error: NPM_TOKEN secret is required"
+              exit 1
+            fi
             echo "Publishing ${{ matrix.name }}@${{ matrix.version }}..."
             cd "${{ matrix.directory }}"
             pnpm publish --access public --no-git-checks
