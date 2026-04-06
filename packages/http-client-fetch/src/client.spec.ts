@@ -554,6 +554,36 @@ describe("FetchApiClient", () => {
         expect(result.body).toBe("Hello, World!");
       }
     });
+
+    it("returns undefined for content-length 0 regardless of parsed body content", async () => {
+      const json = vi.fn().mockResolvedValue({ ignored: true });
+      const text = vi.fn().mockResolvedValue("ignored");
+
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        statusText: "OK",
+        headers: new Headers({
+          "content-length": "0",
+          "content-type": "application/json",
+        }),
+        json,
+        text,
+      });
+
+      const client = createApiClient({
+        baseUrl: "https://api.example.com",
+        Request: { "/empty": { GET: {} } },
+        Response: { "/empty": { GET: { "200": z.undefined() } } },
+      });
+      const result = await client.get("/empty", {});
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.body).toBeUndefined();
+      }
+      expect(json).not.toHaveBeenCalled();
+      expect(text).not.toHaveBeenCalled();
+    });
   });
 
   describe("retry logic", () => {
