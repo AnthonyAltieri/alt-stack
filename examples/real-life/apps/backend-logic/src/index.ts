@@ -1,4 +1,13 @@
-import { createDocsRouter, createServer, init, router, ok, err, TaggedError } from "@alt-stack/server-hono";
+import {
+  createDocsRouter,
+  createServer,
+  init,
+  router,
+  ok,
+  err,
+  TaggedError,
+  type HonoBaseContext,
+} from "@alt-stack/server-hono";
 import { createWarpStreamClient } from "@alt-stack/workers-client-warpstream";
 import { serve } from "@hono/node-server";
 import type { Context } from "hono";
@@ -21,7 +30,7 @@ const TaskSchema = z.object({
   updatedAt: z.string().datetime(),
 });
 
-interface AppContext {
+interface AppContext extends HonoBaseContext {
   userId: string | null;
 }
 
@@ -285,7 +294,7 @@ const taskRouter = router<AppContext>({
 // Server
 // ============================================================================
 
-async function createContext(c: Context): Promise<AppContext> {
+async function createContext(c: Context): Promise<Omit<AppContext, "hono">> {
   const auth = c.req.header("Authorization");
   const userId = auth ? await validateToken(auth) : null;
   return { userId };

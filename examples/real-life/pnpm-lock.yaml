@@ -18,11 +18,14 @@ importers:
   apps/backend-auth:
     dependencies:
       '@alt-stack/server-hono':
-        specifier: ^0.0.1
-        version: 0.0.1(hono@4.10.7)(zod@4.1.13)
+        specifier: ^0.4.5
+        version: 0.4.5(hono@4.10.7)(zod@4.1.13)
       '@hono/node-server':
         specifier: ^1.0.0
         version: 1.19.6(hono@4.10.7)
+      '@t3-oss/env-core':
+        specifier: ^0.9.0
+        version: 0.9.2(typescript@5.9.3)(zod@4.1.13)
       hono:
         specifier: ^4.0.0
         version: 4.10.7
@@ -43,17 +46,20 @@ importers:
   apps/backend-logic:
     dependencies:
       '@alt-stack/server-hono':
-        specifier: ^0.0.1
-        version: 0.0.1(hono@4.10.7)(zod@4.1.13)
+        specifier: ^0.4.5
+        version: 0.4.5(hono@4.10.7)(zod@4.1.13)
       '@alt-stack/workers-client-warpstream':
-        specifier: ^0.1.0
-        version: 0.1.0(kafkajs@2.2.4)(zod@4.1.13)
+        specifier: ^0.1.2
+        version: 0.1.2(kafkajs@2.2.4)(zod@4.1.13)
       '@hono/node-server':
         specifier: ^1.0.0
         version: 1.19.6(hono@4.10.7)
       '@real-life/workers-sdk':
         specifier: workspace:*
         version: link:../../packages/workers-sdk
+      '@t3-oss/env-core':
+        specifier: ^0.9.0
+        version: 0.9.2(typescript@5.9.3)(zod@4.1.13)
       hono:
         specifier: ^4.0.0
         version: 4.10.7
@@ -77,8 +83,8 @@ importers:
   apps/web:
     dependencies:
       '@alt-stack/http-client-ky':
-        specifier: ^0.0.1
-        version: 0.0.1(zod@4.1.13)
+        specifier: ^0.0.4
+        version: 0.0.4(zod@4.1.13)
       '@real-life/backend-auth-sdk':
         specifier: workspace:*
         version: link:../../packages/backend-auth-sdk
@@ -114,8 +120,8 @@ importers:
   apps/workers:
     dependencies:
       '@alt-stack/workers-warpstream':
-        specifier: ^0.0.1
-        version: 0.0.1(kafkajs@2.2.4)(zod@4.1.13)
+        specifier: ^0.1.0
+        version: 0.1.0(kafkajs@2.2.4)(zod@4.1.13)
       kafkajs:
         specifier: ^2.0.0
         version: 2.2.4
@@ -171,45 +177,57 @@ importers:
 
 packages:
 
-  '@alt-stack/http-client-core@0.0.1':
-    resolution: {integrity: sha512-JDQV+K6WaF2TloPutKnM/8PKpP2GdVVrGTJeFK7/HDoqJUrMEYQ/HIoTCvER2zgZhncaIQQWR7NERZnhET0ReQ==}
+  '@alt-stack/http-client-core@0.0.4':
+    resolution: {integrity: sha512-hAZw7iu0iUOWFh2kLcL7dYLTaxZPKsMWuokpGNpxjn0ViqS0Sq5k6C9ywyr1mUFAjqLzxrBtYPuqITqraOKpgQ==}
     peerDependencies:
       zod: ^4.0.0
 
-  '@alt-stack/http-client-ky@0.0.1':
-    resolution: {integrity: sha512-MM+taMCdNXGLwX2K+nkoKfW8qrTTFJ9Jr//sS3oktbPsX79WNB2dcpGQpZE32dXmeB+gw0wqcRh0cmzkI3UV4A==}
+  '@alt-stack/http-client-ky@0.0.4':
+    resolution: {integrity: sha512-J7zwwVlbH1JiAZPjvofBnksKCDJEbrslrHuBLh/jiBlnYFCF7AFXE2/dNuQOimLHiv4m6HUtcrK6cP44Xd+72A==}
     peerDependencies:
       zod: ^4.0.0
 
-  '@alt-stack/server-core@0.0.1':
-    resolution: {integrity: sha512-3uqzGMNWdZ6euqHP4FnbeU9JWb4QlKnDjh8VIchbiuzK0BiREs/Xl0eDpZBY95g+A8ndoB3vU83sUNSlGQdCnA==}
+  '@alt-stack/result@0.1.4':
+    resolution: {integrity: sha512-yVA9A6umv2ucTPVnT/QC6p8MEj6XniAcm+HWk40+/hcO+LUyjlbHVQuR+lP5048/z6UjW31jJuXwavQpnCoW5w==}
     peerDependencies:
       zod: ^4.0.0
+    peerDependenciesMeta:
+      zod:
+        optional: true
 
-  '@alt-stack/server-hono@0.0.1':
-    resolution: {integrity: sha512-KhmsZwruWf3SBCuep6+1fg4nSnmemYxREpn+ENfxpbUgpZYIQpkB8AsNRR//47BVmdRsqhmDVuww+QAmnpnBrw==}
+  '@alt-stack/server-core@0.4.4':
+    resolution: {integrity: sha512-rTrwTmfE34YvwOxzm/SnkZGKLX8e3+g88uwo5YvCXC+oXalO+sxfOmE3jmdx3WVCdnurzOCvZ3gwQ34pmYkTPw==}
+    peerDependencies:
+      '@opentelemetry/api': ^1.0.0
+      zod: ^4.0.0
+    peerDependenciesMeta:
+      '@opentelemetry/api':
+        optional: true
+
+  '@alt-stack/server-hono@0.4.5':
+    resolution: {integrity: sha512-uaX9rm+1jxtx0r8T5a7eUmyknxZNYu3VEmc53ziWR+dVuKevpgOtRuOdYozsW32mzATN4D/6L66MrWg4e83duQ==}
     peerDependencies:
       hono: ^4.0.0
       zod: ^4.0.0
 
-  '@alt-stack/workers-client-core@0.1.0':
-    resolution: {integrity: sha512-OF9Oy/nw4hLBaVL0u85K/fK7oGGGWl5Xy81RmCxSAVkw3cuYSElxJCSyFz4YbeP0+Rpb5qjGd05xdyJgTWf24A==}
+  '@alt-stack/workers-client-core@0.2.1':
+    resolution: {integrity: sha512-/0+M/EOuAIFMP9tvRmiZWF74uLLM4l7X0V24zHAd3PFFLQLE9Rb+F2ropcTwCdOfD9rwDL8yF6Ik/ZtiPC9Pzg==}
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
 
-  '@alt-stack/workers-client-warpstream@0.1.0':
-    resolution: {integrity: sha512-qOMFKquuUFpqhSJRvBwhBNVErS8oVgvQQCRW0gkNljEGN0TbyCGC83qSV+1jS5VFR9Szwj7pw7cir7t2BCDaCg==}
+  '@alt-stack/workers-client-warpstream@0.1.2':
+    resolution: {integrity: sha512-AgOT8/alhae1FfqQSYAmWtTRE+Pk2NHHYCkI3KeAorSkjGyyZxkz5BaeJ9MTxFjpdnGTgn/NhqJRm/9Cc4iTkQ==}
     peerDependencies:
       kafkajs: ^2.0.0
       zod: ^3.25.0 || ^4.0.0
 
-  '@alt-stack/workers-core@0.2.0':
-    resolution: {integrity: sha512-7k1PdYuFVhMARcoxaikEgcrxAqGZFDdSWU1jmf0Rmd+/PQtox/jET75bsnIwB8GZyya3sGcRFkmmC0oTY08mhw==}
+  '@alt-stack/workers-core@0.6.0':
+    resolution: {integrity: sha512-0I2GafwDyu8je7EmQt4sJQFygpZFPLXE4vh8D5CrwwiaC1Iaicl3Bomuq9ZgWnipnMLnH42n/jnJCJ776gx8kA==}
     peerDependencies:
       zod: ^4.0.0
 
-  '@alt-stack/workers-warpstream@0.0.1':
-    resolution: {integrity: sha512-FORfYRGobj3+TyScedvaG0scLElhLV+WRIiFAYHTOnrTdqEQnB33eN+r7MoEPlij7I8pu31T4BdDalqMPaATGQ==}
+  '@alt-stack/workers-warpstream@0.1.0':
+    resolution: {integrity: sha512-VO5i7wbIzecJU+HUEiPfDgoaxN8A5pPM8Iyi2FhosX05cdNkwIQNrN1fE9NLCnxBnobIZMra60Zw2MsU1R+oqw==}
     peerDependencies:
       kafkajs: ^2.0.0
       zod: ^3.25.0 || ^4.0.0
@@ -618,6 +636,15 @@ packages:
   '@swc/helpers@0.5.15':
     resolution: {integrity: sha512-JQ5TuMi45Owi4/BIMAJBoSQoOJu12oOk/gADqlcUL9JEdHB8vyjUSsxqeNXnmXHjYKMi2WcYtezGEEhqUI/E2g==}
 
+  '@t3-oss/env-core@0.9.2':
+    resolution: {integrity: sha512-KgWXljUTHgO3o7GMZQPAD5+P+HqpauMNNHowlm7V2b9IeMitSUpNKwG6xQrup/xARWHTdxRVIl0mSI4wCevQhQ==}
+    peerDependencies:
+      typescript: '>=5.0.0'
+      zod: ^3.0.0
+    peerDependenciesMeta:
+      typescript:
+        optional: true
+
   '@types/node@20.19.25':
     resolution: {integrity: sha512-ZsJzA5thDQMSQO788d7IocwwQbI8B5OPzmqNvpf3NY/+MHDAS759Wo0gd2WQeXYt5AAAQjzcrTVC6SKCuYgoCQ==}
 
@@ -675,6 +702,7 @@ packages:
   next@15.5.6:
     resolution: {integrity: sha512-zTxsnI3LQo3c9HSdSf91O1jMNsEzIXDShXd4wVdg9y5shwLqBXi4ZtUUJyB86KGVSJLZx0PFONvO54aheGX8QQ==}
     engines: {node: ^18.18.0 || ^19.8.0 || >= 20.0.0}
+    deprecated: This version has a security vulnerability. Please upgrade to a patched version. See https://nextjs.org/blog/CVE-2025-66478 for more details.
     hasBin: true
     peerDependencies:
       '@opentelemetry/api': ^1.1.0
@@ -772,43 +800,51 @@ packages:
 
 snapshots:
 
-  '@alt-stack/http-client-core@0.0.1(zod@4.1.13)':
+  '@alt-stack/http-client-core@0.0.4(zod@4.1.13)':
     dependencies:
       zod: 4.1.13
 
-  '@alt-stack/http-client-ky@0.0.1(zod@4.1.13)':
+  '@alt-stack/http-client-ky@0.0.4(zod@4.1.13)':
     dependencies:
-      '@alt-stack/http-client-core': 0.0.1(zod@4.1.13)
+      '@alt-stack/http-client-core': 0.0.4(zod@4.1.13)
       ky: 1.14.0
       zod: 4.1.13
 
-  '@alt-stack/server-core@0.0.1(zod@4.1.13)':
-    dependencies:
+  '@alt-stack/result@0.1.4(zod@4.1.13)':
+    optionalDependencies:
       zod: 4.1.13
 
-  '@alt-stack/server-hono@0.0.1(hono@4.10.7)(zod@4.1.13)':
+  '@alt-stack/server-core@0.4.4(zod@4.1.13)':
     dependencies:
-      '@alt-stack/server-core': 0.0.1(zod@4.1.13)
+      '@alt-stack/result': 0.1.4(zod@4.1.13)
+      zod: 4.1.13
+
+  '@alt-stack/server-hono@0.4.5(hono@4.10.7)(zod@4.1.13)':
+    dependencies:
+      '@alt-stack/server-core': 0.4.4(zod@4.1.13)
       hono: 4.10.7
       zod: 4.1.13
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
 
-  '@alt-stack/workers-client-core@0.1.0(zod@4.1.13)':
+  '@alt-stack/workers-client-core@0.2.1(zod@4.1.13)':
     dependencies:
       zod: 4.1.13
 
-  '@alt-stack/workers-client-warpstream@0.1.0(kafkajs@2.2.4)(zod@4.1.13)':
+  '@alt-stack/workers-client-warpstream@0.1.2(kafkajs@2.2.4)(zod@4.1.13)':
     dependencies:
-      '@alt-stack/workers-client-core': 0.1.0(zod@4.1.13)
+      '@alt-stack/workers-client-core': 0.2.1(zod@4.1.13)
       kafkajs: 2.2.4
       zod: 4.1.13
 
-  '@alt-stack/workers-core@0.2.0(zod@4.1.13)':
+  '@alt-stack/workers-core@0.6.0(zod@4.1.13)':
     dependencies:
+      '@alt-stack/result': 0.1.4(zod@4.1.13)
       zod: 4.1.13
 
-  '@alt-stack/workers-warpstream@0.0.1(kafkajs@2.2.4)(zod@4.1.13)':
+  '@alt-stack/workers-warpstream@0.1.0(kafkajs@2.2.4)(zod@4.1.13)':
     dependencies:
-      '@alt-stack/workers-core': 0.2.0(zod@4.1.13)
+      '@alt-stack/workers-core': 0.6.0(zod@4.1.13)
       kafkajs: 2.2.4
       zod: 4.1.13
 
@@ -1059,6 +1095,12 @@ snapshots:
   '@swc/helpers@0.5.15':
     dependencies:
       tslib: 2.8.1
+
+  '@t3-oss/env-core@0.9.2(typescript@5.9.3)(zod@4.1.13)':
+    dependencies:
+      zod: 4.1.13
+    optionalDependencies:
+      typescript: 5.9.3
 
   '@types/node@20.19.25':
     dependencies:
