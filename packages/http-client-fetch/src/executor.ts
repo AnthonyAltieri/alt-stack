@@ -12,7 +12,7 @@ export interface FetchExecutorOptions {
 async function parseResponseData(response: Response): Promise<unknown> {
   const contentLength = response.headers.get("content-length")?.trim();
   if (contentLength === "0") {
-    return undefined;
+    return null;
   }
 
   const contentType = response.headers.get("content-type")?.trim();
