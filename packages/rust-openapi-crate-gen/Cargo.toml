@@ -1,0 +1,20 @@
+[package]
+name = "rust-openapi-crate-gen"
+version = "0.1.0"
+description = "Generate a consumable Rust crate scaffold from an OpenAPI document"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+clap.workspace = true
+reqwest.workspace = true
+rust-openapi = { path = "../rust-openapi" }
+serde_json.workspace = true
+serde_yaml.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+syn.workspace = true
+tempfile.workspace = true
