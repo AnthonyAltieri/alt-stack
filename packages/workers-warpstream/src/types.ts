@@ -1,6 +1,7 @@
 import type { Kafka, KafkaConfig, ConsumerConfig, ProducerConfig, KafkaMessage } from "kafkajs";
 import type {
   BaseWorkerContext,
+  QueueExecutionConfig,
   Storage,
   WorkerRouter,
   WorkerTelemetryOption,
@@ -109,6 +110,8 @@ export interface JobClient<TRouter extends WorkerRouter<any>> {
 export interface EnqueueOptions {
   /** Partition key */
   key?: string;
+  /** Optional retry and redrive config override for managed queues */
+  config?: QueueExecutionConfig;
   /** Custom headers */
   headers?: Record<string, string>;
 }

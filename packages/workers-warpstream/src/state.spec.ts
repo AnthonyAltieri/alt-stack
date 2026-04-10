@@ -44,9 +44,14 @@ describe("workers-warpstream state backend", () => {
         .queue(
           {
             name: "uploads",
-            retry: {
-              maxRetries: 1,
-              delay: { type: "fixed", ms: 1000 },
+            config: {
+              retry: {
+                budget: 1,
+                backoff: {
+                  type: "static",
+                  startingSeconds: 1,
+                },
+              },
             },
           },
           async () => ok(),
@@ -61,7 +66,14 @@ describe("workers-warpstream state backend", () => {
     await client.enqueue(
       "process-upload",
       { fileId: "file_1" } as never,
-      { key: "tenant-1" },
+      {
+        key: "tenant-1",
+        config: {
+          redrive: {
+            budget: 2,
+          },
+        },
+      },
     );
 
     expect(producer.send).toHaveBeenCalledTimes(1);
@@ -71,6 +83,12 @@ describe("workers-warpstream state backend", () => {
     expect(appendedEvents?.[0]?.type).toBe("job_enqueued");
     expect(appendedEvents?.[0]?.queueName).toBe("uploads");
     expect(appendedEvents?.[0]?.key).toBe("tenant-1");
+    expect(appendedEvents?.[0]?.headers["x-retry-budget"]).toBe("1");
+    expect(appendedEvents?.[0]?.headers["x-retry-backoff-type"]).toBe("static");
+    expect(appendedEvents?.[0]?.headers["x-retry-backoff-starting-seconds"]).toBe("1");
+    expect(appendedEvents?.[0]?.headers["x-retry-count"]).toBe("0");
+    expect(appendedEvents?.[0]?.headers["x-redrive-budget"]).toBe("2");
+    expect(appendedEvents?.[0]?.headers["x-redrive-count"]).toBe("0");
   });
 
   it("dispatches due retries and records the queued event", async () => {
@@ -85,9 +103,14 @@ describe("workers-warpstream state backend", () => {
       payload: { fileId: "file_1" },
       queue: {
         name: "uploads",
-        retry: {
-          maxRetries: 1,
-          delay: { type: "fixed", ms: 1000 },
+        config: {
+          retry: {
+            budget: 1,
+            backoff: {
+              type: "static",
+              startingSeconds: 1,
+            },
+          },
         },
       },
       headers: buildQueueHeaders({
@@ -96,9 +119,18 @@ describe("workers-warpstream state backend", () => {
         queueName: "uploads",
         createdAt: "1711540800000",
         dispatchKind: "initial",
+        retryBudget: 1,
+        retryBackoffType: "static",
+        retryBackoffStartingSeconds: 1,
+        retryCount: 0,
       }),
       key: "tenant-1",
       dispatchKind: "retry",
+      retryBudget: 1,
+      retryBackoffType: "static",
+      retryBackoffStartingSeconds: 1,
+      retryCount: 1,
+      redriveCount: 0,
     };
     const storage = createStorageMock({
       listDueDispatches: vi.fn(async () => [dueDispatch]),
@@ -129,6 +161,82 @@ describe("workers-warpstream state backend", () => {
     expect(event?.key).toBe("tenant-1");
   });
 
+  it("increments the redrive count when dispatching due redrives", async () => {
+    const producer = createProducerMock();
+    const dueDispatch: DueDispatch = {
+      kind: "redrive",
+      jobId: "job_1",
+      jobName: "process-upload",
+      queueName: "uploads",
+      attempt: 2,
+      scheduledAt: "2026-03-27T12:00:05.000Z",
+      payload: { fileId: "file_1" },
+      queue: {
+        name: "uploads",
+        deadLetter: {
+          queueName: "uploads-dlq",
+        },
+        config: {
+          retry: {
+            budget: 0,
+            backoff: {
+              type: "static",
+              startingSeconds: 0,
+            },
+          },
+          redrive: {
+            budget: 1,
+          },
+        },
+      },
+      headers: buildQueueHeaders({
+        jobId: "job_1",
+        attempt: 2,
+        queueName: "uploads",
+        createdAt: "1711540800000",
+        dispatchKind: "redrive",
+        redriveId: "redrive_1",
+        retryBudget: 0,
+        retryBackoffType: "static",
+        retryBackoffStartingSeconds: 0,
+        retryCount: 0,
+        redriveBudget: 1,
+        redriveCount: 1,
+      }),
+      key: "tenant-1",
+      dispatchKind: "redrive",
+      redriveId: "redrive_1",
+      retryBudget: 0,
+      retryBackoffType: "static",
+      retryBackoffStartingSeconds: 0,
+      retryCount: 0,
+      redriveBudget: 1,
+      redriveCount: 1,
+    };
+    const storage = createStorageMock({
+      listDueDispatches: vi.fn(async () => [dueDispatch]),
+    });
+    const kafka = {
+      producer: () => producer,
+    } as unknown as import("kafkajs").Kafka;
+
+    await dispatchDueJobs({
+      kafka,
+      storage,
+    });
+
+    const sendArgs = vi.mocked(producer.send).mock.calls.at(0);
+    const sendCall = sendArgs?.at(0) as
+      | { messages: Array<{ headers?: Record<string, string> }> }
+      | undefined;
+    expect(sendCall?.messages[0]?.headers?.["x-redrive-count"]).toBe("1");
+    expect(sendCall?.messages[0]?.headers?.["x-retry-count"]).toBe("0");
+    const event = vi.mocked(storage.append).mock.calls[0]?.[0]?.[0];
+    expect(event?.type).toBe("redrive_dispatched");
+    expect(event?.headers["x-redrive-count"]).toBe("1");
+    expect(event?.headers["x-retry-count"]).toBe("0");
+  });
+
   it("converts managed queue failures into retry state instead of rethrowing", async () => {
     const { router, procedure } = init();
     const storage = createStorageMock();
@@ -138,6 +246,10 @@ describe("workers-warpstream state backend", () => {
       queueName: "uploads",
       createdAt: Date.now().toString(),
       dispatchKind: "initial",
+      retryBudget: 1,
+      retryBackoffType: "static",
+      retryBackoffStartingSeconds: 1,
+      retryCount: 0,
     });
     const consumer = {
       connect: vi.fn(async () => undefined),
@@ -173,12 +285,17 @@ describe("workers-warpstream state backend", () => {
         .queue(
           {
             name: "uploads",
-            retry: {
-              maxRetries: 1,
-              delay: { type: "fixed", ms: 1000 },
-            },
             deadLetter: {
               queueName: "uploads-dlq",
+            },
+            config: {
+              retry: {
+                budget: 1,
+                backoff: {
+                  type: "static",
+                  startingSeconds: 1,
+                },
+              },
             },
           },
           async () => {
@@ -204,6 +321,58 @@ describe("workers-warpstream state backend", () => {
     ]);
   });
 
+  it("unwraps ok() values before validating worker output schemas", async () => {
+    const { router, procedure } = init();
+    const handler = vi.fn(async ({ input }: { input: { fileId: string } }) =>
+      ok({ fileId: input.fileId }),
+    );
+    const consumer = {
+      connect: vi.fn(async () => undefined),
+      subscribe: vi.fn(async () => undefined),
+      disconnect: vi.fn(async () => undefined),
+      run: vi.fn(async ({ eachMessage }: { eachMessage: (payload: {
+        topic: string;
+        partition: number;
+        message: {
+          offset: string;
+          value: Buffer;
+          headers: Record<string, string>;
+        };
+      }) => Promise<void> }) => {
+        await eachMessage({
+          topic: "process-upload",
+          partition: 0,
+          message: {
+            offset: "1",
+            value: Buffer.from(JSON.stringify({ fileId: "file_1" })),
+            headers: {},
+          },
+        });
+      }),
+    };
+    const kafka = {
+      consumer: () => consumer,
+    } as unknown as import("kafkajs").Kafka;
+
+    const workerRouter = router({
+      "process-upload": procedure
+        .input({ payload: z.object({ fileId: z.string() }) })
+        .output(z.object({ fileId: z.string() }))
+        .queue("uploads", handler),
+    });
+
+    await expect(
+      createWorker(workerRouter, {
+        kafka,
+        groupId: "workers",
+      }),
+    ).resolves.toEqual({
+      disconnect: expect.any(Function),
+    });
+
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
   it("rethrows managed queue failures that have no retry or dead-letter policy", async () => {
     const { router, procedure } = init();
     const storage = createStorageMock();
@@ -213,6 +382,10 @@ describe("workers-warpstream state backend", () => {
       queueName: "uploads",
       createdAt: Date.now().toString(),
       dispatchKind: "initial",
+      retryBudget: 0,
+      retryBackoffType: "static",
+      retryBackoffStartingSeconds: 0,
+      retryCount: 0,
     });
     const consumer = {
       connect: vi.fn(async () => undefined),
@@ -272,5 +445,89 @@ describe("workers-warpstream state backend", () => {
     expect(eventTypes).toEqual(["attempt_started", "attempt_failed"]);
     const failedEvent = vi.mocked(storage.append).mock.calls[1]?.[0]?.[0];
     expect(failedEvent?.key).toBe("tenant-2");
+  });
+
+  it("stops at failed once a redrive budget is exhausted", async () => {
+    const { router, procedure } = init();
+    const storage = createStorageMock();
+    const messageHeaders = buildQueueHeaders({
+      jobId: "job_3",
+      attempt: 2,
+      queueName: "uploads",
+      createdAt: Date.now().toString(),
+      dispatchKind: "redrive",
+      redriveId: "redrive_1",
+      retryBudget: 0,
+      retryBackoffType: "static",
+      retryBackoffStartingSeconds: 0,
+      retryCount: 0,
+      redriveBudget: 1,
+      redriveCount: 1,
+    });
+    const consumer = {
+      connect: vi.fn(async () => undefined),
+      subscribe: vi.fn(async () => undefined),
+      disconnect: vi.fn(async () => undefined),
+      run: vi.fn(async ({ eachMessage }: { eachMessage: (payload: {
+        topic: string;
+        partition: number;
+        message: {
+          offset: string;
+          key: Buffer;
+          value: Buffer;
+          headers: Record<string, string>;
+        };
+      }) => Promise<void> }) => {
+        await eachMessage({
+          topic: "process-upload",
+          partition: 0,
+          message: {
+            offset: "1",
+            key: Buffer.from("tenant-3"),
+            value: Buffer.from(JSON.stringify({ fileId: "file_3" })),
+            headers: messageHeaders,
+          },
+        });
+      }),
+    };
+    const kafka = {
+      consumer: () => consumer,
+    } as unknown as import("kafkajs").Kafka;
+
+    const workerRouter = router({
+      "process-upload": procedure
+        .input({ payload: z.object({ fileId: z.string() }) })
+        .queue(
+          {
+            name: "uploads",
+            deadLetter: {
+              queueName: "uploads-dlq",
+            },
+            config: {
+              redrive: {
+                budget: 1,
+              },
+            },
+          },
+          async () => {
+            throw new Error("boom");
+          },
+        ),
+    });
+
+    await expect(
+      createWorker(workerRouter, {
+        kafka,
+        groupId: "workers",
+        storage,
+      }),
+    ).resolves.toEqual({
+      disconnect: expect.any(Function),
+    });
+
+    const eventTypes = vi
+      .mocked(storage.append)
+      .mock.calls.map((call: [QueueJobEvent[]]) => call[0][0]?.type);
+    expect(eventTypes).toEqual(["attempt_started", "attempt_failed"]);
   });
 });

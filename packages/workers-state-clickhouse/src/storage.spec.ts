@@ -45,8 +45,25 @@ describe("ClickHouseStorage", () => {
         queueName: "uploads",
         attempt: 1,
         payload: { fileId: "file_1" },
-        queue: { name: "uploads" },
-        headers: { "x-created-at": "2026-03-27T12:00:00.000Z" },
+        queue: {
+          name: "uploads",
+          config: {
+            retry: {
+              budget: 0,
+              backoff: {
+                type: "static",
+                startingSeconds: 0,
+              },
+            },
+          },
+        },
+        headers: {
+          "x-created-at": "2026-03-27T12:00:00.000Z",
+          "x-retry-budget": "0",
+          "x-retry-backoff-type": "static",
+          "x-retry-backoff-starting-seconds": "0",
+          "x-retry-count": "0",
+        },
         dispatchKind: "initial",
       },
     ]);
@@ -79,10 +96,16 @@ describe("ClickHouseStorage", () => {
             scheduled_at: null,
             dispatch_kind: "initial",
             redrive_id: null,
+            retry_budget: 0,
+            retry_backoff_type: "static",
+            retry_backoff_starting_seconds: 0,
+            retry_count: 0,
+            redrive_budget: null,
+            redrive_count: 0,
             partition_key: "tenant-1",
             payload_json: "{\"fileId\":\"file_1\"}",
-            queue_json: "{\"name\":\"uploads\"}",
-            headers_json: "{\"x-created-at\":\"1711540800000\"}",
+            queue_json: "{\"name\":\"uploads\",\"config\":{\"retry\":{\"budget\":0,\"backoff\":{\"type\":\"static\",\"startingSeconds\":0}}}}",
+            headers_json: "{\"x-created-at\":\"1711540800000\",\"x-retry-budget\":\"0\",\"x-retry-backoff-type\":\"static\",\"x-retry-backoff-starting-seconds\":\"0\",\"x-retry-count\":\"0\"}",
             error_json: "null",
             dead_letter_reason_json: "null",
             requested_by: null,
@@ -102,10 +125,16 @@ describe("ClickHouseStorage", () => {
             scheduled_at: "2026-03-27 12:00:05.000",
             dispatch_kind: "retry",
             redrive_id: null,
+            retry_budget: 1,
+            retry_backoff_type: "static",
+            retry_backoff_starting_seconds: 1,
+            retry_count: 1,
+            redrive_budget: null,
+            redrive_count: 0,
             partition_key: "tenant-1",
             payload_json: "{\"fileId\":\"file_1\"}",
-            queue_json: "{\"name\":\"uploads\",\"retry\":{\"maxRetries\":1,\"delay\":{\"type\":\"fixed\",\"ms\":1000}}}",
-            headers_json: "{\"x-created-at\":\"1711540800000\"}",
+            queue_json: "{\"name\":\"uploads\",\"config\":{\"retry\":{\"budget\":1,\"backoff\":{\"type\":\"static\",\"startingSeconds\":1}}}}",
+            headers_json: "{\"x-created-at\":\"1711540800000\",\"x-retry-budget\":\"1\",\"x-retry-backoff-type\":\"static\",\"x-retry-backoff-starting-seconds\":\"1\",\"x-retry-count\":\"1\"}",
             error_json: "{\"name\":\"Error\",\"message\":\"boom\"}",
             dead_letter_reason_json: "null",
             requested_by: null,
@@ -147,10 +176,16 @@ describe("ClickHouseStorage", () => {
           scheduled_at: "2026-03-27T12:00:05.000Z",
           dispatch_kind: "retry",
           redrive_id: null,
+          retry_budget: 1,
+          retry_backoff_type: "static",
+          retry_backoff_starting_seconds: 1,
+          retry_count: 1,
+          redrive_budget: null,
+          redrive_count: 0,
           partition_key: "tenant-1",
           payload_json: "{\"fileId\":\"file_1\"}",
-          queue_json: "{\"name\":\"uploads\",\"retry\":{\"maxRetries\":1,\"delay\":{\"type\":\"fixed\",\"ms\":1000}}}",
-          headers_json: "{\"x-created-at\":\"1711540800000\"}",
+          queue_json: "{\"name\":\"uploads\",\"config\":{\"retry\":{\"budget\":1,\"backoff\":{\"type\":\"static\",\"startingSeconds\":1}}}}",
+          headers_json: "{\"x-created-at\":\"1711540800000\",\"x-retry-budget\":\"1\",\"x-retry-backoff-type\":\"static\",\"x-retry-backoff-starting-seconds\":\"1\",\"x-retry-count\":\"1\"}",
           error_json: "{\"name\":\"Error\",\"message\":\"boom\"}",
           dead_letter_reason_json: "null",
         }),
@@ -190,8 +225,25 @@ describe("ClickHouseStorage", () => {
         createdAt: "2026-03-27T12:00:00.000Z",
         scheduledAt: "2026-03-27T12:01:00.000Z",
         payload: { fileId: "file_1" },
-        queue: { name: "uploads" },
-        headers: { "x-created-at": "2026-03-27T12:00:00.000Z" },
+        queue: {
+          name: "uploads",
+          config: {
+            retry: {
+              budget: 0,
+              backoff: {
+                type: "static",
+                startingSeconds: 0,
+              },
+            },
+          },
+        },
+        headers: {
+          "x-created-at": "2026-03-27T12:00:00.000Z",
+          "x-retry-budget": "0",
+          "x-retry-backoff-type": "static",
+          "x-retry-backoff-starting-seconds": "0",
+          "x-retry-count": "0",
+        },
         key: "tenant-1",
         dispatchKind: "redrive",
       },
@@ -215,7 +267,32 @@ describe("ClickHouseStorage", () => {
       .fn()
       .mockResolvedValueOnce(
         createResponse(
-          "{\"job_id\":\"job_1\",\"queue_name\":\"uploads\",\"job_name\":\"process-upload\",\"created_at\":\"2026-03-27T12:00:00.000Z\",\"updated_at\":\"2026-03-27T12:00:00.000Z\",\"state\":\"dead_letter\",\"attempt\":3,\"scheduled_at\":null,\"dispatch_kind\":\"retry\",\"redrive_id\":null,\"payload_json\":\"{\\\"fileId\\\":\\\"file_1\\\"}\",\"queue_json\":\"{\\\"name\\\":\\\"uploads\\\",\\\"deadLetter\\\":{\\\"queueName\\\":\\\"uploads-dlq\\\"}}\",\"headers_json\":\"{\\\"x-created-at\\\":\\\"1711540800000\\\"}\",\"error_json\":\"null\",\"dead_letter_reason_json\":\"{\\\"code\\\":\\\"max_retries_exceeded\\\",\\\"message\\\":\\\"boom\\\"}\"}\n",
+          `${JSON.stringify({
+            job_id: "job_1",
+            queue_name: "uploads",
+            job_name: "process-upload",
+            created_at: "2026-03-27T12:00:00.000Z",
+            updated_at: "2026-03-27T12:00:00.000Z",
+            state: "dead_letter",
+            attempt: 3,
+            scheduled_at: null,
+            dispatch_kind: "retry",
+            redrive_id: null,
+            retry_budget: 1,
+            retry_backoff_type: "static",
+            retry_backoff_starting_seconds: 1,
+            retry_count: 1,
+            redrive_budget: 1,
+            redrive_count: 0,
+            payload_json: "{\"fileId\":\"file_1\"}",
+            queue_json:
+              "{\"name\":\"uploads\",\"deadLetter\":{\"queueName\":\"uploads-dlq\"},\"config\":{\"retry\":{\"budget\":1,\"backoff\":{\"type\":\"static\",\"startingSeconds\":1}},\"redrive\":{\"budget\":1}}}",
+            headers_json:
+              "{\"x-created-at\":\"1711540800000\",\"x-retry-budget\":\"1\",\"x-retry-backoff-type\":\"static\",\"x-retry-backoff-starting-seconds\":\"1\",\"x-retry-count\":\"1\",\"x-redrive-budget\":\"1\",\"x-redrive-count\":\"0\"}",
+            error_json: "null",
+            dead_letter_reason_json:
+              "{\"code\":\"max_retries_exceeded\",\"message\":\"boom\"}",
+          })}\n`,
         ),
       )
       .mockResolvedValueOnce(createResponse(""))
@@ -234,7 +311,56 @@ describe("ClickHouseStorage", () => {
     });
 
     expect(record.redriveId).toBe("redrive_1");
+    expect(record.redriveBudget).toBe(1);
+    expect(record.redriveCount).toBe(1);
     expect(record.requestedBy).toBe("operator@example.com");
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("rejects redrives once the budget is exhausted", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        createResponse(
+          `${JSON.stringify({
+            job_id: "job_1",
+            queue_name: "uploads",
+            job_name: "process-upload",
+            created_at: "2026-03-27T12:00:00.000Z",
+            updated_at: "2026-03-27T12:00:00.000Z",
+            state: "dead_letter",
+            attempt: 4,
+            scheduled_at: null,
+            dispatch_kind: "redrive",
+            redrive_id: "redrive_1",
+            retry_budget: 1,
+            retry_backoff_type: "static",
+            retry_backoff_starting_seconds: 1,
+            retry_count: 0,
+            redrive_budget: 1,
+            redrive_count: 1,
+            payload_json: "{\"fileId\":\"file_1\"}",
+            queue_json:
+              "{\"name\":\"uploads\",\"deadLetter\":{\"queueName\":\"uploads-dlq\"},\"config\":{\"retry\":{\"budget\":1,\"backoff\":{\"type\":\"static\",\"startingSeconds\":1}},\"redrive\":{\"budget\":1}}}",
+            headers_json:
+              "{\"x-created-at\":\"1711540800000\",\"x-redrive-id\":\"redrive_1\",\"x-retry-budget\":\"1\",\"x-retry-backoff-type\":\"static\",\"x-retry-backoff-starting-seconds\":\"1\",\"x-retry-count\":\"0\",\"x-redrive-budget\":\"1\",\"x-redrive-count\":\"1\"}",
+            error_json: "null",
+            dead_letter_reason_json:
+              "{\"code\":\"redrive_failed\",\"message\":\"boom again\"}",
+          })}\n`,
+        ),
+      );
+
+    const storage = new ClickHouseStorage({
+      url: "http://localhost:8123",
+      fetch: fetchMock,
+    });
+
+    await expect(
+      storage.requestRedrive({
+        jobId: "job_1",
+        requestedBy: "operator@example.com",
+      }),
+    ).rejects.toThrow("redrive budget 1 is exhausted");
   });
 });

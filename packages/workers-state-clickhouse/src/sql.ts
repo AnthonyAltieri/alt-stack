@@ -27,6 +27,12 @@ CREATE TABLE IF NOT EXISTS ${tables.events} (
   scheduled_at Nullable(DateTime64(3, 'UTC')),
   dispatch_kind LowCardinality(String),
   redrive_id Nullable(String),
+  retry_budget UInt16,
+  retry_backoff_type LowCardinality(String),
+  retry_backoff_starting_seconds UInt32,
+  retry_count UInt16,
+  redrive_budget Nullable(UInt16),
+  redrive_count UInt16,
   partition_key Nullable(String),
   payload_json String,
   queue_json String,
@@ -51,6 +57,12 @@ CREATE TABLE IF NOT EXISTS ${tables.current} (
   scheduled_at Nullable(DateTime64(3, 'UTC')),
   dispatch_kind LowCardinality(String),
   redrive_id Nullable(String),
+  retry_budget UInt16,
+  retry_backoff_type LowCardinality(String),
+  retry_backoff_starting_seconds UInt32,
+  retry_count UInt16,
+  redrive_budget Nullable(UInt16),
+  redrive_count UInt16,
   partition_key Nullable(String),
   payload_json String,
   queue_json String,
@@ -69,8 +81,56 @@ ALTER TABLE ${tables.events}
 ADD COLUMN IF NOT EXISTS partition_key Nullable(String)
     `.trim(),
     `
+ALTER TABLE ${tables.events}
+ADD COLUMN IF NOT EXISTS retry_budget UInt16 DEFAULT 0
+    `.trim(),
+    `
+ALTER TABLE ${tables.events}
+ADD COLUMN IF NOT EXISTS retry_backoff_type LowCardinality(String) DEFAULT 'static'
+    `.trim(),
+    `
+ALTER TABLE ${tables.events}
+ADD COLUMN IF NOT EXISTS retry_backoff_starting_seconds UInt32 DEFAULT 0
+    `.trim(),
+    `
+ALTER TABLE ${tables.events}
+ADD COLUMN IF NOT EXISTS retry_count UInt16 DEFAULT 0
+    `.trim(),
+    `
+ALTER TABLE ${tables.events}
+ADD COLUMN IF NOT EXISTS redrive_budget Nullable(UInt16)
+    `.trim(),
+    `
+ALTER TABLE ${tables.events}
+ADD COLUMN IF NOT EXISTS redrive_count UInt16 DEFAULT 0
+    `.trim(),
+    `
 ALTER TABLE ${tables.current}
 ADD COLUMN IF NOT EXISTS partition_key Nullable(String)
+    `.trim(),
+    `
+ALTER TABLE ${tables.current}
+ADD COLUMN IF NOT EXISTS retry_budget UInt16 DEFAULT 0
+    `.trim(),
+    `
+ALTER TABLE ${tables.current}
+ADD COLUMN IF NOT EXISTS retry_backoff_type LowCardinality(String) DEFAULT 'static'
+    `.trim(),
+    `
+ALTER TABLE ${tables.current}
+ADD COLUMN IF NOT EXISTS retry_backoff_starting_seconds UInt32 DEFAULT 0
+    `.trim(),
+    `
+ALTER TABLE ${tables.current}
+ADD COLUMN IF NOT EXISTS retry_count UInt16 DEFAULT 0
+    `.trim(),
+    `
+ALTER TABLE ${tables.current}
+ADD COLUMN IF NOT EXISTS redrive_budget Nullable(UInt16)
+    `.trim(),
+    `
+ALTER TABLE ${tables.current}
+ADD COLUMN IF NOT EXISTS redrive_count UInt16 DEFAULT 0
     `.trim(),
   ];
 }

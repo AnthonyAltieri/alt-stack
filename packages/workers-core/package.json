@@ -13,7 +13,7 @@
     }
   },
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && tsc --project tsconfig.json --emitDeclarationOnly --declaration --declarationMap --outDir dist",
     "test": "vitest",
     "check-types": "tsc --noEmit"
   },

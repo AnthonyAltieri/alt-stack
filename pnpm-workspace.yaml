@@ -1,6 +1,8 @@
 packages:
   - "apps/*"
   - "examples/*"
+  - "examples/worker-state/apps/*"
+  - "examples/worker-state/packages/*"
   - "packages/*"
 
 catalog:

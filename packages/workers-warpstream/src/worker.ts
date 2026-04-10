@@ -16,6 +16,7 @@ import {
   normalizeQueueDefinition,
   parseQueueHeaders,
   planFailureAction,
+  resolveExecutionConfig,
   resolveWorkerTelemetryConfig,
   shouldIgnoreJob,
   initWorkerTelemetry,
@@ -31,6 +32,8 @@ import {
   recordProcessingTime,
   recordE2ETime,
   calculateQueueTime,
+  isErr,
+  isOk,
 } from "@alt-stack/workers-core";
 import type { MiddlewareResult } from "@alt-stack/workers-core";
 import type {
@@ -106,15 +109,40 @@ export async function createWorker<TCustomContext extends object = Record<string
         procedure.type === "queue"
           ? procedure.queueConfig ?? normalizeQueueDefinition(procedure.queue ?? procedure.jobName)
           : undefined;
+      const effectiveQueueConfig = queueConfig ?? normalizeQueueDefinition(procedure.queue ?? procedure.jobName);
 
       const metricCreatedAt = extractCreatedAtValue(message.headers) ?? Date.now().toString();
       const parsedHeaders = parseQueueHeaders(message.headers);
+      const executionConfig = resolveExecutionConfig(
+        effectiveQueueConfig,
+        parsedHeaders
+          ? {
+              retry: {
+                budget: parsedHeaders.retryBudget,
+                backoff: {
+                  type: parsedHeaders.retryBackoffType,
+                  startingSeconds: parsedHeaders.retryBackoffStartingSeconds,
+                },
+              },
+              redrive: parsedHeaders.redriveBudget === undefined
+                ? undefined
+                : {
+                    budget: parsedHeaders.redriveBudget,
+                  },
+            }
+          : undefined,
+      );
+      const retryConfig = executionConfig.retry;
       const jobId = parsedHeaders?.jobId ?? `${topic}-${partition}-${message.offset}`;
       const attempt = parsedHeaders?.attempt ?? 1;
       const dispatchKind = parsedHeaders?.dispatchKind ?? "initial";
       const queueName = queueConfig?.name ?? parsedHeaders?.queueName ?? procedure.queue ?? topic;
       const createdAtIso = resolveCreatedAtIso(metricCreatedAt);
       const partitionKey = normalizeMessageKey(message.key);
+      const retryCount = parsedHeaders?.retryCount ?? 0;
+      const retryAttempt = retryCount + 1;
+      const redriveBudget = executionConfig.redrive?.budget;
+      const redriveCount = parsedHeaders?.redriveCount ?? 0;
       const normalizedHeaders = buildQueueHeaders(
         {
           jobId,
@@ -124,6 +152,12 @@ export async function createWorker<TCustomContext extends object = Record<string
           dispatchKind,
           scheduledAt: parsedHeaders?.scheduledAt,
           redriveId: parsedHeaders?.redriveId,
+          retryBudget: retryConfig.budget,
+          retryBackoffType: retryConfig.backoff.type,
+          retryBackoffStartingSeconds: retryConfig.backoff.startingSeconds,
+          retryCount,
+          redriveBudget,
+          redriveCount,
         },
         toStringHeaders(message.headers),
       );
@@ -149,6 +183,7 @@ export async function createWorker<TCustomContext extends object = Record<string
         jobId,
         jobName: jobInfo.jobName,
         attempt,
+        retryAttempt,
         topic,
         partition,
         offset: message.offset,
@@ -269,10 +304,34 @@ export async function createWorker<TCustomContext extends object = Record<string
           },
         ]);
 
-        const action = planFailureAction(queueConfig, attempt, queueError, new Date());
+        const action = planFailureAction(queueConfig, attempt, queueError, {
+          now: new Date(),
+          retry: retryConfig,
+          retryCount,
+          redrive: redriveBudget === undefined ? undefined : { budget: redriveBudget },
+          redriveCount,
+        });
 
         if (action.type === "retry") {
           setJobStatus(span, "retry");
+          const retryHeaders = buildQueueHeaders(
+            {
+              jobId,
+              attempt: action.nextAttempt,
+              queueName: queueConfig.name,
+              createdAt: metricCreatedAt,
+              dispatchKind: "retry",
+              scheduledAt: action.retryAt,
+              redriveId: parsedHeaders?.redriveId,
+              retryBudget: retryConfig.budget,
+              retryBackoffType: retryConfig.backoff.type,
+              retryBackoffStartingSeconds: retryConfig.backoff.startingSeconds,
+              retryCount: action.nextRetryCount,
+              redriveBudget,
+              redriveCount,
+            },
+            normalizedHeaders,
+          );
           await options.storage!.append([
             {
               eventId: `${jobId}:retry:${action.nextAttempt}`,
@@ -284,10 +343,11 @@ export async function createWorker<TCustomContext extends object = Record<string
               queueName: queueConfig.name,
               attempt,
               nextAttempt: action.nextAttempt,
+              nextRetryCount: action.nextRetryCount,
               retryAt: action.retryAt,
               payload: jobInfo.payload,
               queue: queueConfig,
-              headers: normalizedHeaders,
+              headers: retryHeaders,
               key: partitionKey,
               dispatchKind: "retry",
               scheduledAt: action.retryAt,
@@ -325,7 +385,7 @@ export async function createWorker<TCustomContext extends object = Record<string
         endSpanWithError(span, normalizedError);
         span?.end();
         await options.onError?.(normalizedError, baseCtx);
-        if (action.type === "failure") {
+        if (action.type === "failure" && action.rethrow) {
           throw normalizedError;
         }
       }
@@ -510,8 +570,12 @@ async function executeProcedure<TCustomContext extends object>(
     ctx: currentCtx,
   });
 
-  if (procedure.config.output && response !== undefined) {
-    procedure.config.output.parse(response);
+  if (isErr(response)) {
+    throw response.error;
+  }
+
+  if (procedure.config.output && isOk(response) && response.value !== undefined) {
+    procedure.config.output.parse(response.value);
   }
 }
 

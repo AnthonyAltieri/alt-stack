@@ -15,7 +15,7 @@ export type ErrorUnion<T extends Record<string, z.ZodTypeAny>> =
  * Errors must extend Error with a readonly _tag property.
  */
 export type WorkerHandlerResult<
-  TErrors extends Record<string, z.ZodTypeAny> | undefined,
+  _TErrors extends Record<string, z.ZodTypeAny> | undefined,
   TOutput extends z.ZodTypeAny | undefined,
 > = Result<InferOutput<NonNullable<TOutput>> | void, ResultError>;
 
@@ -40,6 +40,8 @@ export interface BaseWorkerContext {
   jobName: string;
   /** Current attempt number (starts at 1) */
   attempt: number;
+  /** Current attempt number within the active retry cycle (starts at 1) */
+  retryAttempt: number;
   /** OpenTelemetry span for this job (undefined if telemetry disabled or not installed) */
   span?: import("@opentelemetry/api").Span;
 }
@@ -50,7 +52,7 @@ export interface BaseWorkerContext {
 export type TypedWorkerContext<
   TInput extends InputConfig,
   _TOutput extends z.ZodTypeAny | undefined,
-  TErrors extends Record<string, z.ZodTypeAny> | undefined,
+  _TErrors extends Record<string, z.ZodTypeAny> | undefined,
   TCustomContext extends object = Record<string, never>,
 > = BaseWorkerContext &
   TCustomContext & {

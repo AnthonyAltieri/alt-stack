@@ -1,40 +1,59 @@
 export type DispatchKind = "initial" | "retry" | "redrive";
 
-export interface FixedRetryDelayStrategy {
-  type: "fixed";
-  ms: number;
+export type RetryBackoffType = "static" | "linear" | "exponential";
+
+export interface QueueRetryBackoffConfig {
+  type?: RetryBackoffType;
+  startingSeconds?: number;
 }
 
-export interface ExponentialRetryDelayStrategy {
-  type: "exponential";
-  initialMs: number;
-  multiplier?: number;
-  maxMs?: number;
+export interface NormalizedQueueRetryBackoffConfig {
+  type: RetryBackoffType;
+  startingSeconds: number;
 }
 
-export type RetryDelayStrategy =
-  | FixedRetryDelayStrategy
-  | ExponentialRetryDelayStrategy;
+export interface QueueRetryConfig {
+  budget?: number;
+  backoff?: QueueRetryBackoffConfig;
+}
 
-export interface QueueRetryPolicy {
-  maxRetries: number;
-  delay: RetryDelayStrategy;
+export interface NormalizedQueueRetryConfig {
+  budget: number;
+  backoff: NormalizedQueueRetryBackoffConfig;
 }
 
 export interface QueueDeadLetterPolicy {
   queueName?: string;
 }
 
+export interface QueueRedriveConfig {
+  budget?: number;
+}
+
+export interface NormalizedQueueRedriveConfig {
+  budget?: number;
+}
+
+export interface QueueExecutionConfig {
+  retry?: QueueRetryConfig;
+  redrive?: QueueRedriveConfig;
+}
+
+export interface NormalizedQueueExecutionConfig {
+  retry: NormalizedQueueRetryConfig;
+  redrive?: NormalizedQueueRedriveConfig;
+}
+
 export interface QueueDefinition {
   name: string;
-  retry?: QueueRetryPolicy;
   deadLetter?: QueueDeadLetterPolicy;
+  config?: QueueExecutionConfig;
 }
 
 export interface NormalizedQueueDefinition {
   name: string;
-  retry?: QueueRetryPolicy;
   deadLetter?: QueueDeadLetterPolicy;
+  config: NormalizedQueueExecutionConfig;
 }
 
 export interface QueueJobError {
@@ -117,6 +136,7 @@ export interface RetryScheduledEvent extends QueueJobEventBase {
   type: "retry_scheduled";
   error: QueueJobError;
   nextAttempt: number;
+  nextRetryCount: number;
   retryAt: string;
 }
 
@@ -161,6 +181,12 @@ export interface QueueJobStateSnapshot extends QueueEventContext {
   lastError?: QueueJobError;
   deadLetterReason?: DeadLetterReason;
   redriveId?: string;
+  retryBudget: number;
+  retryBackoffType: RetryBackoffType;
+  retryBackoffStartingSeconds: number;
+  retryCount: number;
+  redriveBudget?: number;
+  redriveCount: number;
 }
 
 export interface QueueJobHistory {
@@ -200,6 +226,12 @@ export interface DueDispatch {
   key?: string;
   dispatchKind: DispatchKind;
   redriveId?: string;
+  retryBudget: number;
+  retryBackoffType: RetryBackoffType;
+  retryBackoffStartingSeconds: number;
+  retryCount: number;
+  redriveBudget?: number;
+  redriveCount: number;
 }
 
 export interface RedriveRequest {
@@ -216,6 +248,12 @@ export interface RedriveRecord {
   redriveId: string;
   queueName: string;
   jobName: string;
+  retryBudget: number;
+  retryBackoffType: RetryBackoffType;
+  retryBackoffStartingSeconds: number;
+  retryCount: number;
+  redriveBudget?: number;
+  redriveCount: number;
   requestedAt: string;
   requestedBy: string;
   reason?: string;

@@ -12,7 +12,18 @@ describe("queue configuration", () => {
 
     const procedureDefinition = workerRouter.getProcedures()[0];
     expect(procedureDefinition?.queue).toBe("uploads");
-    expect(procedureDefinition?.queueConfig).toEqual({ name: "uploads" });
+    expect(procedureDefinition?.queueConfig).toEqual({
+      name: "uploads",
+      config: {
+        retry: {
+          budget: 0,
+          backoff: {
+            type: "static",
+            startingSeconds: 0,
+          },
+        },
+      },
+    });
   });
 
   it("stores retry and dead-letter queue metadata on queue procedures", () => {
@@ -22,11 +33,13 @@ describe("queue configuration", () => {
       example: procedure.queue(
         {
           name: "uploads",
-          retry: {
-            maxRetries: 3,
-            delay: {
-              type: "fixed",
-              ms: 5000,
+          config: {
+            retry: {
+              budget: 3,
+              backoff: {
+                type: "static",
+                startingSeconds: 5,
+              },
             },
           },
           deadLetter: {
@@ -39,11 +52,13 @@ describe("queue configuration", () => {
 
     expect(workerRouter.getProcedures()[0]?.queueConfig).toEqual({
       name: "uploads",
-      retry: {
-        maxRetries: 3,
-        delay: {
-          type: "fixed",
-          ms: 5000,
+      config: {
+        retry: {
+          budget: 3,
+          backoff: {
+            type: "static",
+            startingSeconds: 5,
+          },
         },
       },
       deadLetter: {

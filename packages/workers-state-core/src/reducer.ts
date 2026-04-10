@@ -6,11 +6,13 @@ import type {
   RedriveRequestedEvent,
   RetryScheduledEvent,
 } from "./types.js";
+import { parseQueueHeaders } from "./headers.js";
 
 export function reduceQueueJobEvent(
   previous: QueueJobStateSnapshot | null,
   event: QueueJobEvent,
 ): QueueJobStateSnapshot {
+  const parsedHeaders = parseQueueHeaders(event.headers);
   const base: Omit<QueueJobStateSnapshot, "state"> = {
     jobId: event.jobId,
     jobName: event.jobName,
@@ -23,6 +25,16 @@ export function reduceQueueJobEvent(
     headers: event.headers,
     key: event.key,
     dispatchKind: event.dispatchKind,
+    retryBudget: parsedHeaders?.retryBudget ?? previous?.retryBudget ?? event.queue.config.retry.budget,
+    retryBackoffType: parsedHeaders?.retryBackoffType
+      ?? previous?.retryBackoffType
+      ?? event.queue.config.retry.backoff.type,
+    retryBackoffStartingSeconds: parsedHeaders?.retryBackoffStartingSeconds
+      ?? previous?.retryBackoffStartingSeconds
+      ?? event.queue.config.retry.backoff.startingSeconds,
+    retryCount: parsedHeaders?.retryCount ?? previous?.retryCount ?? 0,
+    redriveBudget: parsedHeaders?.redriveBudget ?? previous?.redriveBudget,
+    redriveCount: parsedHeaders?.redriveCount ?? previous?.redriveCount ?? 0,
   };
 
   switch (event.type) {
@@ -93,6 +105,7 @@ function reduceRetryScheduled(
     ...base,
     state: "retry_scheduled",
     attempt: event.nextAttempt,
+    retryCount: event.nextRetryCount,
     scheduledAt: event.retryAt,
     lastError: event.error,
     redriveId: event.redriveId,

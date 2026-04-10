@@ -75,9 +75,14 @@ describe("workers-warpstream queue state e2e", () => {
           .queue(
             {
               name: "uploads-retry-e2e",
-              retry: {
-                maxRetries: 1,
-                delay: { type: "fixed", ms: 25 },
+              config: {
+                retry: {
+                  budget: 1,
+                  backoff: {
+                    type: "static",
+                    startingSeconds: 0,
+                  },
+                },
               },
             },
             async ({ ctx }) => {

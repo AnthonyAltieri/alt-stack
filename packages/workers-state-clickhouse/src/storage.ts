@@ -1,6 +1,9 @@
 import {
+  QUEUE_HEADER_NAMES,
+  buildQueueHeaders,
   buildQueueJobHistory,
   createRedriveId,
+  parseQueueHeaders,
   reduceQueueJobEvent,
 } from "@alt-stack/workers-state-core";
 import type {
@@ -39,6 +42,12 @@ interface ClickHouseEventRow {
   scheduled_at: string | null;
   dispatch_kind: string;
   redrive_id: string | null;
+  retry_budget: number;
+  retry_backoff_type: string;
+  retry_backoff_starting_seconds: number;
+  retry_count: number;
+  redrive_budget?: number | null;
+  redrive_count?: number;
   partition_key?: string | null;
   payload_json: string;
   queue_json: string;
@@ -60,6 +69,12 @@ interface ClickHouseCurrentRow {
   scheduled_at: string | null;
   dispatch_kind: string;
   redrive_id: string | null;
+  retry_budget: number;
+  retry_backoff_type: string;
+  retry_backoff_starting_seconds: number;
+  retry_count: number;
+  redrive_budget?: number | null;
+  redrive_count?: number;
   partition_key?: string | null;
   payload_json: string;
   queue_json: string;
@@ -75,6 +90,12 @@ type ClickHouseRedriveRow = {
   queue_name: string;
   redrive_id: string;
   event_time: string;
+  retry_budget: number;
+  retry_backoff_type: string;
+  retry_backoff_starting_seconds: number;
+  retry_count: number;
+  redrive_budget?: number | null;
+  redrive_count?: number;
   requested_by: string | null;
   requested_reason: string | null;
 };
@@ -171,6 +192,8 @@ FORMAT ${JSON_FORMAT}
     ].filter(Boolean);
     const sql = `
 SELECT event_type, job_id, job_name, queue_name, redrive_id, event_time, requested_by, requested_reason
+     , retry_budget, retry_backoff_type, retry_backoff_starting_seconds, retry_count
+     , redrive_budget, redrive_count
 FROM ${this.tables.events}
 WHERE ${filters.join(" AND ")}
 ORDER BY event_time DESC
@@ -213,6 +236,12 @@ FORMAT ${JSON_FORMAT}
         key: snapshot.key,
         dispatchKind: snapshot.dispatchKind,
         redriveId: snapshot.redriveId,
+        retryBudget: snapshot.retryBudget,
+        retryBackoffType: snapshot.retryBackoffType,
+        retryBackoffStartingSeconds: snapshot.retryBackoffStartingSeconds,
+        retryCount: snapshot.retryCount,
+        redriveBudget: snapshot.redriveBudget,
+        redriveCount: snapshot.redriveCount,
       };
     });
   }
@@ -225,9 +254,38 @@ FORMAT ${JSON_FORMAT}
     if (currentState.state !== "dead_letter") {
       throw new Error(`Can only redrive dead-letter jobs. Current state: ${currentState.state}`);
     }
+    if (
+      currentState.redriveBudget !== undefined
+      && currentState.redriveCount >= currentState.redriveBudget
+    ) {
+      throw new Error(
+        `Cannot redrive job ${request.jobId}: redrive budget ${currentState.redriveBudget} is exhausted`,
+      );
+    }
 
     const redriveId = request.redriveId ?? createRedriveId();
     const requestedAt = request.requestedAt ?? new Date().toISOString();
+    const nextAttempt = currentState.attempt + 1;
+    const nextRedriveCount = currentState.redriveCount + 1;
+    const createdAtHeader = currentState.headers[QUEUE_HEADER_NAMES.createdAt] ?? currentState.createdAt;
+    const headers = buildQueueHeaders(
+      {
+        jobId: currentState.jobId,
+        attempt: nextAttempt,
+        queueName: currentState.queueName,
+        createdAt: createdAtHeader,
+        dispatchKind: "redrive",
+        scheduledAt: request.scheduledAt ?? requestedAt,
+        redriveId,
+        retryBudget: currentState.retryBudget,
+        retryBackoffType: currentState.retryBackoffType,
+        retryBackoffStartingSeconds: currentState.retryBackoffStartingSeconds,
+        retryCount: 0,
+        redriveBudget: currentState.redriveBudget,
+        redriveCount: nextRedriveCount,
+      },
+      currentState.headers,
+    );
     const event: QueueJobEvent = {
       eventId: `evt_${redriveId}`,
       type: "redrive_requested",
@@ -239,12 +297,12 @@ FORMAT ${JSON_FORMAT}
       jobId: currentState.jobId,
       jobName: currentState.jobName,
       queueName: currentState.queueName,
-      attempt: currentState.attempt,
+      attempt: nextAttempt,
       createdAt: currentState.createdAt,
       scheduledAt: request.scheduledAt ?? requestedAt,
       payload: currentState.payload,
       queue: currentState.queue,
-      headers: currentState.headers,
+      headers,
       key: currentState.key,
       dispatchKind: "redrive",
     };
@@ -256,6 +314,12 @@ FORMAT ${JSON_FORMAT}
       redriveId,
       queueName: currentState.queueName,
       jobName: currentState.jobName,
+      retryBudget: currentState.retryBudget,
+      retryBackoffType: currentState.retryBackoffType,
+      retryBackoffStartingSeconds: currentState.retryBackoffStartingSeconds,
+      retryCount: 0,
+      redriveBudget: currentState.redriveBudget,
+      redriveCount: nextRedriveCount,
       requestedAt,
       requestedBy: request.requestedBy,
       reason: request.reason,
@@ -320,6 +384,7 @@ FORMAT ${JSON_FORMAT}
   }
 
   private toEventRow(event: QueueJobEvent): ClickHouseEventRow {
+    const parsedHeaders = parseQueueHeaders(event.headers);
     return {
       event_id: event.eventId,
       event_type: event.type,
@@ -334,6 +399,13 @@ FORMAT ${JSON_FORMAT}
       scheduled_at: toClickHouseNullableDateTime(this.resolveScheduledAt(event)),
       dispatch_kind: event.dispatchKind,
       redrive_id: event.redriveId ?? null,
+      retry_budget: parsedHeaders?.retryBudget ?? event.queue.config.retry.budget,
+      retry_backoff_type: parsedHeaders?.retryBackoffType ?? event.queue.config.retry.backoff.type,
+      retry_backoff_starting_seconds: parsedHeaders?.retryBackoffStartingSeconds
+        ?? event.queue.config.retry.backoff.startingSeconds,
+      retry_count: parsedHeaders?.retryCount ?? 0,
+      redrive_budget: parsedHeaders?.redriveBudget ?? null,
+      redrive_count: parsedHeaders?.redriveCount ?? 0,
       partition_key: event.key ?? null,
       payload_json: JSON.stringify(event.payload),
       queue_json: JSON.stringify(event.queue),
@@ -348,6 +420,7 @@ FORMAT ${JSON_FORMAT}
   }
 
   private toCurrentRow(event: QueueJobEvent): ClickHouseCurrentRow {
+    const parsedHeaders = parseQueueHeaders(event.headers);
     return {
       job_id: event.jobId,
       queue_name: event.queueName,
@@ -359,6 +432,13 @@ FORMAT ${JSON_FORMAT}
       scheduled_at: toClickHouseNullableDateTime(this.resolveScheduledAt(event)),
       dispatch_kind: event.dispatchKind,
       redrive_id: event.redriveId ?? null,
+      retry_budget: parsedHeaders?.retryBudget ?? event.queue.config.retry.budget,
+      retry_backoff_type: parsedHeaders?.retryBackoffType ?? event.queue.config.retry.backoff.type,
+      retry_backoff_starting_seconds: parsedHeaders?.retryBackoffStartingSeconds
+        ?? event.queue.config.retry.backoff.startingSeconds,
+      retry_count: parsedHeaders?.retryCount ?? 0,
+      redrive_budget: parsedHeaders?.redriveBudget ?? null,
+      redrive_count: parsedHeaders?.redriveCount ?? 0,
       partition_key: event.key ?? null,
       payload_json: JSON.stringify(event.payload),
       queue_json: JSON.stringify(event.queue),
@@ -407,6 +487,7 @@ FORMAT ${JSON_FORMAT}
           type: "retry_scheduled",
           error: JSON.parse(row.error_json),
           nextAttempt: row.next_attempt ?? row.attempt + 1,
+          nextRetryCount: row.retry_count,
           retryAt: row.scheduled_at
             ? toIsoDateTime(row.scheduled_at)
             : toIsoDateTime(row.event_time),
@@ -423,7 +504,7 @@ FORMAT ${JSON_FORMAT}
           ...common,
           type: "redrive_requested",
           redriveId: row.redrive_id ?? "",
-          requestedAt: row.event_time,
+          requestedAt: toIsoDateTime(row.event_time),
           requestedBy: row.requested_by ?? "unknown",
           reason: row.requested_reason ?? undefined,
         };
@@ -456,6 +537,16 @@ FORMAT ${JSON_FORMAT}
       dispatchKind: row.dispatch_kind as QueueJobStateSnapshot["dispatchKind"],
       lastError: parseNullableJson(row.error_json),
       deadLetterReason: parseNullableJson(row.dead_letter_reason_json),
+      retryBudget: row.retry_budget ?? parseQueueHeaders(headers)?.retryBudget ?? queue.config.retry.budget,
+      retryBackoffType: row.retry_backoff_type as QueueJobStateSnapshot["retryBackoffType"]
+        ?? parseQueueHeaders(headers)?.retryBackoffType
+        ?? queue.config.retry.backoff.type,
+      retryBackoffStartingSeconds: row.retry_backoff_starting_seconds
+        ?? parseQueueHeaders(headers)?.retryBackoffStartingSeconds
+        ?? queue.config.retry.backoff.startingSeconds,
+      retryCount: row.retry_count ?? parseQueueHeaders(headers)?.retryCount ?? 0,
+      redriveBudget: row.redrive_budget ?? parseQueueHeaders(headers)?.redriveBudget,
+      redriveCount: row.redrive_count ?? parseQueueHeaders(headers)?.redriveCount ?? 0,
     };
   }
 
@@ -519,18 +610,33 @@ function reduceRedriveRows(rows: ClickHouseRedriveRow[]): RedriveRecord[] {
       redriveId: row.redrive_id,
       queueName: row.queue_name,
       jobName: row.job_name,
-      requestedAt: row.event_time,
+      retryBudget: row.retry_budget,
+      retryBackoffType: row.retry_backoff_type as RedriveRecord["retryBackoffType"],
+      retryBackoffStartingSeconds: row.retry_backoff_starting_seconds,
+      retryCount: row.retry_count,
+      redriveBudget: row.redrive_budget ?? undefined,
+      redriveCount: row.event_type === "redrive_requested"
+        ? row.redrive_count ?? 0
+        : row.redrive_count ?? 0,
+      requestedAt: toIsoDateTime(row.event_time),
       requestedBy: row.requested_by ?? "unknown",
       reason: row.requested_reason ?? undefined,
     };
 
     if (row.event_type === "redrive_requested") {
-      existing.requestedAt = row.event_time;
+      existing.requestedAt = toIsoDateTime(row.event_time);
       existing.requestedBy = row.requested_by ?? existing.requestedBy;
       existing.reason = row.requested_reason ?? existing.reason;
     } else {
-      existing.dispatchedAt = row.event_time;
+      existing.dispatchedAt = toIsoDateTime(row.event_time);
     }
+
+    existing.redriveBudget = row.redrive_budget ?? existing.redriveBudget;
+    existing.retryBudget = row.retry_budget ?? existing.retryBudget;
+    existing.retryBackoffType = row.retry_backoff_type as RedriveRecord["retryBackoffType"];
+    existing.retryBackoffStartingSeconds = row.retry_backoff_starting_seconds;
+    existing.retryCount = row.retry_count ?? existing.retryCount;
+    existing.redriveCount = Math.max(existing.redriveCount, row.redrive_count ?? 0);
 
     records.set(row.redrive_id, existing);
   }

@@ -3,26 +3,43 @@ import { normalizeQueueDefinition, planFailureAction } from "./policy.js";
 
 describe("workers-state-core policy helpers", () => {
   it("normalizes a string queue definition", () => {
-    expect(normalizeQueueDefinition("uploads")).toEqual({ name: "uploads" });
+    expect(normalizeQueueDefinition("uploads")).toEqual({
+      name: "uploads",
+      config: {
+        retry: {
+          budget: 0,
+          backoff: {
+            type: "static",
+            startingSeconds: 0,
+          },
+        },
+      },
+    });
   });
 
   it("plans a retry when the retry budget remains", () => {
     const plan = planFailureAction(
       normalizeQueueDefinition({
         name: "uploads",
-        retry: {
-          maxRetries: 2,
-          delay: { type: "fixed", ms: 5000 },
+        config: {
+          retry: {
+            budget: 2,
+            backoff: {
+              type: "static",
+              startingSeconds: 5,
+            },
+          },
         },
       }),
       1,
       { name: "Error", message: "boom" },
-      new Date("2026-03-27T12:00:00.000Z"),
+      { now: new Date("2026-03-27T12:00:00.000Z") },
     );
 
     expect(plan).toEqual({
       type: "retry",
       nextAttempt: 2,
+      nextRetryCount: 1,
       delayMs: 5000,
       retryAt: "2026-03-27T12:00:05.000Z",
     });
@@ -32,12 +49,17 @@ describe("workers-state-core policy helpers", () => {
     const plan = planFailureAction(
       normalizeQueueDefinition({
         name: "uploads",
-        retry: {
-          maxRetries: 1,
-          delay: { type: "fixed", ms: 5000 },
-        },
         deadLetter: {
           queueName: "uploads-dlq",
+        },
+        config: {
+          retry: {
+            budget: 1,
+            backoff: {
+              type: "static",
+              startingSeconds: 5,
+            },
+          },
         },
       }),
       2,
@@ -48,5 +70,32 @@ describe("workers-state-core policy helpers", () => {
     if (plan.type === "dead_letter") {
       expect(plan.reason.code).toBe("max_retries_exceeded");
     }
+  });
+
+  it("stops dead-lettering once a redrive budget is exhausted", () => {
+    const plan = planFailureAction(
+      normalizeQueueDefinition({
+        name: "uploads",
+        deadLetter: {
+          queueName: "uploads-dlq",
+        },
+        config: {
+          redrive: {
+            budget: 1,
+          },
+        },
+      }),
+      1,
+      { name: "Error", message: "boom" },
+      {
+        redriveCount: 1,
+      },
+    );
+
+    expect(plan).toEqual({
+      type: "failure",
+      reason: "redrive_budget_exhausted",
+      rethrow: false,
+    });
   });
 });

@@ -7,6 +7,8 @@ import {
   buildQueueHeaders,
   createJobId,
   dueDispatchToHeaders,
+  normalizeQueueDefinition,
+  resolveExecutionConfig,
 } from "@alt-stack/workers-core";
 import type {
   CreateJobClientOptions,
@@ -72,8 +74,12 @@ class WarpStreamJobClient<TRouter extends WorkerRouter<any>> implements JobClien
     const createdAtMs = Date.now().toString();
     const createdAtIso = new Date(Number.parseInt(createdAtMs, 10)).toISOString();
     const jobId = createJobId();
-    const queueName = procedure.queueConfig?.name ?? procedure.queue ?? jobName;
+    const queueConfig = procedure.type === "queue"
+      ? (procedure.queueConfig ?? normalizeQueueDefinition(procedure.queue ?? jobName))
+      : normalizeQueueDefinition(procedure.queue ?? jobName);
+    const queueName = queueConfig.name;
     const partitionKey = options?.key;
+    const executionConfig = resolveExecutionConfig(queueConfig, options?.config);
 
     const managedHeaders = buildQueueHeaders(
       {
@@ -82,6 +88,12 @@ class WarpStreamJobClient<TRouter extends WorkerRouter<any>> implements JobClien
         queueName,
         createdAt: createdAtMs,
         dispatchKind: "initial",
+        retryBudget: executionConfig.retry.budget,
+        retryBackoffType: executionConfig.retry.backoff.type,
+        retryBackoffStartingSeconds: executionConfig.retry.backoff.startingSeconds,
+        retryCount: 0,
+        redriveBudget: executionConfig.redrive?.budget,
+        redriveCount: 0,
       },
       options?.headers,
     );
@@ -109,10 +121,10 @@ class WarpStreamJobClient<TRouter extends WorkerRouter<any>> implements JobClien
             createdAt: createdAtIso,
             jobId,
             jobName,
-            queueName: procedure.queueConfig.name,
+            queueName: queueConfig.name,
             attempt: 1,
             payload,
-            queue: procedure.queueConfig,
+            queue: queueConfig,
             headers: managedHeaders,
             key: partitionKey,
             dispatchKind: "initial",
