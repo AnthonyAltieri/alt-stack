@@ -1,0 +1,17 @@
+[package]
+name = "http-client-rust-tokio"
+version = "0.1.0"
+description = "Typed JSON HTTP client runtime for generated Rust OpenAPI SDKs"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+httpmock.workspace = true
+tokio.workspace = true
