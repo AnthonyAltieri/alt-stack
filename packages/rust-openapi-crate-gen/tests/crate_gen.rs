@@ -93,3 +93,20 @@ fn writes_expected_crate_files_to_disk() {
     assert!(lib_rs.contains("pub mod request {"));
     assert!(lib_rs.contains("pub mod response {"));
 }
+
+#[test]
+fn omits_runtime_usage_docs_when_routes_are_disabled() {
+    let mut options = RustOpenApiCrateOptions::new("models-only-sdk");
+    options.include_routes = false;
+
+    let generated =
+        generate_rust_crate(&sample_openapi(), &options).expect("crate generation should succeed");
+
+    assert!(!generated.lib_rs.contains("default_http_client"));
+    assert!(!generated
+        .readme_md
+        .contains("use models_only_sdk::default_http_client"));
+    assert!(generated
+        .readme_md
+        .contains("Route request/response modules were disabled"));
+}

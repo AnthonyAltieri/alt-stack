@@ -306,12 +306,21 @@ fn deserialize_body<T>(body: &str, status: u16, kind: &'static str) -> Result<T,
 where
     T: DeserializeOwned,
 {
+    let body = normalize_json_body(body);
     serde_json::from_str(body).map_err(|source| ApiClientError::Deserialize {
         kind,
         status,
         source,
         body: body.to_owned(),
     })
+}
+
+fn normalize_json_body(body: &str) -> &str {
+    if body.trim().is_empty() {
+        "null"
+    } else {
+        body
+    }
 }
 
 pub use reqwest::{header::HeaderMap as DefaultHeaderMap, Method as HttpMethod};

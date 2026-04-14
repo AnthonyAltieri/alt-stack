@@ -85,3 +85,157 @@ fn generates_models_routes_and_default_client_alias() {
     assert!(generated.contains("pub mod response {"));
     syn::parse_file(&generated).expect("generated Rust should parse");
 }
+
+#[test]
+fn groups_multiple_methods_under_a_single_path_module() {
+    let openapi = json!({
+        "components": {
+            "schemas": {
+                "User": {
+                    "type": "object",
+                    "properties": {
+                        "id": { "type": "string" },
+                        "name": { "type": "string" }
+                    },
+                    "required": ["id", "name"],
+                    "additionalProperties": false
+                }
+            }
+        },
+        "paths": {
+            "/users/{id}": {
+                "get": {
+                    "parameters": [
+                        { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+                    ],
+                    "responses": {
+                        "200": {
+                            "content": {
+                                "application/json": { "schema": { "$ref": "#/components/schemas/User" } }
+                            }
+                        }
+                    }
+                },
+                "delete": {
+                    "parameters": [
+                        { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+                    ],
+                    "responses": {
+                        "200": {
+                            "content": {
+                                "application/json": { "schema": { "$ref": "#/components/schemas/User" } }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    let generated = openapi_to_rust_code(&openapi, &GenerationOptions::default());
+
+    assert_eq!(generated.matches("pub mod users_id {").count(), 2);
+    assert!(generated.contains("pub mod request {\n    pub mod users_id {"));
+    assert!(generated.contains("pub mod get {"));
+    assert!(generated.contains("pub mod delete {"));
+    assert!(generated.contains("pub mod response {\n    pub mod users_id {"));
+    assert!(generated.contains("pub type DeleteUsersId200Response = "));
+    syn::parse_file(&generated).expect("generated Rust should parse");
+}
+
+#[test]
+fn emits_aliases_for_deduplicated_component_schemas() {
+    let openapi = json!({
+        "components": {
+            "schemas": {
+                "AThing": {
+                    "type": "object",
+                    "properties": {
+                        "id": { "type": "string" },
+                        "name": { "type": "string" }
+                    },
+                    "required": ["id", "name"],
+                    "additionalProperties": false
+                },
+                "BThing": {
+                    "type": "object",
+                    "properties": {
+                        "id": { "type": "string" },
+                        "name": { "type": "string" }
+                    },
+                    "required": ["id", "name"],
+                    "additionalProperties": false
+                }
+            }
+        },
+        "paths": {
+            "/things": {
+                "get": {
+                    "responses": {
+                        "200": {
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "$ref": "#/components/schemas/BThing"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    let generated = openapi_to_rust_code(&openapi, &GenerationOptions::default());
+
+    assert!(generated.contains("pub struct AThing {"));
+    assert!(generated.contains("pub struct BThing {"));
+    assert!(!generated.contains("pub type BThing = AThing;"));
+    assert!(generated.contains("pub type GetThings200Response = BThing;"));
+    syn::parse_file(&generated).expect("generated Rust should parse");
+}
+
+#[test]
+fn renders_one_of_with_null_as_option_of_the_non_null_variant() {
+    let openapi = json!({
+        "components": {
+            "schemas": {
+                "User": {
+                    "type": "object",
+                    "properties": {
+                        "id": { "type": "string" }
+                    },
+                    "required": ["id"],
+                    "additionalProperties": false
+                }
+            }
+        },
+        "paths": {
+            "/users/{id}": {
+                "get": {
+                    "responses": {
+                        "200": {
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "oneOf": [
+                                            { "$ref": "#/components/schemas/User" },
+                                            { "type": "null" }
+                                        ]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    let generated = openapi_to_rust_code(&openapi, &GenerationOptions::default());
+
+    assert!(generated.contains("pub type GetUsersId200Response = Option<User>;"));
+    assert!(!generated.contains("GetUsersId200ResponseVariant2"));
+    syn::parse_file(&generated).expect("generated Rust should parse");
+}

@@ -182,8 +182,9 @@ uuid = {{ version = "1.18.1", features = ["serde", "v4"] }}
 
 fn render_readme(options: &RustOpenApiCrateOptions) -> String {
     let crate_name = options.crate_name();
-    format!(
-        r#"# {package_name}
+    if options.include_routes {
+        return format!(
+            r#"# {package_name}
 
 Generated Rust SDK crate for the `{package_name}` OpenAPI specification.
 
@@ -204,8 +205,30 @@ let _ = request;
 - `src/lib.rs` is generated from OpenAPI via `rust-openapi`.
 - The default runtime dependency is `{runtime_package}`.
 "#,
+            package_name = options.package_name,
+            crate_name = crate_name,
+            runtime_package = DEFAULT_RUNTIME_PACKAGE_NAME,
+        );
+    }
+
+    format!(
+        r#"# {package_name}
+
+Generated Rust model crate for the `{package_name}` OpenAPI specification.
+
+## Usage
+
+```rust
+use {crate_name}::*;
+```
+
+## Notes
+
+- `src/lib.rs` is generated from OpenAPI via `rust-openapi`.
+- Route request/response modules were disabled when this crate was generated.
+- No `default_http_client` re-export is included in this mode.
+"#,
         package_name = options.package_name,
         crate_name = crate_name,
-        runtime_package = DEFAULT_RUNTIME_PACKAGE_NAME,
     )
 }

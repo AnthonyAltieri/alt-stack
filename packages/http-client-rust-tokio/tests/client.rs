@@ -169,3 +169,30 @@ async fn supports_delete_requests_without_body() {
     mock.assert();
     assert!(response.is_success());
 }
+
+#[tokio::test]
+async fn treats_empty_204_responses_as_success() {
+    let server = MockServer::start();
+
+    let mock = server.mock(|when, then| {
+        when.method(DELETE).path("/users/123");
+        then.status(204).header("content-length", "0").body("");
+    });
+
+    let client = ApiClient::new(ApiClientOptions::new(server.base_url()));
+    let request = JsonRequest::new().with_path_param("id", "123");
+
+    let response = client
+        .delete::<(), ApiError>("/users/{id}", request)
+        .await
+        .expect("request should succeed");
+
+    mock.assert();
+    match response {
+        ApiResponse::Success(success) => {
+            assert_eq!(success.status, 204);
+            assert_eq!(success.body, ());
+        }
+        ApiResponse::Error(_) => panic!("expected success response"),
+    }
+}
