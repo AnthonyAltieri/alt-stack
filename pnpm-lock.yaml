@@ -57,6 +57,9 @@ importers:
 
   examples/altstack-server:
     dependencies:
+      '@alt-stack/durable-streams-server':
+        specifier: workspace:*
+        version: link:../../packages/durable-streams-server
       '@alt-stack/http-client-fetch':
         specifier: workspace:*
         version: link:../../packages/http-client-fetch
@@ -242,6 +245,50 @@ importers:
       typescript:
         specifier: 5.9.2
         version: 5.9.2
+
+  packages/durable-streams-core:
+    dependencies:
+      '@alt-stack/result':
+        specifier: workspace:*
+        version: link:../result
+    devDependencies:
+      oxlint:
+        specifier: ^1.24.0
+        version: 1.24.0
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.0(jiti@1.21.7)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.2)(yaml@2.8.1)
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.2
+      vitest:
+        specifier: ^4.0.3
+        version: 4.0.3(@types/debug@4.1.12)(@types/node@22.19.1)(jiti@1.21.7)(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1)
+
+  packages/durable-streams-server:
+    dependencies:
+      '@alt-stack/durable-streams-core':
+        specifier: workspace:*
+        version: link:../durable-streams-core
+      '@alt-stack/result':
+        specifier: workspace:*
+        version: link:../result
+    devDependencies:
+      oxlint:
+        specifier: ^1.24.0
+        version: 1.24.0
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.0(jiti@1.21.7)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.2)(yaml@2.8.1)
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.2
+      vitest:
+        specifier: ^4.0.3
+        version: 4.0.3(@types/debug@4.1.12)(@types/node@22.19.1)(jiti@1.21.7)(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1)
+      zod:
+        specifier: ^4.0.0
+        version: 4.1.12
 
   packages/example-altstack-server-sdk:
     devDependencies:
@@ -563,6 +610,9 @@ importers:
         specifier: workspace:*
         version: link:../server-core
     devDependencies:
+      '@alt-stack/durable-streams-server':
+        specifier: workspace:*
+        version: link:../durable-streams-server
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
