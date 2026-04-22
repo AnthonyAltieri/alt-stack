@@ -412,7 +412,41 @@ describe("runtime — POST idempotent producers", () => {
     expect(res.headers["Producer-Received-Seq"]).toBe("2");
   });
 
-  it("close-only with producer headers dedups repeat close requests", async () => {
+  it("close-only on already-closed stream returns 204 regardless of producer", async () => {
+    // Close the stream first with no producer headers.
+    await handleStreamRequest(
+      cfg,
+      req({
+        method: "POST",
+        streamUrl: "/a",
+        headers: { "stream-closed": "true" },
+        body: null,
+      }),
+    );
+
+    // A fresh producer now sends close-only to the already-closed stream.
+    // Per spec §5.2 (SHOULD), close-only is idempotent and must return 204
+    // — NOT 409 — even though this producer never closed anything.
+    const res = await handleStreamRequest(
+      cfg,
+      req({
+        method: "POST",
+        streamUrl: "/a",
+        headers: {
+          "stream-closed": "true",
+          "producer-id": "fresh-closer",
+          "producer-epoch": "0",
+          "producer-seq": "0",
+        },
+        body: null,
+      }),
+    );
+    expect(res.status).toBe(204);
+    expect(res.headers["Stream-Closed"]).toBe("true");
+    expect(res.headers["Stream-Next-Offset"]).toBeDefined();
+  });
+
+  it("close-only with producer headers: first close echoes producer state, retry returns 204", async () => {
     const producerHeaders = {
       "producer-id": "closer",
       "producer-epoch": "0",
@@ -420,6 +454,8 @@ describe("runtime — POST idempotent producers", () => {
       "stream-closed": "true",
     };
 
+    // First close: stream is open, routes through appendWithProducer.
+    // Producer state is advanced and echoed in response headers.
     const first = await handleStreamRequest(
       cfg,
       req({
@@ -434,8 +470,10 @@ describe("runtime — POST idempotent producers", () => {
     expect(first.headers["Producer-Epoch"]).toBe("0");
     expect(first.headers["Producer-Seq"]).toBe("0");
 
-    // A retry with the same producer tuple must dedup even though the stream
-    // is now closed — 204 with current producer state, not 409.
+    // Retry: stream is already closed → idempotent 204 short-circuit (spec
+    // §5.2). Producer headers aren't echoed on the short-circuit path since
+    // no new accepted seq is being reported; the runtime avoids advancing
+    // producer state on terminal streams.
     const retry = await handleStreamRequest(
       cfg,
       req({
@@ -447,8 +485,6 @@ describe("runtime — POST idempotent producers", () => {
     );
     expect(retry.status).toBe(204);
     expect(retry.headers["Stream-Closed"]).toBe("true");
-    expect(retry.headers["Producer-Epoch"]).toBe("0");
-    expect(retry.headers["Producer-Seq"]).toBe("0");
   });
 
   it("partial producer headers return 400", async () => {

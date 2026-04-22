@@ -93,6 +93,10 @@ function maxReadBytesOf(cfg: EndpointConfig): number {
   return cfg.maxReadBytes ?? DEFAULT_MAX_READ_BYTES;
 }
 
+function longPollTimeoutMsOf(cfg: EndpointConfig): number {
+  return cfg.longPollTimeoutMs ?? DEFAULT_LONG_POLL_MS;
+}
+
 /**
  * Enforces {@link EndpointConfig.maxBodyBytes}. Returns `null` when OK,
  * otherwise an error the caller should short-circuit with.
@@ -243,19 +247,28 @@ async function handlePost(
   const producer = producerResult.value;
 
   // Close-only: empty body + Stream-Closed: true. Content-Type is ignored.
-  // When producer headers are present, route through appendWithProducer so
-  // close-only retries with the same (producerId, epoch, seq) dedupe.
   if (bodyIsEmpty && wantsClose) {
     const head = await cfg.storage.head(req.streamUrl);
     if (head._tag === "Err") return errorResponse(head.error);
 
+    // Spec §5.2: close-only is idempotent — already-closed always returns 204
+    // with Stream-Closed, regardless of whether producer headers are present
+    // and regardless of which producer is sending the close. We skip
+    // appendWithProducer here because advancing producer state on a terminal
+    // stream has no semantic value. Same-tuple retries still get 204 via this
+    // same path; we just don't echo Producer-Epoch/Producer-Seq since no
+    // accepted seq is being reported.
+    if (head.value.closed) {
+      return noBody(204, {
+        [STREAM_NEXT_OFFSET]: head.value.tailOffset || OFFSET_BEGINNING,
+        [STREAM_CLOSED]: PRESENCE_TRUE,
+      });
+    }
+
+    // Open stream: actually close it. Route through appendWithProducer when
+    // producer headers are present so retries after a successful close dedupe
+    // via the producer state machine on the next try.
     if (producer === null) {
-      if (head.value.closed) {
-        return noBody(204, {
-          [STREAM_NEXT_OFFSET]: head.value.tailOffset || OFFSET_BEGINNING,
-          [STREAM_CLOSED]: PRESENCE_TRUE,
-        });
-      }
       const r = await cfg.storage.append(req.streamUrl, [], {
         contentType: head.value.contentType,
         close: true,
@@ -429,12 +442,11 @@ async function handleLongPoll(
   const cursorResult = parseCursor(req.query["cursor"]);
   if (cursorResult._tag === "Err") return errorResponse(toInvalidCursor(cursorResult.error));
 
-  const timeoutMs = cfg.longPollTimeoutMs ?? DEFAULT_LONG_POLL_MS;
   const r = await cfg.storage.waitForAppend(
     req.streamUrl,
     fromOffset,
     maxReadBytesOf(cfg),
-    timeoutMs,
+    longPollTimeoutMsOf(cfg),
     req.signal,
   );
   if (r._tag === "Err") return errorResponse(r.error);
@@ -482,13 +494,7 @@ async function handleSse(
   };
   if (encoding === "base64") headers[SSE_DATA_ENCODING] = "base64";
 
-  const iterable = sseStream(cfg, req, fromOffset, meta, encoding);
-  return {
-    status: 200,
-    headers: withDefaults(headers),
-    bodyKind: "sse",
-    body: iterable,
-  };
+  return sse(200, headers, sseStream(cfg, req, fromOffset, meta, encoding));
 }
 
 async function* sseStream(
@@ -578,6 +584,14 @@ function bytes(
   body: Uint8Array,
 ): NormalizedResponse {
   return { status, headers: withDefaults(headers), bodyKind: "bytes", body };
+}
+
+function sse(
+  status: number,
+  headers: Record<string, string>,
+  body: AsyncIterable<SseEvent>,
+): NormalizedResponse {
+  return { status, headers: withDefaults(headers), bodyKind: "sse", body };
 }
 
 function errorResponse(err: DurableStreamError): NormalizedResponse {

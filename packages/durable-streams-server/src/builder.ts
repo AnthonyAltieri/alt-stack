@@ -91,7 +91,16 @@ export class StreamBuilder implements StreamEndpoint {
     return this;
   }
 
-  /** Inject a deterministic RNG (for tests). Defaults to `Math.random`. */
+  /**
+   * Override the random source used for cursor jitter (see Section 8 of the
+   * protocol). The protocol requires live-mode cursors to advance strictly
+   * monotonically when the client's echoed cursor catches up to the server;
+   * the jitter amount comes from this RNG.
+   *
+   * Default: `Math.random`. Override when you need deterministic tests,
+   * reproducible load-test traces, or a seeded PRNG for CDN cache-key
+   * predictability.
+   */
   rng(rng: () => number): this {
     this.state.rng = rng;
     return this;
