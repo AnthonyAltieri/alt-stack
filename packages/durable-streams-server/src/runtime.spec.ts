@@ -328,6 +328,33 @@ describe("runtime — POST (append, JSON mode)", () => {
     );
     expect(res.status).toBe(409);
   });
+
+  it("error precedence: closed-check wins over content-type mismatch", async () => {
+    // Close the stream first.
+    await handleStreamRequest(
+      cfg,
+      req({
+        method: "POST",
+        streamUrl: "/a",
+        headers: { "stream-closed": "true" },
+        body: null,
+      }),
+    );
+    // Now send an append with a mismatched Content-Type. Per spec §5.2, the
+    // closed check takes precedence so clients always see Stream-Closed.
+    const res = await handleStreamRequest(
+      cfg,
+      req({
+        method: "POST",
+        streamUrl: "/a",
+        headers: { "content-type": "text/plain" },
+        body: encoder.encode("hi"),
+      }),
+    );
+    expect(res.status).toBe(409);
+    expect(res.headers["Stream-Closed"]).toBe("true");
+    expect(res.headers["Stream-Next-Offset"]).toBeDefined();
+  });
 });
 
 describe("runtime — POST idempotent producers", () => {
@@ -383,6 +410,45 @@ describe("runtime — POST idempotent producers", () => {
     expect(res.status).toBe(409);
     expect(res.headers["Producer-Expected-Seq"]).toBe("1");
     expect(res.headers["Producer-Received-Seq"]).toBe("2");
+  });
+
+  it("close-only with producer headers dedups repeat close requests", async () => {
+    const producerHeaders = {
+      "producer-id": "closer",
+      "producer-epoch": "0",
+      "producer-seq": "0",
+      "stream-closed": "true",
+    };
+
+    const first = await handleStreamRequest(
+      cfg,
+      req({
+        method: "POST",
+        streamUrl: "/a",
+        headers: producerHeaders,
+        body: null,
+      }),
+    );
+    expect(first.status).toBe(204);
+    expect(first.headers["Stream-Closed"]).toBe("true");
+    expect(first.headers["Producer-Epoch"]).toBe("0");
+    expect(first.headers["Producer-Seq"]).toBe("0");
+
+    // A retry with the same producer tuple must dedup even though the stream
+    // is now closed — 204 with current producer state, not 409.
+    const retry = await handleStreamRequest(
+      cfg,
+      req({
+        method: "POST",
+        streamUrl: "/a",
+        headers: producerHeaders,
+        body: null,
+      }),
+    );
+    expect(retry.status).toBe(204);
+    expect(retry.headers["Stream-Closed"]).toBe("true");
+    expect(retry.headers["Producer-Epoch"]).toBe("0");
+    expect(retry.headers["Producer-Seq"]).toBe("0");
   });
 
   it("partial producer headers return 400", async () => {
@@ -495,6 +561,124 @@ describe("runtime — GET catch-up", () => {
     expect(res.status).toBe(200);
     expect(res.headers["Stream-Closed"]).toBe("true");
     expect(res.headers["Stream-Up-To-Date"]).toBe("true");
+  });
+});
+
+describe("runtime — maxBodyBytes", () => {
+  it("rejects oversize POST with 413", async () => {
+    const cfg: EndpointConfig = {
+      storage: memoryStorage(),
+      maxBodyBytes: 16,
+    };
+    await handleStreamRequest(
+      cfg,
+      req({ method: "PUT", streamUrl: "/a", headers: { "content-type": JSON_CT } }),
+    );
+    const big = encoder.encode(JSON.stringify({ payload: "x".repeat(64) }));
+    const res = await handleStreamRequest(
+      cfg,
+      req({
+        method: "POST",
+        streamUrl: "/a",
+        headers: { "content-type": JSON_CT },
+        body: big,
+      }),
+    );
+    expect(res.status).toBe(413);
+  });
+
+  it("rejects oversize PUT initial body with 413", async () => {
+    const cfg: EndpointConfig = {
+      storage: memoryStorage(),
+      maxBodyBytes: 16,
+    };
+    const big = encoder.encode(JSON.stringify([{ a: 1 }, { b: 2 }, { c: 3 }]));
+    const res = await handleStreamRequest(
+      cfg,
+      req({
+        method: "PUT",
+        streamUrl: "/a",
+        headers: { "content-type": JSON_CT },
+        body: big,
+      }),
+    );
+    expect(res.status).toBe(413);
+  });
+
+  it("allows bodies at or below the cap", async () => {
+    const cfg: EndpointConfig = {
+      storage: memoryStorage(),
+      maxBodyBytes: 1024,
+    };
+    await handleStreamRequest(
+      cfg,
+      req({ method: "PUT", streamUrl: "/a", headers: { "content-type": JSON_CT } }),
+    );
+    const res = await handleStreamRequest(
+      cfg,
+      req({
+        method: "POST",
+        streamUrl: "/a",
+        headers: { "content-type": JSON_CT },
+        body: encoder.encode('{"x":1}'),
+      }),
+    );
+    expect(res.status).toBe(204);
+  });
+});
+
+describe("runtime — nosniff default", () => {
+  it("sets X-Content-Type-Options: nosniff on every response", async () => {
+    const cfg: EndpointConfig = { storage: memoryStorage() };
+    const put = await handleStreamRequest(
+      cfg,
+      req({ method: "PUT", streamUrl: "/a", headers: { "content-type": JSON_CT } }),
+    );
+    expect(put.headers["X-Content-Type-Options"]).toBe("nosniff");
+
+    const head = await handleStreamRequest(cfg, req({ method: "HEAD", streamUrl: "/a" }));
+    expect(head.headers["X-Content-Type-Options"]).toBe("nosniff");
+
+    const get = await handleStreamRequest(
+      cfg,
+      req({ streamUrl: "/a", query: { offset: "-1" } }),
+    );
+    expect(get.headers["X-Content-Type-Options"]).toBe("nosniff");
+  });
+});
+
+describe("runtime — injectable rng", () => {
+  it("uses cfg.rng for cursor jitter instead of Math.random", async () => {
+    // Fixed rng → deterministic jitter. Use a value that produces the max
+    // jitter interval so we can assert an exact cursor advance.
+    const cfg: EndpointConfig = {
+      storage: memoryStorage(),
+      longPollTimeoutMs: 20,
+      rng: () => 0, // jitterIntervals = 1 + floor(0 * 180) = 1
+    };
+    await handleStreamRequest(
+      cfg,
+      req({ method: "PUT", streamUrl: "/a", headers: { "content-type": JSON_CT } }),
+    );
+
+    // First long-poll: client sends no cursor → gets current server interval.
+    const first = await handleStreamRequest(
+      cfg,
+      req({ streamUrl: "/a", query: { offset: "-1", live: "long-poll" } }),
+    );
+    const serverCursor = Number(first.headers["Stream-Cursor"]);
+    expect(Number.isFinite(serverCursor)).toBe(true);
+
+    // Second long-poll: client echoes the exact same cursor → must be bumped
+    // by exactly 1 interval (rng=0 maps to jitter=1).
+    const second = await handleStreamRequest(
+      cfg,
+      req({
+        streamUrl: "/a",
+        query: { offset: "-1", live: "long-poll", cursor: String(serverCursor) },
+      }),
+    );
+    expect(Number(second.headers["Stream-Cursor"])).toBe(serverCursor + 1);
   });
 });
 

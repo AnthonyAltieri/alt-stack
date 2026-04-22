@@ -32,6 +32,7 @@ interface BuilderState {
   maxBodyBytes?: number;
   longPollTimeoutMs?: number;
   maxReadBytes?: number;
+  rng?: () => number;
   middleware: StreamMiddleware[];
 }
 
@@ -90,6 +91,12 @@ export class StreamBuilder implements StreamEndpoint {
     return this;
   }
 
+  /** Inject a deterministic RNG (for tests). Defaults to `Math.random`. */
+  rng(rng: () => number): this {
+    this.state.rng = rng;
+    return this;
+  }
+
   /** Prepend a middleware to the chain. Runs before the protocol runtime. */
   use(mw: StreamMiddleware): this {
     this.state.middleware.push(mw);
@@ -120,12 +127,14 @@ function toEndpointConfig(s: BuilderState): EndpointConfig {
     maxBodyBytes?: number;
     longPollTimeoutMs?: number;
     maxReadBytes?: number;
+    rng?: () => number;
   } = { storage: s.storage };
   if (s.contentType !== undefined) cfg.contentType = s.contentType;
   if (s.ttl !== undefined) cfg.ttl = s.ttl;
   if (s.maxBodyBytes !== undefined) cfg.maxBodyBytes = s.maxBodyBytes;
   if (s.longPollTimeoutMs !== undefined) cfg.longPollTimeoutMs = s.longPollTimeoutMs;
   if (s.maxReadBytes !== undefined) cfg.maxReadBytes = s.maxReadBytes;
+  if (s.rng !== undefined) cfg.rng = s.rng;
   return cfg;
 }
 

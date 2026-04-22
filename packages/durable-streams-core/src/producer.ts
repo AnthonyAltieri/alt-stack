@@ -36,7 +36,7 @@ export interface ProducerState {
 export type Decision =
   | { readonly tag: "accept-new-epoch"; readonly nextState: ProducerState }
   | { readonly tag: "accept"; readonly nextState: ProducerState }
-  | { readonly tag: "duplicate" }
+  | { readonly tag: "duplicate"; readonly currentState: ProducerState }
   | { readonly tag: "reject-stale-epoch"; readonly currentEpoch: number }
   | { readonly tag: "reject-bad-epoch-seq" }
   | {
@@ -76,7 +76,11 @@ export function decideProducerAppend(
 
   // Same epoch: sequence validation.
   if (incoming.seq <= current.lastSeq) {
-    return { tag: "duplicate" };
+    // `current` is the real stored state here — the virtual-null fallback has
+    // lastSeq = -1, and `seq <= -1` is unreachable for a non-negative seq
+    // (which the parsers enforce). Returning `current` lets callers echo the
+    // highest-accepted seq in Producer-Seq response headers.
+    return { tag: "duplicate", currentState: current };
   }
   if (incoming.seq === current.lastSeq + 1) {
     return {

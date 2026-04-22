@@ -145,13 +145,14 @@ export function memoryStorage(): Storage {
   const doWaitForAppend = async (
     streamUrl: string,
     fromOffset: string,
+    maxBytes: number,
     timeoutMs: number,
     signal: AbortSignal,
   ): Promise<Result<ReadChunk, DurableStreamError>> => {
     const s = streams.get(streamUrl);
     if (!s) return err(new StreamNotFound(streamUrl));
 
-    const immediate = makeChunk(s, fromOffset, DEFAULT_READ_MAX_BYTES);
+    const immediate = makeChunk(s, fromOffset, maxBytes);
     if (immediate.messages.length > 0 || immediate.closed) {
       return ok(immediate);
     }
@@ -169,9 +170,9 @@ export function memoryStorage(): Storage {
         resolve(ok(chunk));
       };
 
-      const onUpdate = () => finish(makeChunk(s, fromOffset, DEFAULT_READ_MAX_BYTES));
-      const onAbort = () => finish(makeChunk(s, fromOffset, DEFAULT_READ_MAX_BYTES));
-      const onTimeout = () => finish(makeChunk(s, fromOffset, DEFAULT_READ_MAX_BYTES));
+      const onUpdate = () => finish(makeChunk(s, fromOffset, maxBytes));
+      const onAbort = () => finish(makeChunk(s, fromOffset, maxBytes));
+      const onTimeout = () => finish(makeChunk(s, fromOffset, maxBytes));
 
       const timer = setTimeout(onTimeout, timeoutMs);
       s.notifier.on("update", onUpdate);
@@ -225,11 +226,12 @@ export function memoryStorage(): Storage {
     async append(streamUrl, messages, opts) {
       const s = streams.get(streamUrl);
       if (!s) return err(new StreamNotFound(streamUrl));
-      if (s.contentType !== opts.contentType) {
-        return err(new ContentTypeMismatch(s.contentType));
-      }
+      // Spec §5.2 error precedence: closed → content-type → seq.
       if (s.closed) {
         return err(new StreamClosed(tail(s)));
+      }
+      if (s.contentType !== opts.contentType) {
+        return err(new ContentTypeMismatch(s.contentType));
       }
       for (const m of messages) {
         s.messages.push({ offset: nextOffset(), bytes: m });
@@ -260,20 +262,22 @@ export function memoryStorage(): Storage {
           );
         case "duplicate":
           // Idempotent success: do not re-check content-type or closed state;
-          // the original call already passed those.
+          // the original call already passed those. `decision.currentState`
+          // carries the highest accepted (epoch, seq) for this producer.
           return ok({
             outcome: "duplicate",
             nextOffset: tail(s),
             closed: s.closed,
-            currentState: state ?? { epoch: 0, lastSeq: -1 },
+            currentState: decision.currentState,
           });
         case "accept":
         case "accept-new-epoch": {
-          if (s.contentType !== opts.contentType) {
-            return err(new ContentTypeMismatch(s.contentType));
-          }
+          // Spec §5.2 error precedence: closed → content-type → seq.
           if (s.closed) {
             return err(new StreamClosed(tail(s)));
+          }
+          if (s.contentType !== opts.contentType) {
+            return err(new ContentTypeMismatch(s.contentType));
           }
           for (const m of messages) {
             s.messages.push({ offset: nextOffset(), bytes: m });
@@ -300,8 +304,8 @@ export function memoryStorage(): Storage {
       return ok(makeChunk(s, fromOffset, maxBytes));
     },
 
-    waitForAppend(streamUrl, fromOffset, timeoutMs, signal) {
-      return doWaitForAppend(streamUrl, fromOffset, timeoutMs, signal);
+    waitForAppend(streamUrl, fromOffset, maxBytes, timeoutMs, signal) {
+      return doWaitForAppend(streamUrl, fromOffset, maxBytes, timeoutMs, signal);
     },
 
     subscribe(streamUrl, fromOffset, signal): AsyncIterable<
@@ -326,7 +330,13 @@ export function memoryStorage(): Storage {
         }
         // Then tail live.
         while (!signal.aborted) {
-          const r = await doWaitForAppend(streamUrl, cursor, 30_000, signal);
+          const r = await doWaitForAppend(
+            streamUrl,
+            cursor,
+            DEFAULT_READ_MAX_BYTES,
+            30_000,
+            signal,
+          );
           if (r._tag === "Err") {
             yield r;
             return;

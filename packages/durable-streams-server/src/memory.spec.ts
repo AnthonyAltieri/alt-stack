@@ -270,7 +270,7 @@ describe("memoryStorage — live tailing", () => {
     await s.append("/a", [toBytes('"x"')], { contentType: JSON_CT });
 
     const ac = new AbortController();
-    const r = await s.waitForAppend("/a", "", 1000, ac.signal);
+    const r = await s.waitForAppend("/a", "", 1 << 20, 1000, ac.signal);
     expect(r._tag).toBe("Ok");
     if (r._tag === "Ok") expect(r.value.messages.length).toBe(1);
   });
@@ -285,6 +285,7 @@ describe("memoryStorage — live tailing", () => {
     const waitPromise = s.waitForAppend(
       "/a",
       head.value.tailOffset,
+      1 << 20,
       5000,
       ac.signal,
     );
@@ -304,7 +305,7 @@ describe("memoryStorage — live tailing", () => {
     const s = memoryStorage();
     await s.create("/a", { contentType: JSON_CT });
     const ac = new AbortController();
-    const r = await s.waitForAppend("/a", "", 10, ac.signal);
+    const r = await s.waitForAppend("/a", "", 1 << 20, 10, ac.signal);
     expect(r._tag).toBe("Ok");
     if (r._tag === "Ok") {
       expect(r.value.messages.length).toBe(0);
@@ -328,6 +329,7 @@ describe("memoryStorage — live tailing", () => {
     const r = await s.waitForAppend(
       "/a",
       head.value.tailOffset,
+      1 << 20,
       5000,
       ac.signal,
     );
@@ -343,7 +345,7 @@ describe("memoryStorage — live tailing", () => {
     const head = await s.head("/a");
     if (head._tag !== "Ok") throw new Error("unreachable");
     const ac = new AbortController();
-    const p = s.waitForAppend("/a", head.value.tailOffset, 60_000, ac.signal);
+    const p = s.waitForAppend("/a", head.value.tailOffset, 1 << 20, 60_000, ac.signal);
     await new Promise((r) => setImmediate(r));
     ac.abort();
     const r = await p;

@@ -50,11 +50,17 @@ describe("decideProducerAppend — same epoch", () => {
   it("treats seq == lastSeq as duplicate (idempotent success)", () => {
     const d = decideProducerAppend(state, { epoch: 3, seq: 10 });
     expect(d.tag).toBe("duplicate");
+    if (d.tag === "duplicate") expect(d.currentState).toEqual(state);
   });
 
   it("treats seq < lastSeq as duplicate (out-of-order retry)", () => {
     const d = decideProducerAppend(state, { epoch: 3, seq: 5 });
     expect(d.tag).toBe("duplicate");
+    if (d.tag === "duplicate") {
+      // currentState echoes the highest accepted seq so callers can emit
+      // Producer-Seq response headers without re-reading storage.
+      expect(d.currentState).toEqual(state);
+    }
   });
 
   it("rejects seq > lastSeq + 1 as a gap, echoing expected/received", () => {

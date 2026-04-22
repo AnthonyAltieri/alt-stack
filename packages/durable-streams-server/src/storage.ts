@@ -102,10 +102,14 @@ export interface Storage {
    *
    * Implementations MUST honor the abort signal and return promptly — a
    * disconnected client should not hold a DB connection.
+   *
+   * `maxBytes` caps the data returned when a burst of appends arrives; it
+   * matches the semantics of {@link read}'s `maxBytes`.
    */
   waitForAppend(
     streamUrl: string,
     fromOffset: string,
+    maxBytes: number,
     timeoutMs: number,
     signal: AbortSignal,
   ): Promise<Result<ReadChunk, DurableStreamError>>;

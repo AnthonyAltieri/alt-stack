@@ -24,7 +24,6 @@ import {
   parseAndFlattenJsonAppend,
   frameJsonRead,
   advanceCursor,
-  computeCursor,
   etagFor,
   formatEtagHeader,
   matchesIfNoneMatch,
@@ -39,6 +38,7 @@ import {
   ProducerSeqGap,
   EmptyJsonArray,
   InvalidJson,
+  PayloadTooLarge,
   type DurableStreamError,
   type HeaderParseError,
   type CursorParseError,
@@ -63,17 +63,48 @@ export interface EndpointConfig {
   readonly contentType?: string | readonly string[];
   /** TTL clamping applied to client-supplied Stream-TTL values. */
   readonly ttl?: { readonly default?: number; readonly max?: number };
-  /** Upper bound on request body size. */
+  /** Upper bound on request body size. Enforced by the runtime; returns 413. */
   readonly maxBodyBytes?: number;
   /** Long-poll timeout in milliseconds. Defaults to 30s. */
   readonly longPollTimeoutMs?: number;
   /** Catch-up read chunk size cap. Defaults to 1 MiB. */
   readonly maxReadBytes?: number;
+  /**
+   * Injectable RNG used for cursor jitter. Defaults to {@link Math.random}.
+   * Override for deterministic tests.
+   */
+  readonly rng?: () => number;
 }
 
 const DEFAULT_LONG_POLL_MS = 30_000;
 const DEFAULT_MAX_READ_BYTES = 1 << 20;
 const JSON_CONTENT_TYPE = "application/json";
+
+/** Browser-safety header recommended by spec §10.7 on every response. */
+const NOSNIFF: Readonly<Record<string, string>> = {
+  "X-Content-Type-Options": "nosniff",
+};
+
+function rngOf(cfg: EndpointConfig): () => number {
+  return cfg.rng ?? Math.random;
+}
+
+function maxReadBytesOf(cfg: EndpointConfig): number {
+  return cfg.maxReadBytes ?? DEFAULT_MAX_READ_BYTES;
+}
+
+/**
+ * Enforces {@link EndpointConfig.maxBodyBytes}. Returns `null` when OK,
+ * otherwise an error the caller should short-circuit with.
+ */
+function checkBodySize(
+  cfg: EndpointConfig,
+  body: Uint8Array | null,
+): PayloadTooLarge | null {
+  if (body === null || cfg.maxBodyBytes === undefined) return null;
+  if (body.length > cfg.maxBodyBytes) return new PayloadTooLarge();
+  return null;
+}
 
 // ---------------------------------------------------------------------------
 // Main entry point
@@ -107,6 +138,9 @@ async function handlePut(
   cfg: EndpointConfig,
   req: NormalizedRequest,
 ): Promise<NormalizedResponse> {
+  const oversize = checkBodySize(cfg, req.body);
+  if (oversize) return errorResponse(oversize);
+
   const contentType = req.headers["content-type"] ?? "application/octet-stream";
   if (!contentTypeAllowed(cfg, contentType)) {
     return errorResponse(new ContentTypeMismatch(String(cfg.contentType)));
@@ -193,30 +227,64 @@ async function handlePost(
   cfg: EndpointConfig,
   req: NormalizedRequest,
 ): Promise<NormalizedResponse> {
+  const oversize = checkBodySize(cfg, req.body);
+  if (oversize) return errorResponse(oversize);
+
   const wantsClose = parseStreamClosed(req.headers[STREAM_CLOSED.toLowerCase()]);
   const body = req.body;
   const bodyIsEmpty = body === null || body.length === 0;
 
+  const producerResult = parseProducerHeaders({
+    id: req.headers["producer-id"],
+    epoch: req.headers[PRODUCER_EPOCH.toLowerCase()],
+    seq: req.headers[PRODUCER_SEQ.toLowerCase()],
+  });
+  if (producerResult._tag === "Err") return errorResponse(toInvalidHeader(producerResult.error));
+  const producer = producerResult.value;
+
   // Close-only: empty body + Stream-Closed: true. Content-Type is ignored.
+  // When producer headers are present, route through appendWithProducer so
+  // close-only retries with the same (producerId, epoch, seq) dedupe.
   if (bodyIsEmpty && wantsClose) {
     const head = await cfg.storage.head(req.streamUrl);
     if (head._tag === "Err") return errorResponse(head.error);
-    if (head.value.closed) {
-      const headers: Record<string, string> = {
-        [STREAM_NEXT_OFFSET]: head.value.tailOffset || OFFSET_BEGINNING,
+
+    if (producer === null) {
+      if (head.value.closed) {
+        return noBody(204, {
+          [STREAM_NEXT_OFFSET]: head.value.tailOffset || OFFSET_BEGINNING,
+          [STREAM_CLOSED]: PRESENCE_TRUE,
+        });
+      }
+      const r = await cfg.storage.append(req.streamUrl, [], {
+        contentType: head.value.contentType,
+        close: true,
+      });
+      if (r._tag === "Err") return errorResponse(r.error);
+      return noBody(204, {
+        [STREAM_NEXT_OFFSET]: r.value.nextOffset || OFFSET_BEGINNING,
         [STREAM_CLOSED]: PRESENCE_TRUE,
-      };
-      return noBody(204, headers);
+      });
     }
-    const r = await cfg.storage.append(req.streamUrl, [], {
+
+    const r = await cfg.storage.appendWithProducer(req.streamUrl, [], producer, {
       contentType: head.value.contentType,
       close: true,
     });
     if (r._tag === "Err") return errorResponse(r.error);
-    return noBody(204, {
-      [STREAM_NEXT_OFFSET]: r.value.nextOffset || OFFSET_BEGINNING,
+    const outcome = r.value;
+    const headers: Record<string, string> = {
+      [STREAM_NEXT_OFFSET]: outcome.nextOffset || OFFSET_BEGINNING,
       [STREAM_CLOSED]: PRESENCE_TRUE,
-    });
+    };
+    if (outcome.outcome === "duplicate") {
+      headers[PRODUCER_EPOCH] = String(outcome.currentState.epoch);
+      headers[PRODUCER_SEQ] = String(outcome.currentState.lastSeq);
+      return noBody(204, headers);
+    }
+    headers[PRODUCER_EPOCH] = String(outcome.newState.epoch);
+    headers[PRODUCER_SEQ] = String(outcome.newState.lastSeq);
+    return noBody(204, headers);
   }
 
   // Empty body without Stream-Closed: true is always an error.
@@ -234,14 +302,6 @@ async function handlePost(
   const messagesResult = await bodyToMessages(body!, contentType);
   if (messagesResult._tag === "Err") return errorResponse(messagesResult.error);
   const messages = messagesResult.value;
-
-  const producerResult = parseProducerHeaders({
-    id: req.headers["producer-id"],
-    epoch: req.headers[PRODUCER_EPOCH.toLowerCase()],
-    seq: req.headers[PRODUCER_SEQ.toLowerCase()],
-  });
-  if (producerResult._tag === "Err") return errorResponse(toInvalidHeader(producerResult.error));
-  const producer = producerResult.value;
 
   if (producer === null) {
     const r = await cfg.storage.append(req.streamUrl, messages, {
@@ -277,9 +337,7 @@ async function handlePost(
   }
   headers[PRODUCER_EPOCH] = String(outcome.newState.epoch);
   headers[PRODUCER_SEQ] = String(outcome.newState.lastSeq);
-  // On first write of a new epoch the spec wants 200 OK; otherwise 204 No Content
-  // for produce-side deduplication-aware writes. Plain 204 works for both in
-  // practice — the distinction is non-material once headers carry the state.
+  // Spec §5.2.1: 200 OK for new data, 204 No Content for duplicates.
   return noBody(200, headers);
 }
 
@@ -329,6 +387,7 @@ async function handleCatchup(
   // offset=now: empty body, always up-to-date, no ETag per Section 8.
   if (isNowSentinel) {
     return renderReadChunk(
+      cfg,
       req,
       meta,
       {
@@ -343,13 +402,9 @@ async function handleCatchup(
     );
   }
 
-  const r = await cfg.storage.read(
-    req.streamUrl,
-    fromOffset,
-    cfg.maxReadBytes ?? DEFAULT_MAX_READ_BYTES,
-  );
+  const r = await cfg.storage.read(req.streamUrl, fromOffset, maxReadBytesOf(cfg));
   if (r._tag === "Err") return errorResponse(r.error);
-  return renderReadChunk(req, meta, r.value, {
+  return renderReadChunk(cfg, req, meta, r.value, {
     isNowSentinel: false,
     requestedOffset: fromOffset,
   });
@@ -378,6 +433,7 @@ async function handleLongPoll(
   const r = await cfg.storage.waitForAppend(
     req.streamUrl,
     fromOffset,
+    maxReadBytesOf(cfg),
     timeoutMs,
     req.signal,
   );
@@ -394,13 +450,13 @@ async function handleLongPoll(
       headers[STREAM_CLOSED] = PRESENCE_TRUE;
     } else {
       headers[STREAM_CURSOR] = String(
-        advanceCursor(cursorResult.value, Date.now(), Math.random),
+        advanceCursor(cursorResult.value, Date.now(), rngOf(cfg)),
       );
     }
     return noBody(204, headers);
   }
 
-  return renderReadChunk(req, meta, chunk, {
+  return renderReadChunk(cfg, req, meta, chunk, {
     isNowSentinel,
     requestedOffset: fromOffset,
     includeCursor: !chunk.closed,
@@ -429,7 +485,7 @@ async function handleSse(
   const iterable = sseStream(cfg, req, fromOffset, meta, encoding);
   return {
     status: 200,
-    headers,
+    headers: withDefaults(headers),
     bodyKind: "sse",
     body: iterable,
   };
@@ -481,7 +537,7 @@ async function* sseStream(
       control["streamClosed"] = true;
     } else {
       control["streamCursor"] = String(
-        advanceCursor(null, Date.now(), Math.random),
+        advanceCursor(null, Date.now(), rngOf(cfg)),
       );
       if (chunk.upToDate) control["upToDate"] = true;
     }
@@ -494,11 +550,18 @@ async function* sseStream(
 // Helpers
 // ---------------------------------------------------------------------------
 
+/** Apply defense-in-depth browser headers (spec §10.7) to every response. */
+function withDefaults(
+  headers: Record<string, string>,
+): Record<string, string> {
+  return { ...NOSNIFF, ...headers };
+}
+
 function noBody(
   status: number,
   headers: Record<string, string>,
 ): NormalizedResponse {
-  return { status, headers, bodyKind: "none" };
+  return { status, headers: withDefaults(headers), bodyKind: "none" };
 }
 
 function text(
@@ -506,7 +569,7 @@ function text(
   headers: Record<string, string>,
   body: string,
 ): NormalizedResponse {
-  return { status, headers, bodyKind: "text", body };
+  return { status, headers: withDefaults(headers), bodyKind: "text", body };
 }
 
 function bytes(
@@ -514,7 +577,7 @@ function bytes(
   headers: Record<string, string>,
   body: Uint8Array,
 ): NormalizedResponse {
-  return { status, headers, bodyKind: "bytes", body };
+  return { status, headers: withDefaults(headers), bodyKind: "bytes", body };
 }
 
 function errorResponse(err: DurableStreamError): NormalizedResponse {
@@ -624,6 +687,7 @@ async function bodyToMessages(
 }
 
 function renderReadChunk(
+  cfg: EndpointConfig,
   req: NormalizedRequest,
   meta: StreamMetadata,
   chunk: ReadChunk,
@@ -644,7 +708,7 @@ function renderReadChunk(
 
   if (opts.includeCursor && !chunk.closed) {
     headers[STREAM_CURSOR] = String(
-      advanceCursor(opts.clientCursor ?? null, Date.now(), Math.random),
+      advanceCursor(opts.clientCursor ?? null, Date.now(), rngOf(cfg)),
     );
   }
 
@@ -698,8 +762,7 @@ function formatSseData(
       concat.set(m, o);
       o += m.length;
     }
-    // Node has Buffer; in browsers tsup polyfills. This file targets Node.
-    return Buffer.from(concat).toString("base64");
+    return bytesToBase64(concat);
   }
   if (isJson) {
     const decoder = new TextDecoder();
@@ -709,5 +772,21 @@ function formatSseData(
   return messages.map((m) => new TextDecoder().decode(m)).join("");
 }
 
-// Preserve the `computeCursor` import usage (referenced indirectly for typings)
-void computeCursor;
+/**
+ * Base64-encode a `Uint8Array` using the Web platform's `btoa`. Works on
+ * Node 18+, Bun, Deno, browsers, and Edge runtimes. Chunks the intermediate
+ * latin1 string to stay under `String.fromCharCode`'s argument-count limit
+ * for large payloads.
+ */
+function bytesToBase64(bytes: Uint8Array): string {
+  const CHUNK = 0x8000;
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    const slice = bytes.subarray(i, Math.min(i + CHUNK, bytes.length));
+    binary += String.fromCharCode.apply(
+      null,
+      slice as unknown as number[],
+    );
+  }
+  return btoa(binary);
+}
