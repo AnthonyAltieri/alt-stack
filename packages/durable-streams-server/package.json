@@ -1,7 +1,7 @@
 {
-  "name": "@alt-stack/server-hono",
-  "version": "0.4.5",
-  "description": "Type-safe server framework built on Hono with Zod validation",
+  "name": "@alt-stack/durable-streams-server",
+  "version": "0.0.1",
+  "description": "Framework-agnostic runtime for the Durable Streams Protocol: the stream() builder, Storage interface, and protocol dispatcher. Pair with @alt-stack/server-hono (or another adapter) for routing.",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -17,28 +17,29 @@
     "test": "vitest",
     "check-types": "tsc --noEmit"
   },
-  "keywords": [],
+  "keywords": [
+    "durable-streams",
+    "streaming",
+    "append-only",
+    "sse",
+    "long-poll",
+    "alt-stack"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@alt-stack/server-core": "workspace:*"
+    "@alt-stack/result": "workspace:*",
+    "@alt-stack/durable-streams-core": "workspace:*"
   },
   "peerDependencies": {
-    "@alt-stack/durable-streams-server": "workspace:*",
-    "hono": "^4.0.0",
     "zod": "^4.0.0"
   },
   "peerDependenciesMeta": {
-    "@alt-stack/durable-streams-server": {
+    "zod": {
       "optional": true
     }
   },
   "devDependencies": {
-    "@alt-stack/durable-streams-server": "workspace:*",
-    "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/sdk-trace-base": "^2.2.0",
-    "@opentelemetry/sdk-trace-node": "^2.2.0",
-    "hono": "^4.0.0",
     "oxlint": "^1.24.0",
     "tsup": "^8.0.0",
     "typescript": "^5.9.2",
