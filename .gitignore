@@ -11,6 +11,12 @@ node_modules
 .env.development.local
 .env.test.local
 .env.production.local
+.envrc
+.direnv/
+
+# Local credentials and accidental dumps
+.aws/
+/.new
 
 # Testing
 coverage

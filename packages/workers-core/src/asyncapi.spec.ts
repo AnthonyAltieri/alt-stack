@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
+import { ok } from "./index.js";
 import { generateAsyncAPISpec } from "./asyncapi.js";
 import { init } from "./init.js";
 
@@ -10,7 +11,7 @@ describe("generateAsyncAPISpec", () => {
     const testRouter = router({
       "send-email": procedure
         .input({ payload: z.object({ userId: z.string(), email: z.string().email() }) })
-        .task(async () => {}),
+        .task(async () => ok()),
     });
 
     const spec = generateAsyncAPISpec(testRouter, {
@@ -32,7 +33,7 @@ describe("generateAsyncAPISpec", () => {
     const testRouter = router({
       "process-upload": procedure
         .input({ payload: z.object({ fileId: z.string() }) })
-        .queue("uploads", async () => {}),
+        .queue("uploads", async () => ok()),
     });
 
     const spec = generateAsyncAPISpec(testRouter);
@@ -47,8 +48,8 @@ describe("generateAsyncAPISpec", () => {
     const testRouter = router({
       "send-email": procedure
         .input({ payload: z.object({ email: z.string() }) })
-        .task(async () => {}),
-      "daily-digest": procedure.cron("0 9 * * *", async () => {}),
+        .task(async () => ok()),
+      "daily-digest": procedure.cron("0 9 * * *", async () => ok()),
     });
 
     const spec = generateAsyncAPISpec(testRouter);
@@ -70,7 +71,7 @@ describe("generateAsyncAPISpec", () => {
             age: z.number(),
           }),
         })
-        .task(async () => {}),
+        .task(async () => ok()),
     });
 
     const spec = generateAsyncAPISpec(testRouter);
@@ -86,7 +87,7 @@ describe("generateAsyncAPISpec", () => {
     const testRouter = router({
       "send-notification": procedure
         .input({ payload: z.object({ message: z.string() }) })
-        .task(async () => {}),
+        .task(async () => ok()),
     });
 
     const spec = generateAsyncAPISpec(testRouter);
@@ -100,7 +101,7 @@ describe("generateAsyncAPISpec", () => {
     const { router, procedure } = init();
 
     const testRouter = router({
-      "simple-task": procedure.task(async () => {}),
+      "simple-task": procedure.task(async () => ok()),
     });
 
     const spec = generateAsyncAPISpec(testRouter);
@@ -118,7 +119,7 @@ describe("generateAsyncAPISpec", () => {
     const testRouter = router({
       test: procedure
         .input({ payload: z.object({ id: z.string() }) })
-        .task(async () => {}),
+        .task(async () => ok()),
     });
 
     const spec = generateAsyncAPISpec(testRouter);
@@ -133,7 +134,7 @@ describe("generateAsyncAPISpec", () => {
     const testRouter = router({
       test: procedure
         .input({ payload: z.object({ id: z.string() }) })
-        .task(async () => {}),
+        .task(async () => ok()),
     });
 
     const spec = generateAsyncAPISpec(testRouter, {
@@ -149,13 +150,13 @@ describe("generateAsyncAPISpec", () => {
     const testRouter = router({
       "task-one": procedure
         .input({ payload: z.object({ a: z.string() }) })
-        .task(async () => {}),
+        .task(async () => ok()),
       "task-two": procedure
         .input({ payload: z.object({ b: z.number() }) })
-        .task(async () => {}),
+        .task(async () => ok()),
       "queue-one": procedure
         .input({ payload: z.object({ c: z.boolean() }) })
-        .queue("my-queue", async () => {}),
+        .queue("my-queue", async () => ok()),
     });
 
     const spec = generateAsyncAPISpec(testRouter);
@@ -164,5 +165,4 @@ describe("generateAsyncAPISpec", () => {
     expect(Object.keys(spec.operations ?? {})).toHaveLength(3);
   });
 });
-
 

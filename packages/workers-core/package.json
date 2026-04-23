@@ -13,7 +13,7 @@
     }
   },
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && tsc --project tsconfig.json --emitDeclarationOnly --declaration --declarationMap --outDir dist",
     "test": "vitest",
     "check-types": "tsc --noEmit"
   },
@@ -21,7 +21,8 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@alt-stack/result": "workspace:*"
+    "@alt-stack/result": "workspace:*",
+    "@alt-stack/workers-state-core": "workspace:*"
   },
   "peerDependencies": {
     "@opentelemetry/api": "^1.0.0",

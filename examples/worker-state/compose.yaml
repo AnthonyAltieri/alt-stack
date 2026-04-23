@@ -1,0 +1,92 @@
+x-app-environment: &app-environment
+  NODE_ENV: ${NODE_ENV-development}
+  SQLITE_PATH: ${SQLITE_PATH-/data/task-queue-example.db}
+  DEFAULT_REDRIVE_BUDGET: ${DEFAULT_REDRIVE_BUDGET-1}
+  CLICKHOUSE_URL: ${CLICKHOUSE_URL-http://clickhouse:8123}
+  CLICKHOUSE_USER: ${CLICKHOUSE_USER-default}
+  CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD-task-example-clickhouse}
+  CLICKHOUSE_TABLE_PREFIX: ${CLICKHOUSE_TABLE_PREFIX-task_queue_example}
+  KAFKA_BROKERS: ${KAFKA_BROKERS-kafka:9092}
+  KAFKA_USERNAME: ${KAFKA_USERNAME-}
+  KAFKA_PASSWORD: ${KAFKA_PASSWORD-}
+  KAFKA_SSL: ${KAFKA_SSL-false}
+  SKIP_ENV_VALIDATION: ${SKIP_ENV_VALIDATION-}
+
+services:
+  kafka:
+    image: confluentinc/cp-kafka:7.8.0
+    ports:
+      - "19092:19092"
+    environment:
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://kafka:9092,CONTROLLER://kafka:9093,PLAINTEXT_HOST://0.0.0.0:19092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:19092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    ports:
+      - "8123:8123"
+    environment:
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+
+  api:
+    build:
+      context: ../..
+      dockerfile: examples/worker-state/Dockerfile
+    environment:
+      <<: *app-environment
+      PORT_API: ${PORT_API-3005}
+    command: ["node", "examples/worker-state/apps/api/dist/index.js"]
+    ports:
+      - "${PORT_API:-3005}:${PORT_API:-3005}"
+    depends_on:
+      - kafka
+      - clickhouse
+    volumes:
+      - task_data:/data
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: examples/worker-state/Dockerfile
+    environment:
+      <<: *app-environment
+      KAFKA_GROUP_ID: ${KAFKA_GROUP_ID-task-queue-example-workers}
+    command: ["node", "examples/worker-state/apps/worker/dist/index.js"]
+    depends_on:
+      - kafka
+      - clickhouse
+    volumes:
+      - task_data:/data
+
+  dispatcher:
+    build:
+      context: ../..
+      dockerfile: examples/worker-state/Dockerfile
+    environment:
+      <<: *app-environment
+      DISPATCH_INTERVAL_MS: ${DISPATCH_INTERVAL_MS-1000}
+    command: ["node", "examples/worker-state/apps/dispatcher/dist/index.js"]
+    depends_on:
+      - kafka
+      - clickhouse
+    volumes:
+      - task_data:/data
+
+volumes:
+  clickhouse_data:
+  task_data:

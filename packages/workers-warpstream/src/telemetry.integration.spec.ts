@@ -43,13 +43,13 @@ describe("workers-warpstream telemetry integration", () => {
 
   describe("telemetry configuration types", () => {
     it("accepts boolean telemetry option in router types", () => {
-      const { router, procedure } = init();
+      const { procedure } = init();
 
       const testRouter = workerRouter({
         "process-message": procedure
           .input({ payload: z.object({ data: z.string() }) })
-          .queue("messages", async ({ input }) => {
-            return ok({ processed: true, data: input.data });
+          .queue("messages", async () => {
+            return ok();
           }),
       });
 
@@ -70,15 +70,15 @@ describe("workers-warpstream telemetry integration", () => {
     });
 
     it("accepts full telemetry config in router types", () => {
-      const { router, procedure } = init();
+      const { procedure } = init();
 
       const testRouter = workerRouter({
         "process-event": procedure
           .input({ payload: z.object({ eventId: z.string() }) })
-          .task(async ({ input }) => {
-            return ok({ processed: input.eventId });
+          .task(async () => {
+            return ok();
           }),
-        "health-check": procedure.task(async () => ok({ healthy: true })),
+        "health-check": procedure.task(async () => ok()),
       });
 
       // Type check: full telemetry config should be valid
@@ -109,20 +109,15 @@ describe("workers-warpstream telemetry integration", () => {
   describe("span in context", () => {
     it("span is available in WarpStreamContext type", () => {
       // This is a type-level test - if it compiles, the span field is available
-      const { router, procedure } = init();
-
-      let spanReceived = false;
+      const { procedure } = init();
 
       const testRouter = workerRouter({
         "test-span": procedure
           .input({ payload: z.object({ id: z.string() }) })
           .queue("test-queue", async ({ ctx }) => {
             // ctx should have span property from BaseWorkerContext
-            if (ctx.span) {
-              spanReceived = true;
-              ctx.span.setAttribute("message.id", "test-123");
-            }
-            return ok({ done: true });
+            ctx.span?.setAttribute("message.id", "test-123");
+            return ok();
           }),
       });
 
@@ -131,7 +126,7 @@ describe("workers-warpstream telemetry integration", () => {
     });
 
     it("span is available in task procedures", () => {
-      const { router, procedure } = init();
+      const { procedure } = init();
 
       const testRouter = workerRouter({
         "process-data": procedure
@@ -144,7 +139,7 @@ describe("workers-warpstream telemetry integration", () => {
             // Process...
 
             ctx.span?.addEvent("processing.completed");
-            return ok({ count: input.batch.length });
+            return ok();
           }),
       });
 
@@ -154,10 +149,10 @@ describe("workers-warpstream telemetry integration", () => {
 
   describe("telemetry disabled", () => {
     it("router works with telemetry disabled", () => {
-      const { router, procedure } = init();
+      const { procedure } = init();
 
       const testRouter = workerRouter({
-        "simple-job": procedure.task(async () => ok({ done: true })),
+        "simple-job": procedure.task(async () => ok()),
       });
 
       // Type check: telemetry: false should be valid
@@ -177,10 +172,10 @@ describe("workers-warpstream telemetry integration", () => {
     });
 
     it("router works without telemetry option", () => {
-      const { router, procedure } = init();
+      const { procedure } = init();
 
       const testRouter = workerRouter({
-        "simple-job": procedure.task(async () => ok({ done: true })),
+        "simple-job": procedure.task(async () => ok()),
       });
 
       // Type check: no telemetry option should be valid (opt-in by default)

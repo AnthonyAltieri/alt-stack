@@ -27,7 +27,8 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@alt-stack/workers-client-core": "workspace:*"
+    "@alt-stack/workers-client-core": "workspace:*",
+    "@alt-stack/workers-state-core": "workspace:*"
   },
   "peerDependencies": {
     "kafkajs": "^2.0.0",
