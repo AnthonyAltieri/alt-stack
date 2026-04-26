@@ -284,6 +284,12 @@ export const Request = {
       body: PostUsersBody,
     },
   },
+  '/pets': {
+    GET: {},
+  },
+  '/stats': {
+    GET: {},
+  },
 } as const;
 
 export const Response = {
