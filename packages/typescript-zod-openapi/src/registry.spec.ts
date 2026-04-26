@@ -305,4 +305,95 @@ describe("ZodSchemaRegistry", () => {
       }
     });
   });
+
+  describe("custom (non-built-in) string formats", () => {
+    // Built-in `SUPPORTED_STRING_FORMATS` cover RFC-style identities like
+    // `email`/`uuid`. This block locks in support for arbitrary user-defined
+    // formats — e.g. branded entity-id schemas (`session-id`, `run-id`, …)
+    // that callers map to their own Zod schemas.
+
+    it("should register and look up a custom kebab-case format", () => {
+      const schema = z.string().uuid();
+      registerZodSchemaToOpenApiSchema(schema, {
+        schemaExportedVariableName: "SessionIdSchema",
+        type: "string",
+        format: "session-id",
+      });
+
+      expect(getSchemaExportedVariableNameForStringFormat("session-id")).toBe(
+        "SessionIdSchema",
+      );
+    });
+
+    it("should look up a custom format declared via the formats array", () => {
+      const schema = z.string().uuid();
+      registerZodSchemaToOpenApiSchema(schema, {
+        schemaExportedVariableName: "AnyEntityIdSchema",
+        type: "string",
+        formats: ["session-id", "run-id"],
+      });
+
+      expect(getSchemaExportedVariableNameForStringFormat("session-id")).toBe(
+        "AnyEntityIdSchema",
+      );
+      expect(getSchemaExportedVariableNameForStringFormat("run-id")).toBe(
+        "AnyEntityIdSchema",
+      );
+    });
+
+    it("should let built-in and custom formats coexist", () => {
+      const emailSchema = z.string().email();
+      const sessionIdSchema = z.string().uuid();
+
+      registerZodSchemaToOpenApiSchema(emailSchema, {
+        schemaExportedVariableName: "emailSchema",
+        type: "string",
+        format: "email",
+      });
+      registerZodSchemaToOpenApiSchema(sessionIdSchema, {
+        schemaExportedVariableName: "SessionIdSchema",
+        type: "string",
+        format: "session-id",
+      });
+
+      expect(getSchemaExportedVariableNameForStringFormat("email")).toBe(
+        "emailSchema",
+      );
+      expect(getSchemaExportedVariableNameForStringFormat("session-id")).toBe(
+        "SessionIdSchema",
+      );
+    });
+
+    it("should detect duplicate registrations across custom formats", () => {
+      const schema1 = z.string().uuid();
+      const schema2 = z.string().uuid();
+
+      registerZodSchemaToOpenApiSchema(schema1, {
+        schemaExportedVariableName: "SessionIdSchema",
+        type: "string",
+        format: "session-id",
+      });
+
+      expect(() => {
+        registerZodSchemaToOpenApiSchema(schema2, {
+          schemaExportedVariableName: "OtherSessionIdSchema",
+          type: "string",
+          format: "session-id",
+        });
+      }).toThrow("duplicate Zod OpenAPI registration");
+    });
+
+    it("should return undefined for an unregistered custom format", () => {
+      const schema = z.string().uuid();
+      registerZodSchemaToOpenApiSchema(schema, {
+        schemaExportedVariableName: "SessionIdSchema",
+        type: "string",
+        format: "session-id",
+      });
+
+      expect(
+        getSchemaExportedVariableNameForStringFormat("run-id"),
+      ).toBeUndefined();
+    });
+  });
 });

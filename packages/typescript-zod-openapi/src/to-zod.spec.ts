@@ -1,7 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { z } from "zod";
 import { convertSchemaToZodString } from "./to-zod";
 import { openApiToZodTsCode } from "./to-typescript";
-import { clearZodSchemaToOpenApiSchemaRegistry } from "./registry";
+import {
+  clearZodSchemaToOpenApiSchemaRegistry,
+  registerZodSchemaToOpenApiSchema,
+} from "./registry";
 
 describe("convertSchemaToZodString", () => {
   beforeEach(() => {
@@ -481,6 +485,64 @@ describe("openApiToZodTsCode", () => {
       expect(result).toContain("ObjectSchema");
       expect(result).toContain("UnionSchema");
       expect(result).toContain("IntersectionSchema");
+    });
+  });
+
+  describe("custom string formats", () => {
+    // End-to-end: a property tagged with a registered custom format must
+    // emit the registered Zod schema name in both the generated Zod
+    // expression and the TS interface's output alias, so the codegen's
+    // own `_AssertEqual<Interface, z.infer<typeof Schema>>` line holds
+    // for branded entity-id types.
+
+    it("references the registered schema for a custom string format", () => {
+      const sessionIdSchema = z.string().uuid();
+      registerZodSchemaToOpenApiSchema(sessionIdSchema, {
+        schemaExportedVariableName: "SessionIdSchema",
+        type: "string",
+        format: "session-id",
+      });
+
+      const result = convertSchemaToZodString({
+        type: "string",
+        format: "session-id",
+      });
+      expect(result).toBe("SessionIdSchema");
+    });
+
+    it("emits branded references end-to-end through openApiToZodTsCode", () => {
+      const sessionIdSchema = z.string().uuid();
+      registerZodSchemaToOpenApiSchema(sessionIdSchema, {
+        schemaExportedVariableName: "SessionIdSchema",
+        type: "string",
+        format: "session-id",
+      });
+
+      const openapi = {
+        components: {
+          schemas: {
+            Session: {
+              type: "object",
+              properties: {
+                session_id: { type: "string", format: "session-id" },
+              },
+              required: ["session_id"],
+            },
+          },
+        },
+      };
+
+      const result = openApiToZodTsCode(openapi);
+      // Zod schema side references the registered variable name.
+      expect(result).toContain(
+        "export const SessionSchema = z.object({ session_id: SessionIdSchema })",
+      );
+      // Interface side emits the output alias for the registered schema.
+      expect(result).toContain("session_id: SessionIdSchemaOutput");
+      // The output alias is declared.
+      expect(result).toContain(
+        "type SessionIdSchemaOutput = z.output<typeof SessionIdSchema>",
+      );
     });
   });
 });

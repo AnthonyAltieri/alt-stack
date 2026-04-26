@@ -7,6 +7,7 @@ export {
   schemaRegistry,
 } from "./registry.js";
 export type {
+  SupportedStringFormat,
   ZodOpenApiRegistrationString,
   ZodOpenApiRegistrationStrings,
   ZodOpenApiRegistrationPrimitive,

@@ -17,15 +17,20 @@ export const SUPPORTED_STRING_FORMATS = [
   "uuid",
 ] as const;
 
-type SupportedStringFormat = (typeof SUPPORTED_STRING_FORMATS)[number];
+/**
+ * Built-in OpenAPI string formats this package translates into Zod method
+ * calls (`.email()`, `.uuid()`, …) via `getFormatModifier`. Custom formats
+ * (any other string) are still allowed in registrations — they don't pick
+ * up an automatic Zod modifier; the registered schema's exported variable
+ * name is referenced directly instead.
+ */
+export type SupportedStringFormat = (typeof SUPPORTED_STRING_FORMATS)[number];
 
 // ============================================================================
 // Types
 // ============================================================================
 
-export type ZodOpenApiRegistrationString<
-  F extends SupportedStringFormat = SupportedStringFormat,
-> = {
+export type ZodOpenApiRegistrationString<F extends string = string> = {
   /** The name of the schema variable, IMPORTANT: must be named the same as the variable name */
   schemaExportedVariableName: string;
   type: "string";
@@ -34,8 +39,7 @@ export type ZodOpenApiRegistrationString<
 };
 
 export type ZodOpenApiRegistrationStrings<
-  Fs extends
-    readonly SupportedStringFormat[] = readonly SupportedStringFormat[],
+  Fs extends readonly string[] = readonly string[],
 > = {
   /** The name of the schema variable, IMPORTANT: must be named the same as the variable name */
   schemaExportedVariableName: string;
@@ -72,12 +76,6 @@ function isStringsRegistration(
   return reg.type === "string" && "formats" in reg;
 }
 
-function isSupportedStringFormat(
-  format: string,
-): format is SupportedStringFormat {
-  return (SUPPORTED_STRING_FORMATS as readonly string[]).includes(format);
-}
-
 // ============================================================================
 // Helper Functions
 // ============================================================================
@@ -109,11 +107,11 @@ class ZodSchemaRegistry {
   /**
    * Register a Zod schema with its OpenAPI representation
    */
-  register<F extends SupportedStringFormat>(
+  register<F extends string>(
     schema: z.ZodTypeAny,
     registration: ZodOpenApiRegistrationString<F>,
   ): void;
-  register<Fs extends readonly SupportedStringFormat[]>(
+  register<Fs extends readonly string[]>(
     schema: z.ZodTypeAny,
     registration: ZodOpenApiRegistrationStrings<Fs>,
   ): void;
@@ -166,12 +164,13 @@ class ZodSchemaRegistry {
   }
 
   /**
-   * Reverse-lookup helper: given a string format, return the registered schema's exported variable name
+   * Reverse-lookup helper: given a string format, return the registered schema's
+   * exported variable name. Honors both built-in `SupportedStringFormat` values
+   * and arbitrary custom formats supplied via `registerZodSchemaToOpenApiSchema`.
    */
   getSchemaExportedVariableNameForStringFormat(
-    format: SupportedStringFormat | string,
+    format: string,
   ): string | undefined {
-    if (!isSupportedStringFormat(format)) return undefined;
     for (const registration of this.map.values()) {
       if (registration.type !== "string") continue;
 
@@ -184,7 +183,7 @@ class ZodSchemaRegistry {
 
       if (
         isStringsRegistration(registration) &&
-        registration.formats.includes(format)
+        (registration.formats as readonly string[]).includes(format)
       ) {
         return registration.schemaExportedVariableName;
       }
@@ -228,10 +227,12 @@ export function registerZodSchemaToOpenApiSchema(
 }
 
 /**
- * Convenience helper to get an exported schema variable name for a given string format
+ * Convenience helper to get an exported schema variable name for a given
+ * string format. Accepts both built-in `SupportedStringFormat` values and
+ * arbitrary custom formats registered by the caller.
  */
 export function getSchemaExportedVariableNameForStringFormat(
-  format: SupportedStringFormat | string,
+  format: string,
 ): string | undefined {
   return schemaRegistry.getSchemaExportedVariableNameForStringFormat(format);
 }
