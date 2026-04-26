@@ -457,6 +457,44 @@ describe("openApiToZodTsCode with routes", () => {
 
       expect(result).toContain("export const Response");
       expect(result).toContain("'200': GetUsers200Response");
+      // The bare GET (no params/query/headers/body) must still
+      // appear in the Request map as an empty entry — otherwise
+      // `EndpointsWithMethod<TRequest, "GET">` won't resolve the
+      // path and consumers can't reach it through the typed client.
+      expect(result).toContain("export const Request = {");
+      expect(result).toContain("'/users':");
+      expect(result).toMatch(/GET:\s*\{\s*\},/);
+    });
+
+    it("should emit empty Request entries for routes with no schemas at all", () => {
+      const openapi = {
+        components: { schemas: {} },
+        paths: {
+          "/health": {
+            get: {
+              responses: {
+                "204": {},
+              },
+            },
+            post: {
+              responses: {
+                "204": {},
+              },
+            },
+          },
+        },
+      };
+
+      const result = openApiToZodTsCode(openapi, undefined, {
+        includeRoutes: true,
+      });
+
+      // Both bare methods should land in the Request map. Without
+      // them, callers of `client.get("/health")` get a "no overload
+      // matches this call" error and have to fall back to raw fetch.
+      expect(result).toContain("'/health':");
+      expect(result).toMatch(/GET:\s*\{\s*\},/);
+      expect(result).toMatch(/POST:\s*\{\s*\},/);
     });
 
     it("should quote hyphenated parameter names", () => {

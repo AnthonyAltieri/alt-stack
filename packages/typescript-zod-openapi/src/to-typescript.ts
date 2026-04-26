@@ -262,20 +262,28 @@ function generateRequestResponseObjects(
 
   lines.push("export const Request = {");
   for (const [path, methods] of Object.entries(requestPaths)) {
-    const methodEntries = Object.entries(methods).filter(
-      ([, parts]) => parts.length > 0,
-    );
-    if (methodEntries.length > 0) {
-      lines.push(`  '${path}': {`);
-      for (const [method, parts] of methodEntries) {
-        lines.push(`    ${method}: {`);
-        for (const part of parts) {
-          lines.push(`      ${part},`);
-        }
-        lines.push(`    },`);
+    const methodEntries = Object.entries(methods);
+    if (methodEntries.length === 0) continue;
+    lines.push(`  '${path}': {`);
+    for (const [method, parts] of methodEntries) {
+      // Emit an entry for every method, even when the route has no
+      // params / query / headers / body. Without this the typed
+      // client's `EndpointsWithMethod<TRequest, "GET">` lookup
+      // doesn't resolve the path, and consumers have to fall back
+      // to raw fetch — defeating the purpose of generating the map.
+      // The empty-object form is type-safe: `RequestOptions` already
+      // collapses every absent schema branch to `?: never`.
+      if (parts.length === 0) {
+        lines.push(`    ${method}: {},`);
+        continue;
       }
-      lines.push(`  },`);
+      lines.push(`    ${method}: {`);
+      for (const part of parts) {
+        lines.push(`      ${part},`);
+      }
+      lines.push(`    },`);
     }
+    lines.push(`  },`);
   }
   lines.push("} as const;");
   lines.push("");
@@ -438,14 +446,17 @@ export const openApiToZodTsCode = (
         lines.push("// Route Schemas");
         lines.push(...declarations);
         lines.push("");
-
-        // Generate Request/Response objects using canonical names
-        const requestResponseObjs = generateRequestResponseObjects(
-          routes,
-          schemaNameToCanonical,
-        );
-        lines.push(...requestResponseObjs);
       }
+
+      // Always emit Request/Response maps when routes exist, even
+      // if every route is bare (no params/query/headers/body and no
+      // typed responses). Skipping the maps in that case would make
+      // the routes unreachable through the typed client.
+      const requestResponseObjs = generateRequestResponseObjects(
+        routes,
+        schemaNameToCanonical,
+      );
+      lines.push(...requestResponseObjs);
     }
   }
 
