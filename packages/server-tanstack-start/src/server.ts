@@ -5,6 +5,7 @@ import {
   createRouter as baseCreateRouter,
   err as resultErr,
   findHttpStatusForError,
+  generateOpenAPISpec,
   isErr,
   mergeRouters as baseMergeRouters,
   middlewareMarker,
@@ -19,6 +20,8 @@ import type {
   MiddlewareResultSuccess,
   PendingProcedure,
   Procedure,
+  GenerateOpenAPISpecOptions,
+  OpenAPISpec,
   RouterConfigValue,
   TypedContext,
 } from "@alt-stack/server-core";
@@ -50,9 +53,11 @@ export interface DefinedTanStackServerRoute<
   TPath extends string,
   TParams extends TanStackRouteParams = TanStackRouteParams,
   TRouteContext = unknown,
+  TContext extends TanStackBaseContext<any, any> = TanStackBaseContext,
 > {
   path: TPath;
   server: TanStackServerRoute<TParams, TRouteContext>;
+  router: BaseRouter<TContext>;
 }
 
 type ValidateMethodsForTanStackPath<
@@ -106,6 +111,37 @@ export interface CreateTanStackRouteHandlersOptions<
 type RouterOrConfig<TContext extends object> =
   | BaseRouter<TContext>
   | Record<string, BaseRouter<TContext> | BaseRouter<TContext>[]>;
+
+function createRouterFromMethods<
+  TPath extends string,
+  const TMethods extends TanStackRouteMethods,
+  TContext extends TanStackBaseContext<any, any>,
+>(
+  path: TPath,
+  methods: TMethods & ValidateMethodsForTanStackPath<TPath, TMethods>,
+): BaseRouter<TContext> {
+  const router = baseCreateRouter<TContext>();
+  const openApiPath = tanStackPathToOpenApiPath(path);
+
+  for (const [method, procedure] of Object.entries(methods)) {
+    if (!procedure) {
+      continue;
+    }
+
+    router.registerPendingProcedure(
+      openApiPath,
+      method,
+      procedure as PendingProcedure<
+        InputConfig,
+        z.ZodTypeAny | undefined,
+        ErrorConfig | undefined,
+        TContext
+      >,
+    );
+  }
+
+  return router;
+}
 
 function normalizePrefix(prefix: string): string {
   const normalized = prefix.startsWith("/") ? prefix : `/${prefix}`;
@@ -599,26 +635,7 @@ export function createServerRoute<
   methods: TMethods & ValidateMethodsForTanStackPath<TPath, TMethods>,
   options?: CreateTanStackRouteHandlersOptions<TContext, TParams, TRouteContext>,
 ): TanStackServerRoute<TParams, TRouteContext> {
-  const router = baseCreateRouter<TContext>();
-  const openApiPath = tanStackPathToOpenApiPath(path);
-
-  for (const [method, procedure] of Object.entries(methods)) {
-    if (!procedure) {
-      continue;
-    }
-
-    router.registerPendingProcedure(
-      openApiPath,
-      method,
-      procedure as PendingProcedure<
-        InputConfig,
-        z.ZodTypeAny | undefined,
-        ErrorConfig | undefined,
-        TContext
-      >,
-    );
-  }
-
+  const router = createRouterFromMethods<TPath, TMethods, TContext>(path, methods);
   return createRouteHandlers<TContext, TParams, TRouteContext>(router, options);
 }
 
@@ -642,15 +659,33 @@ export function defineServerRoute<
   path: TPath,
   methods: TMethods & ValidateMethodsForTanStackPath<TPath, TMethods>,
   options?: CreateTanStackRouteHandlersOptions<TContext, TParams, TRouteContext>,
-): DefinedTanStackServerRoute<TPath, TParams, TRouteContext> {
+): DefinedTanStackServerRoute<TPath, TParams, TRouteContext, TContext> {
+  const router = createRouterFromMethods<TPath, TMethods, TContext>(path, methods);
+
   return {
     path,
-    server: createServerRoute<TPath, TMethods, TContext, TParams, TRouteContext>(
-      path,
-      methods,
-      options,
-    ),
+    server: createRouteHandlers<TContext, TParams, TRouteContext>(router, options),
+    router,
   };
+}
+
+export function generateOpenAPISpecFromServerRoutes<
+  const TRoutes extends readonly DefinedTanStackServerRoute<
+    string,
+    any,
+    any,
+    any
+  >[],
+>(
+  routes: TRoutes,
+  options?: GenerateOpenAPISpecOptions,
+): OpenAPISpec {
+  return generateOpenAPISpec(
+    {
+      "/": routes.map((route) => route.router),
+    },
+    options,
+  );
 }
 
 export class Router<

@@ -7,6 +7,7 @@ import {
   createServerRoute,
   defineServerRoute,
   err,
+  generateOpenAPISpecFromServerRoutes,
   init,
   ok,
   router,
@@ -82,6 +83,42 @@ describe("TanStack Start server adapter", () => {
 
     expect(routeDefinition.path).toBe("/api/todos/$id");
     expect(routeDefinition.server.handlers.GET).toBeDefined();
+  });
+
+  it("generates OpenAPI docs from defined server routes", () => {
+    const listTodosRoute = defineServerRoute("/api/todos", {
+      get: procedure
+        .output(z.array(z.object({ id: z.string(), title: z.string() })))
+        .handler(() => ok([])),
+    });
+    const getTodoRoute = defineServerRoute("/api/todos/$id", {
+      get: procedure
+        .input({ params: z.object({ id: z.string() }) })
+        .output(z.object({ id: z.string(), title: z.string() }))
+        .handler(({ input }) => ok({ id: input.params.id, title: "Ship adapter" })),
+    });
+
+    const spec = generateOpenAPISpecFromServerRoutes(
+      [listTodosRoute, getTodoRoute],
+      {
+        title: "Todos API",
+        version: "1.0.0",
+      },
+    );
+
+    expect(spec.info).toEqual({ title: "Todos API", version: "1.0.0" });
+    expect(Object.keys(spec.paths).sort()).toEqual([
+      "/api/todos",
+      "/api/todos/{id}",
+    ]);
+    expect(spec.paths["/api/todos"]?.get?.operationId).toBe("getApiTodos");
+    expect(spec.paths["/api/todos/{id}"]?.get?.parameters).toEqual([
+      expect.objectContaining({
+        in: "path",
+        name: "id",
+        required: true,
+      }),
+    ]);
   });
 
   it("validates JSON request bodies", async () => {

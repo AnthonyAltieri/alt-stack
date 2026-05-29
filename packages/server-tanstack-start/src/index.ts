@@ -11,6 +11,7 @@ export {
   createRouteHandlers,
   createServerRoute,
   defineServerRoute,
+  generateOpenAPISpecFromServerRoutes,
   Router,
 } from "./server.js";
 export type {
