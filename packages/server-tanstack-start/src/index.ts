@@ -10,10 +10,12 @@ export {
   createRequestHandler,
   createRouteHandlers,
   createServerRoute,
+  defineServerRoute,
   Router,
 } from "./server.js";
 export type {
   CreateTanStackRouteHandlersOptions,
+  DefinedTanStackServerRoute,
   TanStackRouteMethods,
 } from "./server.js";
 export {

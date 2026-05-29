@@ -5,6 +5,7 @@ import {
   createRequestHandler,
   createRouteHandlers,
   createServerRoute,
+  defineServerRoute,
   err,
   init,
   ok,
@@ -36,7 +37,7 @@ describe("TanStack Start server adapter", () => {
   });
 
   it("creates idiomatic server.handlers for createFileRoute server routes", async () => {
-    const server = createServerRoute("/api/todos/$id", {
+    const todoRoute = defineServerRoute("/api/todos/$id", {
       get: procedure
         .input({
           params: z.object({ id: z.string() }),
@@ -52,7 +53,9 @@ describe("TanStack Start server adapter", () => {
         ),
     });
 
-    const response = await server.handlers.GET!({
+    expect(todoRoute.path).toBe("/api/todos/$id");
+
+    const response = await todoRoute.server.handlers.GET!({
       request: request("http://localhost/api/todos/abc?includeCompleted=true"),
       params: { id: "abc" },
       context: {},
@@ -63,6 +66,22 @@ describe("TanStack Start server adapter", () => {
       id: "abc",
       includeCompleted: true,
     });
+  });
+
+  it("keeps the TanStack route path and server definition together", () => {
+    const todoRoute = defineServerRoute("/api/todos/$id", {
+      get: procedure
+        .input({ params: z.object({ id: z.string() }) })
+        .handler(({ input }) => ok({ id: input.params.id })),
+    });
+
+    const routeDefinition = {
+      path: todoRoute.path,
+      server: todoRoute.server,
+    };
+
+    expect(routeDefinition.path).toBe("/api/todos/$id");
+    expect(routeDefinition.server.handlers.GET).toBeDefined();
   });
 
   it("validates JSON request bodies", async () => {
@@ -276,13 +295,13 @@ describe("TanStack Start server adapter", () => {
   });
 
   it("requires params schemas for TanStack dynamic route segments", () => {
-    const _server = createServerRoute("/api/todos/$id", {
+    const _route = defineServerRoute("/api/todos/$id", {
       // @ts-expect-error - dynamic `$id` routes require an `input.params.id` schema
       get: procedure
         .output(z.object({ id: z.string() }))
         .handler(() => ok({ id: "missing-schema" })),
     });
 
-    expect(_server.handlers.GET).toBeDefined();
+    expect(_route.server.handlers.GET).toBeDefined();
   });
 });

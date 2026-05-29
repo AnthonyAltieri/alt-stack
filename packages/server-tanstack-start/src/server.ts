@@ -46,6 +46,15 @@ export type TanStackRouteMethods = {
   [K in MethodKey]?: PendingProcedure<any, any, any, any>;
 };
 
+export interface DefinedTanStackServerRoute<
+  TPath extends string,
+  TParams extends TanStackRouteParams = TanStackRouteParams,
+  TRouteContext = unknown,
+> {
+  path: TPath;
+  server: TanStackServerRoute<TParams, TRouteContext>;
+}
+
 type ValidateMethodsForTanStackPath<
   TPath extends string,
   TMethods extends TanStackRouteMethods,
@@ -611,6 +620,37 @@ export function createServerRoute<
   }
 
   return createRouteHandlers<TContext, TParams, TRouteContext>(router, options);
+}
+
+export function defineServerRoute<
+  TPath extends string,
+  const TMethods extends TanStackRouteMethods,
+  TContext extends TanStackBaseContext<any, any> = TanStackBaseContext<
+    Record<ExtractTanStackPathParams<TPath>, string | undefined>,
+    unknown
+  >,
+  TParams extends TanStackRouteParams = TContext extends TanStackBaseContext<
+    infer TInferredParams,
+    any
+  >
+    ? TInferredParams
+    : Record<ExtractTanStackPathParams<TPath>, string | undefined>,
+  TRouteContext = TContext extends TanStackBaseContext<any, infer TInferredRouteContext>
+    ? TInferredRouteContext
+    : unknown,
+>(
+  path: TPath,
+  methods: TMethods & ValidateMethodsForTanStackPath<TPath, TMethods>,
+  options?: CreateTanStackRouteHandlersOptions<TContext, TParams, TRouteContext>,
+): DefinedTanStackServerRoute<TPath, TParams, TRouteContext> {
+  return {
+    path,
+    server: createServerRoute<TPath, TMethods, TContext, TParams, TRouteContext>(
+      path,
+      methods,
+      options,
+    ),
+  };
 }
 
 export class Router<

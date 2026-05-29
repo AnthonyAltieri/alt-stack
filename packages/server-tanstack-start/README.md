@@ -9,7 +9,7 @@ Use it when you want TanStack Start and TanStack Router files to stay idiomatic,
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import {
-  createServerRoute,
+  defineServerRoute,
   init,
   ok,
   type TanStackBaseContext,
@@ -21,32 +21,34 @@ interface AppContext extends TanStackBaseContext {
 
 const t = init<AppContext>();
 
-export const Route = createFileRoute("/api/todos/$id")({
-  server: createServerRoute("/api/todos/$id", {
-    get: t.procedure
-      .input({
-        params: z.object({ id: z.string().uuid() }),
-        query: z.object({ includeCompleted: z.enum(["true", "false"]).optional() }),
-      })
-      .output(
-        z.object({
-          id: z.string(),
-          title: z.string(),
-          completed: z.boolean(),
-        }),
-      )
-      .handler(({ input }) =>
-        ok({
-          id: input.params.id,
-          title: "Write adapter",
-          completed: input.query.includeCompleted === "true",
-        }),
-      ),
-  }),
+const todosRoute = defineServerRoute("/api/todos/$id", {
+  get: t.procedure
+    .input({
+      params: z.object({ id: z.string().uuid() }),
+      query: z.object({ includeCompleted: z.enum(["true", "false"]).optional() }),
+    })
+    .output(
+      z.object({
+        id: z.string(),
+        title: z.string(),
+        completed: z.boolean(),
+      }),
+    )
+    .handler(({ input }) =>
+      ok({
+        id: input.params.id,
+        title: "Write adapter",
+        completed: input.query.includeCompleted === "true",
+      }),
+    ),
+});
+
+export const Route = createFileRoute(todosRoute.path)({
+  server: todosRoute.server,
 });
 ```
 
-The helper returns TanStack's `server: { handlers }` shape. The route path uses TanStack's `$id` syntax, and the adapter converts it to Alt Stack's `{id}` path syntax internally.
+`defineServerRoute` returns `{ path, server }`, so the TanStack route path is defined once and reused by `createFileRoute`. The route path uses TanStack's `$id` syntax, and the adapter converts it to Alt Stack's `{id}` path syntax internally.
 
 For larger APIs, define regular Alt Stack routers and expose them to TanStack:
 
