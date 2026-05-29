@@ -39,7 +39,6 @@ import type {
 import type { ExtractTanStackPathParams } from "./path.js";
 
 type ErrorConfig = Record<number, z.ZodTypeAny>;
-type MethodKey = "get" | "post" | "put" | "patch" | "delete";
 type AnyProcedure<TContext extends object> = Procedure<
   InputConfig,
   z.ZodTypeAny | undefined,
@@ -48,8 +47,21 @@ type AnyProcedure<TContext extends object> = Procedure<
 >;
 
 export type TanStackRouteMethods = {
-  [K in MethodKey]?: PendingProcedure<any, any, any, any>;
+  [K in TanStackHttpMethod]?: PendingProcedure<any, any, any, any>;
 };
+
+export type AltStackFileRouteOptions<
+  TPath extends string,
+  TMethods extends TanStackRouteMethods,
+  TContext extends TanStackBaseContext<TParams, TRouteContext>,
+  TParams extends TanStackRouteParams,
+  TRouteContext,
+> = {
+  server: {
+    handlers: TMethods & ValidateMethodsForTanStackPath<TPath, TMethods>;
+  } & CreateTanStackRouteHandlersOptions<TContext, TParams, TRouteContext> &
+    Record<string, unknown>;
+} & Record<string, unknown>;
 
 export interface DefinedTanStackServerRoute<
   TPath extends string,
@@ -688,8 +700,11 @@ export function defineServerRoute<
   };
 }
 
-export function createAltFileRoute<
+export function createAltStackFileRoute<
   TFilePath extends keyof FileRoutesByPath & string,
+>(
+  path: TFilePath,
+): <
   const TMethods extends TanStackRouteMethods,
   TContext extends TanStackBaseContext<any, any> = TanStackBaseContext<
     Record<ExtractTanStackPathParams<TFilePath>, string | undefined>,
@@ -705,26 +720,80 @@ export function createAltFileRoute<
     ? TInferredRouteContext
     : unknown,
 >(
-  path: TFilePath,
-  methods: TMethods & ValidateMethodsForTanStackPath<TFilePath, TMethods>,
-  options?: CreateTanStackRouteHandlersOptions<TContext, TParams, TRouteContext>,
-): AltStackFileRoute<
+  options: AltStackFileRouteOptions<
+    TFilePath,
+    TMethods,
+    TContext,
+    TParams,
+    TRouteContext
+  >,
+) => AltStackFileRoute<
   ReturnType<ReturnType<typeof createFileRoute<TFilePath>>>,
   TFilePath,
   TParams,
   TRouteContext,
   TContext
 > {
-  const route = defineServerRoute<TFilePath, TMethods, TContext, TParams, TRouteContext>(
-    path,
-    methods,
-    options,
-  );
-  const tanStackRoute = (createFileRoute(path) as any)({
-    server: route.server,
-  });
+  return <
+    const TMethods extends TanStackRouteMethods,
+    TContext extends TanStackBaseContext<any, any> = TanStackBaseContext<
+      Record<ExtractTanStackPathParams<TFilePath>, string | undefined>,
+      unknown
+    >,
+    TParams extends TanStackRouteParams = TContext extends TanStackBaseContext<
+      infer TInferredParams,
+      any
+    >
+      ? TInferredParams
+      : Record<ExtractTanStackPathParams<TFilePath>, string | undefined>,
+    TRouteContext = TContext extends TanStackBaseContext<
+      any,
+      infer TInferredRouteContext
+    >
+      ? TInferredRouteContext
+      : unknown,
+  >(
+    options: AltStackFileRouteOptions<
+      TFilePath,
+      TMethods,
+      TContext,
+      TParams,
+      TRouteContext
+    >,
+  ) => {
+    const {
+      server: {
+        handlers,
+        createContext,
+        defaultErrorHandlers,
+        ...serverOptions
+      },
+      ...routeOptions
+    } = options;
+    const route = defineServerRoute<
+      TFilePath,
+      TMethods,
+      TContext,
+      TParams,
+      TRouteContext
+    >(
+      path,
+      handlers,
+      {
+        ...(createContext && { createContext }),
+        ...(defaultErrorHandlers && { defaultErrorHandlers }),
+      },
+    );
+    const tanStackRoute = (createFileRoute(path) as any)({
+      ...routeOptions,
+      server: {
+        ...serverOptions,
+        handlers: route.server.handlers,
+      },
+    });
 
-  return Object.assign(tanStackRoute, { altStack: route });
+    return Object.assign(tanStackRoute, { altStack: route });
+  };
 }
 
 type OpenAPISpecRouteSource =

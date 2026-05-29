@@ -8,7 +8,7 @@ Use it when you want TanStack Start and TanStack Router files to stay idiomatic,
 // src/routes/api/todos/$id.ts
 import { z } from "zod";
 import {
-  createAltFileRoute,
+  createAltStackFileRoute,
   init,
   ok,
   type TanStackBaseContext,
@@ -20,30 +20,34 @@ interface AppContext extends TanStackBaseContext {
 
 const t = init<AppContext>();
 
-export const Route = createAltFileRoute("/api/todos/$id", {
-  get: t.procedure
-    .input({
-      params: z.object({ id: z.string().uuid() }),
-      query: z.object({ includeCompleted: z.enum(["true", "false"]).optional() }),
-    })
-    .output(
-      z.object({
-        id: z.string(),
-        title: z.string(),
-        completed: z.boolean(),
-      }),
-    )
-    .handler(({ input }) =>
-      ok({
-        id: input.params.id,
-        title: "Write adapter",
-        completed: input.query.includeCompleted === "true",
-      }),
-    ),
+export const Route = createAltStackFileRoute("/api/todos/$id")({
+  server: {
+    handlers: {
+      GET: t.procedure
+        .input({
+          params: z.object({ id: z.string().uuid() }),
+          query: z.object({ includeCompleted: z.enum(["true", "false"]).optional() }),
+        })
+        .output(
+          z.object({
+            id: z.string(),
+            title: z.string(),
+            completed: z.boolean(),
+          }),
+        )
+        .handler(({ input }) =>
+          ok({
+            id: input.params.id,
+            title: "Write adapter",
+            completed: input.query.includeCompleted === "true",
+          }),
+        ),
+    },
+  },
 });
 ```
 
-`createAltFileRoute` wraps TanStack's `createFileRoute` and attaches Alt Stack route metadata to the returned `Route`. The route path is defined once, uses TanStack's `$id` syntax, and is converted to Alt Stack's `{id}` path syntax internally for validation and OpenAPI.
+`createAltStackFileRoute` wraps TanStack's `createFileRoute` and attaches Alt Stack route metadata to the returned `Route`. The route path is defined once, uses TanStack's `$id` syntax, and is converted to Alt Stack's `{id}` path syntax internally for validation and OpenAPI. HTTP verbs live under `server.handlers` and use TanStack's uppercase method keys.
 
 ## OpenAPI
 
@@ -52,7 +56,7 @@ Export the `Route` object from each route module, then collect those exports in 
 ```ts
 // src/routes/api/todos/index.ts
 import { z } from "zod";
-import { createAltFileRoute, init, ok, type TanStackBaseContext } from "@alt-stack/server-tanstack-start";
+import { createAltStackFileRoute, init, ok, type TanStackBaseContext } from "@alt-stack/server-tanstack-start";
 
 interface AppContext extends TanStackBaseContext {
   user: { id: string } | null;
@@ -60,17 +64,21 @@ interface AppContext extends TanStackBaseContext {
 
 const t = init<AppContext>();
 
-export const Route = createAltFileRoute("/api/todos", {
-  get: t.procedure
-    .output(z.array(z.object({ id: z.string(), title: z.string() })))
-    .handler(() => ok([])),
+export const Route = createAltStackFileRoute("/api/todos")({
+  server: {
+    handlers: {
+      GET: t.procedure
+        .output(z.array(z.object({ id: z.string(), title: z.string() })))
+        .handler(() => ok([])),
+    },
+  },
 });
 ```
 
 ```ts
 // src/routes/api/todos/$id.ts
 import { z } from "zod";
-import { createAltFileRoute, init, ok, type TanStackBaseContext } from "@alt-stack/server-tanstack-start";
+import { createAltStackFileRoute, init, ok, type TanStackBaseContext } from "@alt-stack/server-tanstack-start";
 
 interface AppContext extends TanStackBaseContext {
   user: { id: string } | null;
@@ -78,11 +86,15 @@ interface AppContext extends TanStackBaseContext {
 
 const t = init<AppContext>();
 
-export const Route = createAltFileRoute("/api/todos/$id", {
-  get: t.procedure
-    .input({ params: z.object({ id: z.string().uuid() }) })
-    .output(z.object({ id: z.string(), title: z.string() }))
-    .handler(({ input }) => ok({ id: input.params.id, title: "Write adapter" })),
+export const Route = createAltStackFileRoute("/api/todos/$id")({
+  server: {
+    handlers: {
+      GET: t.procedure
+        .input({ params: z.object({ id: z.string().uuid() }) })
+        .output(z.object({ id: z.string(), title: z.string() }))
+        .handler(({ input }) => ok({ id: input.params.id, title: "Write adapter" })),
+    },
+  },
 });
 ```
 
@@ -101,7 +113,7 @@ export const openApiSpec = generateOpenAPISpecFromServerRoutes(
 );
 ```
 
-The registry is explicit because TanStack file routes are decentralized modules. `createAltFileRoute` attaches the same Alt Stack procedure metadata used by the request handlers to the exported TanStack `Route`, so OpenAPI generation can use those route exports directly.
+The registry is explicit because TanStack file routes are decentralized modules. `createAltStackFileRoute` attaches the same Alt Stack procedure metadata used by the request handlers to the exported TanStack `Route`, so OpenAPI generation can use those route exports directly.
 
 Handlers receive the native TanStack inputs on `ctx.tanstack`:
 
@@ -111,4 +123,4 @@ ctx.tanstack.params;
 ctx.tanstack.context;
 ```
 
-For larger APIs, keep each API route as an exported `Route = createAltFileRoute(...)` value and compose those exports in registries such as OpenAPI generation, SDK generation, or route-level test setup. Avoid defining separate router paths for TanStack routes; the `createAltFileRoute` path is the source of truth for TanStack, Alt Stack, and OpenAPI.
+For larger APIs, keep each API route as an exported `Route = createAltStackFileRoute(...)` value and compose those exports in registries such as OpenAPI generation, SDK generation, or route-level test setup. Avoid defining separate router paths for TanStack routes; the `createAltStackFileRoute` path is the source of truth for TanStack, Alt Stack, and OpenAPI.

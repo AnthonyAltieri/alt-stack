@@ -1,10 +1,11 @@
 export {
-  createAltFileRoute,
+  createAltStackFileRoute,
   defineServerRoute,
   generateOpenAPISpecFromServerRoutes,
 } from "./server.js";
 export type {
   AltStackFileRoute,
+  AltStackFileRouteOptions,
   AltStackFileRouteMetadata,
   CreateTanStackRouteHandlersOptions,
   DefinedTanStackServerRoute,

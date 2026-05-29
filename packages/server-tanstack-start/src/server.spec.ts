@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import {
   TaggedError,
-  createAltFileRoute,
+  createAltStackFileRoute,
   err,
   generateOpenAPISpecFromServerRoutes,
   init,
@@ -53,20 +53,24 @@ describe("TanStack Start server adapter", () => {
   });
 
   it("creates idiomatic server.handlers for createFileRoute server routes", async () => {
-    const todoRoute = createAltFileRoute("/api/todos/$id", {
-      get: procedure
-        .input({
-          params: z.object({ id: z.string() }),
-          query: z.object({ includeCompleted: z.enum(["true", "false"]) }),
-        })
-        .output(z.object({ id: z.string(), includeCompleted: z.boolean() }))
-        .handler(({ input, ctx }) =>
-          ok({
-            id: input.params.id,
-            includeCompleted: input.query.includeCompleted === "true",
-            requestUrl: ctx.tanstack.request.url,
-          }),
-        ),
+    const todoRoute = createAltStackFileRoute("/api/todos/$id")({
+      server: {
+        handlers: {
+          GET: procedure
+            .input({
+              params: z.object({ id: z.string() }),
+              query: z.object({ includeCompleted: z.enum(["true", "false"]) }),
+            })
+            .output(z.object({ id: z.string(), includeCompleted: z.boolean() }))
+            .handler(({ input, ctx }) =>
+              ok({
+                id: input.params.id,
+                includeCompleted: input.query.includeCompleted === "true",
+                requestUrl: ctx.tanstack.request.url,
+              }),
+            ),
+        },
+      },
     });
 
     expect(todoRoute.altStack.path).toBe("/api/todos/$id");
@@ -85,10 +89,14 @@ describe("TanStack Start server adapter", () => {
   });
 
   it("keeps the TanStack file route and Alt Stack metadata together", () => {
-    const Route = createAltFileRoute("/api/todos/$id", {
-      get: procedure
-        .input({ params: z.object({ id: z.string() }) })
-        .handler(({ input }) => ok({ id: input.params.id })),
+    const Route = createAltStackFileRoute("/api/todos/$id")({
+      server: {
+        handlers: {
+          GET: procedure
+            .input({ params: z.object({ id: z.string() }) })
+            .handler(({ input }) => ok({ id: input.params.id })),
+        },
+      },
     });
 
     expect(Route.altStack.path).toBe("/api/todos/$id");
@@ -97,16 +105,26 @@ describe("TanStack Start server adapter", () => {
   });
 
   it("generates OpenAPI docs from defined server routes", () => {
-    const listTodosRoute = createAltFileRoute("/api/todos", {
-      get: procedure
-        .output(z.array(z.object({ id: z.string(), title: z.string() })))
-        .handler(() => ok([])),
+    const listTodosRoute = createAltStackFileRoute("/api/todos")({
+      server: {
+        handlers: {
+          GET: procedure
+            .output(z.array(z.object({ id: z.string(), title: z.string() })))
+            .handler(() => ok([])),
+        },
+      },
     });
-    const getTodoRoute = createAltFileRoute("/api/todos/$id", {
-      get: procedure
-        .input({ params: z.object({ id: z.string() }) })
-        .output(z.object({ id: z.string(), title: z.string() }))
-        .handler(({ input }) => ok({ id: input.params.id, title: "Ship adapter" })),
+    const getTodoRoute = createAltStackFileRoute("/api/todos/$id")({
+      server: {
+        handlers: {
+          GET: procedure
+            .input({ params: z.object({ id: z.string() }) })
+            .output(z.object({ id: z.string(), title: z.string() }))
+            .handler(({ input }) =>
+              ok({ id: input.params.id, title: "Ship adapter" }),
+            ),
+        },
+      },
     });
 
     const spec = generateOpenAPISpecFromServerRoutes(
@@ -133,13 +151,17 @@ describe("TanStack Start server adapter", () => {
   });
 
   it("validates JSON request bodies", async () => {
-    const route = createAltFileRoute("/api/todos", {
-      post: procedure
-        .input({
-          body: z.object({ title: z.string().min(1) }),
-        })
-        .output(z.object({ title: z.string() }))
-        .handler(({ input }) => ok({ title: input.body.title })),
+    const route = createAltStackFileRoute("/api/todos")({
+      server: {
+        handlers: {
+          POST: procedure
+            .input({
+              body: z.object({ title: z.string().min(1) }),
+            })
+            .output(z.object({ title: z.string() }))
+            .handler(({ input }) => ok({ title: input.body.title })),
+        },
+      },
     });
 
     const response = await route.altStack.server.handlers.POST!({
@@ -157,12 +179,16 @@ describe("TanStack Start server adapter", () => {
   });
 
   it("returns a validation error response for invalid input", async () => {
-    const route = createAltFileRoute("/api/todos", {
-      post: procedure
-        .input({
-          body: z.object({ title: z.string().min(1) }),
-        })
-        .handler(() => ok({ unreachable: true })),
+    const route = createAltStackFileRoute("/api/todos")({
+      server: {
+        handlers: {
+          POST: procedure
+            .input({
+              body: z.object({ title: z.string().min(1) }),
+            })
+            .handler(() => ok({ unreachable: true })),
+        },
+      },
     });
 
     const response = await route.altStack.server.handlers.POST!({
@@ -190,16 +216,20 @@ describe("TanStack Start server adapter", () => {
       }
     }
 
-    const route = createAltFileRoute("/api/todos/$id", {
-      get: procedure
-        .input({ params: z.object({ id: z.string() }) })
-        .errors({
-          404: z.object({
-            _tag: z.literal("NotFoundError"),
-            resourceId: z.string(),
-          }),
-        })
-        .handler(({ input }) => err(new NotFoundError(input.params.id))),
+    const route = createAltStackFileRoute("/api/todos/$id")({
+      server: {
+        handlers: {
+          GET: procedure
+            .input({ params: z.object({ id: z.string() }) })
+            .errors({
+              404: z.object({
+                _tag: z.literal("NotFoundError"),
+                resourceId: z.string(),
+              }),
+            })
+            .handler(({ input }) => err(new NotFoundError(input.params.id))),
+        },
+      },
     });
 
     const response = await route.altStack.server.handlers.GET!({
@@ -224,23 +254,27 @@ describe("TanStack Start server adapter", () => {
       return next({ ctx: { user: { id: ctx.tanstack.params.id ?? "unknown" } } });
     });
 
-    const route = createAltFileRoute("/api/users/$id", {
-      get: authed
-        .input({ params: z.object({ id: z.string() }) })
-        .output(
-          z.object({
-            userId: z.string(),
-            fromRouteContext: z.string(),
-            fromCustomContext: z.string(),
-          }),
-        )
-        .handler(({ ctx }) =>
-          ok({
-            userId: ctx.user!.id,
-            fromRouteContext: (ctx.tanstack.context as { source: string }).source,
-            fromCustomContext: ctx.user!.id,
-          }),
-        ),
+    const route = createAltStackFileRoute("/api/users/$id")({
+      server: {
+        handlers: {
+          GET: authed
+            .input({ params: z.object({ id: z.string() }) })
+            .output(
+              z.object({
+                userId: z.string(),
+                fromRouteContext: z.string(),
+                fromCustomContext: z.string(),
+              }),
+            )
+            .handler(({ ctx }) =>
+              ok({
+                userId: ctx.user!.id,
+                fromRouteContext: (ctx.tanstack.context as { source: string }).source,
+                fromCustomContext: ctx.user!.id,
+              }),
+            ),
+        },
+      },
     });
 
     const response = await route.altStack.server.handlers.GET!({
@@ -258,17 +292,16 @@ describe("TanStack Start server adapter", () => {
   });
 
   it("supports createContext for app-specific context", async () => {
-    const route = createAltFileRoute(
-      "/api/me",
-      {
-        get: procedure
-          .output(z.object({ userId: z.string() }))
-          .handler(({ ctx }) => ok({ userId: ctx.user!.id })),
-      },
-      {
+    const route = createAltStackFileRoute("/api/me")({
+      server: {
         createContext: () => ({ user: { id: "from-create-context" } }),
+        handlers: {
+          GET: procedure
+            .output(z.object({ userId: z.string() }))
+            .handler(({ ctx }) => ok({ userId: ctx.user!.id })),
+        },
       },
-    );
+    });
 
     const response = await route.altStack.server.handlers.GET!({
       request: request("http://localhost/api/me"),
@@ -283,10 +316,14 @@ describe("TanStack Start server adapter", () => {
   });
 
   it("passes Response results through unchanged", async () => {
-    const route = createAltFileRoute("/api/export", {
-      get: procedure.handler(() =>
-        ok(new Response("csv-data", { status: 201 })),
-      ),
+    const route = createAltStackFileRoute("/api/export")({
+      server: {
+        handlers: {
+          GET: procedure.handler(() =>
+            ok(new Response("csv-data", { status: 201 })),
+          ),
+        },
+      },
     });
 
     const response = await route.altStack.server.handlers.GET!({
@@ -299,12 +336,37 @@ describe("TanStack Start server adapter", () => {
     await expect(response.text()).resolves.toBe("csv-data");
   });
 
+  it("passes non-handler route and server options through to TanStack", () => {
+    const component = () => null;
+    const route = createAltStackFileRoute("/api/todos")({
+      component,
+      staticData: { section: "todos" },
+      server: {
+        extraServerOption: "kept",
+        handlers: {
+          GET: procedure.handler(() => ok({ todos: [] })),
+        },
+      },
+    });
+
+    expect((route as any).options.component).toBe(component);
+    expect((route as any).options.staticData).toEqual({ section: "todos" });
+    expect((route as any).options.server.extraServerOption).toBe("kept");
+    expect((route as any).options.server.handlers.GET).toBe(
+      route.altStack.server.handlers.GET,
+    );
+  });
+
   it("requires params schemas for TanStack dynamic route segments", () => {
-    const _route = createAltFileRoute("/api/todos/$id", {
-      // @ts-expect-error - dynamic `$id` routes require an `input.params.id` schema
-      get: procedure
-        .output(z.object({ id: z.string() }))
-        .handler(() => ok({ id: "missing-schema" })),
+    const _route = createAltStackFileRoute("/api/todos/$id")({
+      server: {
+        handlers: {
+          // @ts-expect-error - dynamic `$id` routes require an `input.params.id` schema
+          GET: procedure
+            .output(z.object({ id: z.string() }))
+            .handler(() => ok({ id: "missing-schema" })),
+        },
+      },
     });
 
     expect(_route.altStack.server.handlers.GET).toBeDefined();
