@@ -1,0 +1,41 @@
+{
+  "name": "@alt-stack/server-tanstack-start",
+  "version": "0.0.0",
+  "description": "TanStack Start server route adapter for Alt Stack",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest",
+    "check-types": "tsc --noEmit"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@alt-stack/server-core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@tanstack/react-router": "^1.170.9",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/sdk-trace-base": "^2.2.0",
+    "@opentelemetry/sdk-trace-node": "^2.2.0",
+    "@tanstack/react-router": "^1.170.9",
+    "oxlint": "^1.24.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.9.2",
+    "vitest": "^4.0.3",
+    "zod": "^4.0.0"
+  }
+}

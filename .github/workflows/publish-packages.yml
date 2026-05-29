@@ -204,7 +204,11 @@ jobs:
 
           const matrix = [];
           const firstPublishCandidates = [];
+          const allowedFirstPublishPackages = new Set([
+            '@alt-stack/server-tanstack-start',
+          ]);
           const skippedPrivatePackages = [];
+          let probePackage = '';
 
           for (const dir of packageDirs) {
             const pkgJson = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf-8'));
@@ -226,14 +230,21 @@ jobs:
             }
 
             if (published.kind === 'not-found') {
-              console.log(`⚠️ ${pkgName}@${localVersion} is not on npm yet - skipping automatic first publish`);
-              firstPublishCandidates.push({ name: pkgName, directory: dir, version: localVersion });
+              if (allowedFirstPublishPackages.has(pkgName)) {
+                console.log(`📦 ${pkgName}@${localVersion} is not on npm yet but is first-publish allowlisted - will publish`);
+                matrix.push({ name: pkgName, directory: dir, version: localVersion, firstPublish: true });
+              } else {
+                console.log(`⚠️ ${pkgName}@${localVersion} is not on npm yet - skipping automatic first publish`);
+                firstPublishCandidates.push({ name: pkgName, directory: dir, version: localVersion });
+              }
               continue;
             }
 
+            probePackage ||= pkgName;
+
             if (!published.versions.includes(localVersion)) {
               console.log(`📦 ${pkgName}@${localVersion} missing from npm - will publish`);
-              matrix.push({ name: pkgName, directory: dir, version: localVersion });
+              matrix.push({ name: pkgName, directory: dir, version: localVersion, firstPublish: false });
             } else {
               console.log(`✓ ${pkgName}@${localVersion} already on npm - skipping`);
             }
@@ -242,7 +253,7 @@ jobs:
           console.log('\nPackages to publish:', JSON.stringify(matrix, null, 2));
           fs.appendFileSync(process.env.GITHUB_OUTPUT, `matrix=${JSON.stringify({ include: matrix })}\n`);
           fs.appendFileSync(process.env.GITHUB_OUTPUT, `has_packages=${matrix.length > 0}\n`);
-          fs.appendFileSync(process.env.GITHUB_OUTPUT, `probe_package=${matrix[0]?.name ?? ''}\n`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `probe_package=${probePackage}\n`);
           fs.appendFileSync(process.env.GITHUB_OUTPUT, `first_publish_candidates=${JSON.stringify(firstPublishCandidates)}\n`);
           fs.appendFileSync(process.env.GITHUB_OUTPUT, `skipped_private_packages=${JSON.stringify(skippedPrivatePackages)}\n`);
           EOF
