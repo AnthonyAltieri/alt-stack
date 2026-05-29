@@ -118,39 +118,6 @@ export const openApiSpec = generateOpenAPISpecFromServerRoutes(
 
 The registry is explicit because TanStack file routes are decentralized modules. Keeping the `defineServerRoute` object exported from each route file gives OpenAPI generation the same Alt Stack procedure metadata used by the request handlers.
 
-For larger APIs, define regular Alt Stack routers and expose them to TanStack:
-
-```ts
-import { createFileRoute } from "@tanstack/react-router";
-import {
-  createRouteHandlers,
-  init,
-  ok,
-  router,
-  type TanStackBaseContext,
-} from "@alt-stack/server-tanstack-start";
-import { z } from "zod";
-
-interface AppContext extends TanStackBaseContext {
-  user: { id: string } | null;
-}
-
-const t = init<AppContext>();
-
-const todosRouter = router<AppContext>({
-  "/api/todos/{id}": {
-    get: t.procedure
-      .input({ params: z.object({ id: z.string() }) })
-      .output(z.object({ id: z.string() }))
-      .handler(({ input }) => ok({ id: input.params.id })),
-  },
-});
-
-export const Route = createFileRoute("/api/todos/$id")({
-  server: createRouteHandlers(todosRouter),
-});
-```
-
 Handlers receive the native TanStack inputs on `ctx.tanstack`:
 
 ```ts
@@ -158,3 +125,5 @@ ctx.tanstack.request;
 ctx.tanstack.params;
 ctx.tanstack.context;
 ```
+
+For larger APIs, keep each API route as an exported `defineServerRoute` value and compose those exports in registries such as OpenAPI generation, SDK generation, or route-level test setup. Avoid defining separate router paths for TanStack routes; the `defineServerRoute` path is the source of truth for TanStack, Alt Stack, and OpenAPI.

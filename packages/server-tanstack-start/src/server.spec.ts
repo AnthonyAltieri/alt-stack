@@ -2,15 +2,11 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import {
   TaggedError,
-  createRequestHandler,
-  createRouteHandlers,
-  createServerRoute,
   defineServerRoute,
   err,
   generateOpenAPISpecFromServerRoutes,
   init,
   ok,
-  router,
   tanStackPathToOpenApiPath,
 } from "./index.js";
 import type { TanStackBaseContext } from "./index.js";
@@ -122,7 +118,7 @@ describe("TanStack Start server adapter", () => {
   });
 
   it("validates JSON request bodies", async () => {
-    const server = createServerRoute("/api/todos", {
+    const route = defineServerRoute("/api/todos", {
       post: procedure
         .input({
           body: z.object({ title: z.string().min(1) }),
@@ -131,7 +127,7 @@ describe("TanStack Start server adapter", () => {
         .handler(({ input }) => ok({ title: input.body.title })),
     });
 
-    const response = await server.handlers.POST!({
+    const response = await route.server.handlers.POST!({
       request: request("http://localhost/api/todos", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -146,7 +142,7 @@ describe("TanStack Start server adapter", () => {
   });
 
   it("returns a validation error response for invalid input", async () => {
-    const server = createServerRoute("/api/todos", {
+    const route = defineServerRoute("/api/todos", {
       post: procedure
         .input({
           body: z.object({ title: z.string().min(1) }),
@@ -154,7 +150,7 @@ describe("TanStack Start server adapter", () => {
         .handler(() => ok({ unreachable: true })),
     });
 
-    const response = await server.handlers.POST!({
+    const response = await route.server.handlers.POST!({
       request: request("http://localhost/api/todos", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -179,7 +175,7 @@ describe("TanStack Start server adapter", () => {
       }
     }
 
-    const server = createServerRoute("/api/todos/$id", {
+    const route = defineServerRoute("/api/todos/$id", {
       get: procedure
         .input({ params: z.object({ id: z.string() }) })
         .errors({
@@ -191,7 +187,7 @@ describe("TanStack Start server adapter", () => {
         .handler(({ input }) => err(new NotFoundError(input.params.id))),
     });
 
-    const response = await server.handlers.GET!({
+    const response = await route.server.handlers.GET!({
       request: request(),
       params: { id: "missing" },
       context: {},
@@ -213,7 +209,7 @@ describe("TanStack Start server adapter", () => {
       return next({ ctx: { user: { id: ctx.tanstack.params.id ?? "unknown" } } });
     });
 
-    const server = createServerRoute("/api/users/$id", {
+    const route = defineServerRoute("/api/users/$id", {
       get: authed
         .input({ params: z.object({ id: z.string() }) })
         .output(
@@ -232,7 +228,7 @@ describe("TanStack Start server adapter", () => {
         ),
     });
 
-    const response = await server.handlers.GET!({
+    const response = await route.server.handlers.GET!({
       request: request("http://localhost/api/users/u_123"),
       params: { id: "u_123" },
       context: { source: "tanstack" },
@@ -247,7 +243,7 @@ describe("TanStack Start server adapter", () => {
   });
 
   it("supports createContext for app-specific context", async () => {
-    const server = createServerRoute(
+    const route = defineServerRoute(
       "/api/me",
       {
         get: procedure
@@ -259,7 +255,7 @@ describe("TanStack Start server adapter", () => {
       },
     );
 
-    const response = await server.handlers.GET!({
+    const response = await route.server.handlers.GET!({
       request: request("http://localhost/api/me"),
       params: {},
       context: {},
@@ -272,13 +268,13 @@ describe("TanStack Start server adapter", () => {
   });
 
   it("passes Response results through unchanged", async () => {
-    const server = createServerRoute("/api/export", {
+    const route = defineServerRoute("/api/export", {
       get: procedure.handler(() =>
         ok(new Response("csv-data", { status: 201 })),
       ),
     });
 
-    const response = await server.handlers.GET!({
+    const response = await route.server.handlers.GET!({
       request: request("http://localhost/api/export"),
       params: {},
       context: {},
@@ -286,49 +282,6 @@ describe("TanStack Start server adapter", () => {
 
     expect(response.status).toBe(201);
     await expect(response.text()).resolves.toBe("csv-data");
-  });
-
-  it("dispatches request handlers and returns 405 for unsupported methods", async () => {
-    const appRouter = router<AppContext>({
-      "/api/status": {
-        get: procedure
-          .output(z.object({ ok: z.boolean() }))
-          .handler(() => ok({ ok: true })),
-      },
-    });
-    const handler = createRequestHandler(appRouter);
-
-    const response = await handler({
-      request: request("http://localhost/api/status", { method: "POST" }),
-      params: {},
-      context: {},
-    });
-
-    expect(response.status).toBe(405);
-    expect(response.headers.get("allow")).toBe("GET");
-  });
-
-  it("can create handlers from a prefixed router config", async () => {
-    const todosRouter = router<AppContext>({
-      "/": {
-        get: procedure
-          .output(z.object({ route: z.literal("todos") }))
-          .handler(() => ok({ route: "todos" as const })),
-      },
-    });
-
-    const server = createRouteHandlers<AppContext>({
-      "/api/todos": todosRouter,
-    });
-
-    const response = await server.handlers.GET!({
-      request: request("http://localhost/api/todos"),
-      params: {},
-      context: {},
-    });
-
-    expect(response.status).toBe(200);
-    await expect(json(response)).resolves.toEqual({ route: "todos" });
   });
 
   it("requires params schemas for TanStack dynamic route segments", () => {

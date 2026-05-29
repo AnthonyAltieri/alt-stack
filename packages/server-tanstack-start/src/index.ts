@@ -1,18 +1,6 @@
-import type { TanStackBaseContext } from "./types.js";
-import {
-  Router as BaseRouter,
-  createRouter as baseCreateRouter,
-  mergeRouters as baseMergeRouters,
-  router as baseRouter,
-} from "@alt-stack/server-core";
-
 export {
-  createRequestHandler,
-  createRouteHandlers,
-  createServerRoute,
   defineServerRoute,
   generateOpenAPISpecFromServerRoutes,
-  Router,
 } from "./server.js";
 export type {
   CreateTanStackRouteHandlersOptions,
@@ -69,8 +57,6 @@ export {
   // Procedure builders
   BaseProcedureBuilder,
   ProcedureBuilder,
-  // OpenAPI
-  generateOpenAPISpec,
   // Validation
   validateInput,
   parseSchema,
@@ -127,30 +113,4 @@ export type {
   Procedure,
   ReadyProcedure,
   PendingProcedure,
-  RouterConfigValue,
 } from "@alt-stack/server-core";
-
-export function router<
-  TCustomContext extends TanStackBaseContext = TanStackBaseContext,
->(
-  config: Parameters<typeof baseRouter<TCustomContext>>[0],
-): BaseRouter<TCustomContext> {
-  return baseRouter<TCustomContext>(config);
-}
-
-export function createRouter<
-  TCustomContext extends TanStackBaseContext = TanStackBaseContext,
->(
-  config?: Record<
-    string,
-    BaseRouter<TCustomContext> | BaseRouter<TCustomContext>[]
-  >,
-): BaseRouter<TCustomContext> {
-  return baseCreateRouter<TCustomContext>(config);
-}
-
-export function mergeRouters<
-  TCustomContext extends TanStackBaseContext = TanStackBaseContext,
->(...routers: BaseRouter<TCustomContext>[]): BaseRouter<TCustomContext> {
-  return baseMergeRouters<TCustomContext>(...routers);
-}
