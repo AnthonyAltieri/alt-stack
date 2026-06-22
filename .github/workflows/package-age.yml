@@ -1,0 +1,37 @@
+name: Package Age
+
+on:
+  pull_request:
+    branches:
+      - main
+      - master
+    paths:
+      - "**/package.json"
+      - "**/pnpm-lock.yaml"
+      - "**/pnpm-workspace.yaml"
+
+permissions:
+  contents: read
+
+jobs:
+  package-age:
+    name: Check newly added npm package age
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "20"
+
+      - name: Check newly added npm package release age
+        run: >-
+          node scripts/check-npm-release-age.mjs
+          --min-age-days 7
+          --base-ref "${{ github.event.pull_request.base.sha }}"
+          --exclude "@alt-stack/*"

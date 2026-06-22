@@ -3,6 +3,11 @@ packages:
   - "examples/*"
   - "packages/*"
 
+minimumReleaseAge: 10080
+minimumReleaseAgeExclude:
+  - "@alt-stack/*"
+blockExoticSubdeps: true
+
 catalog:
   oxlint: ^1.24.0
   turbo: ^2.5.8

@@ -15,26 +15,32 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org/'
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
 
       - name: Get pnpm store directory
         shell: bash
-        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
 
       - name: Setup pnpm cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ env.STORE_PATH }}
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
@@ -47,12 +53,14 @@ jobs:
       - name: Configure npm (for publishing)
         if: inputs.dry_run != true
         shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          if [ -z "${{ secrets.NPM_TOKEN }}" ]; then
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
             echo "Error: NPM_TOKEN secret is required for publishing"
             exit 1
           fi
-          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
+          printf '//registry.npmjs.org/:_authToken=%s\n' "$NODE_AUTH_TOKEN" > .npmrc
 
       - name: Reconcile package versions
         id: reconcile
@@ -248,10 +256,14 @@ jobs:
           EOF
 
       - name: Summary
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          echo "### Package Reconciliation Complete" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ inputs.dry_run }}" == "true" ]; then
-            echo "🔍 **Dry run** - no changes were made" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "✅ **Publishing complete** - missing versions have been published" >> $GITHUB_STEP_SUMMARY
-          fi
+          {
+            echo "### Package Reconciliation Complete"
+            if [ "$DRY_RUN" == "true" ]; then
+              echo "🔍 **Dry run** - no changes were made"
+            else
+              echo "✅ **Publishing complete** - missing versions have been published"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
