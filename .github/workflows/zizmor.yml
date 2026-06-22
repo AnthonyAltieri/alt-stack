@@ -27,3 +27,4 @@ jobs:
         with:
           advanced-security: false
           annotations: true
+          min-severity: low

@@ -17,6 +17,9 @@ env:
   PACKAGE_DIR: packages/python-pydantic-openapi
   DIST_DIR: dist/python-pydantic-openapi
 
+permissions:
+  contents: read
+
 jobs:
   detect-unpublished:
     runs-on: ubuntu-latest
@@ -33,6 +36,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Setup Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -42,8 +47,11 @@ jobs:
       - name: Detect unpublished package version
         id: detect
         shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.dry_run }}" == "true" ]]; then
+          if [[ "$EVENT_NAME" == "workflow_dispatch" && "$INPUT_DRY_RUN" == "true" ]]; then
             echo "dry_run=true" >> "$GITHUB_OUTPUT"
           else
             echo "dry_run=false" >> "$GITHUB_OUTPUT"
@@ -89,15 +97,21 @@ jobs:
 
       - name: Detection summary
         shell: bash
+        env:
+          PACKAGE_NAME: ${{ steps.detect.outputs.package_name }}
+          PACKAGE_VERSION: ${{ steps.detect.outputs.package_version }}
+          SHOULD_PUBLISH: ${{ steps.detect.outputs.should_publish }}
         run: |
-          echo "### Python package release detection" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Package: \`${{ steps.detect.outputs.package_name }}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Version: \`${{ steps.detect.outputs.package_version }}\`" >> "$GITHUB_STEP_SUMMARY"
-          if [[ "${{ steps.detect.outputs.should_publish }}" == "true" ]]; then
-            echo "- Result: version is unpublished and eligible for release" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "- Result: version already exists on PyPI; no release needed" >> "$GITHUB_STEP_SUMMARY"
-          fi
+          {
+            echo "### Python package release detection"
+            echo "- Package: \`${PACKAGE_NAME}\`"
+            echo "- Version: \`${PACKAGE_VERSION}\`"
+            if [[ "$SHOULD_PUBLISH" == "true" ]]; then
+              echo "- Result: version is unpublished and eligible for release"
+            else
+              echo "- Result: version already exists on PyPI; no release needed"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
   build:
     needs: detect-unpublished
@@ -111,6 +125,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Setup Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -147,10 +163,15 @@ jobs:
       - name: Dry-run summary
         if: needs.detect-unpublished.outputs.dry_run == 'true'
         shell: bash
+        env:
+          PACKAGE_NAME: ${{ needs.detect-unpublished.outputs.package_name }}
+          PACKAGE_VERSION: ${{ needs.detect-unpublished.outputs.package_version }}
         run: |
-          echo "### Python package dry run" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Built artifacts for \`${{ needs.detect-unpublished.outputs.package_name }}@${{ needs.detect-unpublished.outputs.package_version }}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Publishing and git tagging were skipped because \`dry_run=true\`" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### Python package dry run"
+            echo "- Built artifacts for \`${PACKAGE_NAME}@${PACKAGE_VERSION}\`"
+            echo "- Publishing and git tagging were skipped because \`dry_run=true\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   publish:
     needs: [detect-unpublished, build]
@@ -196,6 +217,7 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
       - name: Configure git
         shell: bash
@@ -205,7 +227,12 @@ jobs:
 
       - name: Create and push git tag
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKAGE_NAME: ${{ needs.detect-unpublished.outputs.package_name }}
+          PACKAGE_VERSION: ${{ needs.detect-unpublished.outputs.package_version }}
         run: |
-          TAG_NAME="${{ needs.detect-unpublished.outputs.package_name }}@${{ needs.detect-unpublished.outputs.package_version }}"
+          TAG_NAME="${PACKAGE_NAME}@${PACKAGE_VERSION}"
           git tag -a "$TAG_NAME" -m "Release $TAG_NAME" 2>/dev/null || echo "Tag $TAG_NAME already exists"
-          git push origin "$TAG_NAME" || echo "Tag $TAG_NAME already exists on origin"
+          AUTH_HEADER="$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 | tr -d '\n')"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${AUTH_HEADER}" push origin "$TAG_NAME" || echo "Tag $TAG_NAME already exists on origin"
