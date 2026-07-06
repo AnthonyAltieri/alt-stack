@@ -4,27 +4,17 @@ on:
   push:
     branches:
       - main
-      - master
   workflow_dispatch:
-    inputs:
-      dry_run:
-        description: 'Run in dry-run mode (no publishing, tagging, or committing)'
-        required: false
-        default: 'false'
-        type: boolean
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 jobs:
-  detect-unpublished:
+  release:
     runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-      has_packages: ${{ steps.set-matrix.outputs.has_packages }}
-      probe_package: ${{ steps.set-matrix.outputs.probe_package }}
-      first_publish_candidates: ${{ steps.set-matrix.outputs.first_publish_candidates }}
-      skipped_private_packages: ${{ steps.set-matrix.outputs.skipped_private_packages }}
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
@@ -41,7 +31,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: '20'
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org/"
 
       - name: Install pnpm
         uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
@@ -73,474 +64,33 @@ jobs:
 
           for workspace_file in "${workspaces[@]}"; do
             workspace_dir=$(dirname "$workspace_file")
-            echo "📦 Installing nested workspace dependencies in ${workspace_dir}"
+            echo "Installing nested workspace dependencies in ${workspace_dir}"
             pnpm install --dir "$workspace_dir" --frozen-lockfile
           done
 
-      - name: Clean and rebuild all packages
-        run: |
-          echo "🧹 Cleaning all dist directories..."
-          find packages -name "dist" -type d -exec rm -rf {} + 2>/dev/null || true
-          echo "🔨 Rebuilding all packages..."
-          pnpm turbo run build
-          echo "✅ All packages rebuilt with fresh dist files"
-
-      - name: Check if SDK regeneration needed
-        id: sdk-check
-        shell: bash
-        run: |
-          KAFKA_PRODUCER_CHANGED=false
-          ALTSTACK_SERVER_CHANGED=false
-          CHANGED_FILES=$(git diff --name-only HEAD^1 HEAD 2>/dev/null || echo "")
-
-          if echo "$CHANGED_FILES" | grep -q "^examples/kafka-producer/"; then
-            KAFKA_PRODUCER_CHANGED=true
-            echo "📦 Kafka producer app changed - will regenerate SDK"
-          fi
-
-          if echo "$CHANGED_FILES" | grep -q "^examples/altstack-server/"; then
-            ALTSTACK_SERVER_CHANGED=true
-            echo "📦 Altstack server app changed - will regenerate SDK"
-          fi
-
-          echo "kafka_producer_changed=$KAFKA_PRODUCER_CHANGED" >> "$GITHUB_OUTPUT"
-          echo "altstack_server_changed=$ALTSTACK_SERVER_CHANGED" >> "$GITHUB_OUTPUT"
-
-      - name: Build core packages for SDK generation
-        if: steps.sdk-check.outputs.kafka_producer_changed == 'true' || steps.sdk-check.outputs.altstack_server_changed == 'true'
-        run: |
-          pnpm --filter @alt-stack/result build
-          pnpm --filter @alt-stack/zod-openapi build
-          pnpm --filter @alt-stack/zod-asyncapi build
-          pnpm --filter @alt-stack/kafka-core build
-          pnpm --filter @alt-stack/server-core build
-          pnpm --filter @alt-stack/server-hono build
-
-      - name: Regenerate Kafka Producer SDK
-        if: steps.sdk-check.outputs.kafka_producer_changed == 'true'
-        run: |
-          echo "🔄 Regenerating Kafka Producer SDK..."
-          cd examples/kafka-producer
-          pnpm generate-spec
-          echo "✓ Generated AsyncAPI spec"
-          cd ../..
-          pnpm --filter @alt-stack/zod-asyncapi exec tsx src/cli.ts \
-            ${{ github.workspace }}/examples/kafka-producer/asyncapi.json \
-            -o ${{ github.workspace }}/packages/example-kafka-producer-sdk/src/index.ts
-          echo "✓ Regenerated example-kafka-producer-sdk"
-
-      - name: Regenerate Altstack Server SDK
-        if: steps.sdk-check.outputs.altstack_server_changed == 'true'
-        run: |
-          echo "🔄 Regenerating Altstack Server SDK..."
-          cd examples/altstack-server
-          pnpm dev > server.log 2>&1 &
-          SERVER_PID=$!
-          MAX_ATTEMPTS=30
-          ATTEMPT=0
-
-          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
-            sleep 2
-            if curl -f -s http://localhost:3000/docs/openapi.json > /dev/null 2>&1; then
-              echo "✓ Server is ready"
-              break
-            fi
-            ATTEMPT=$((ATTEMPT + 1))
-            echo "Waiting for server... attempt $ATTEMPT/$MAX_ATTEMPTS"
-          done
-
-          if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
-            echo "✗ Server failed to start"
-            cat server.log || true
-            kill $SERVER_PID 2>/dev/null || true
-            exit 1
-          fi
-
-          cd ../..
-          pnpm --filter @alt-stack/zod-openapi exec tsx src/cli.ts \
-            http://localhost:3000/docs/openapi.json \
-            -o ${{ github.workspace }}/packages/example-altstack-server-sdk/src/index.ts
-          kill $SERVER_PID 2>/dev/null || true
-          echo "✓ Regenerated example-altstack-server-sdk"
-
-      - name: Detect packages with unpublished versions
-        id: set-matrix
-        shell: bash
-        run: |
-          node << 'EOF'
-          const { execSync } = require('child_process');
-          const fs = require('fs');
-          const path = require('path');
-
-          const packageDirs = fs.readdirSync('packages')
-            .map(dir => path.join('packages', dir))
-            .filter(dir => {
-              const pkgPath = path.join(dir, 'package.json');
-              if (!fs.existsSync(pkgPath)) return false;
-              try {
-                const pkgJson = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-                return pkgJson.name?.startsWith('@alt-stack/') && pkgJson.name !== '@alt-stack/typescript-config';
-              } catch { return false; }
-            });
-
-          function getPublishedVersions(pkgName) {
-            try {
-              const raw = execSync(`npm view "${pkgName}" versions --json`, {
-                encoding: 'utf-8',
-                stdio: ['pipe', 'pipe', 'pipe']
-              }).trim();
-
-              if (!raw) {
-                return { kind: 'published', versions: [] };
-              }
-
-              const parsed = JSON.parse(raw);
-
-              return {
-                kind: 'published',
-                versions: Array.isArray(parsed) ? parsed : [parsed]
-              };
-            } catch (error) {
-              const stderr = String(error.stderr || error.message || '');
-
-              if (stderr.includes('E404')) {
-                return { kind: 'not-found', versions: [] };
-              }
-
-              return { kind: 'error', error: stderr || String(error) };
-            }
-          }
-
-          const matrix = [];
-          const firstPublishCandidates = [];
-          const allowedFirstPublishPackages = new Set([
-            '@alt-stack/server-tanstack-start',
-          ]);
-          const skippedPrivatePackages = [];
-          let probePackage = '';
-
-          for (const dir of packageDirs) {
-            const pkgJson = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf-8'));
-            const pkgName = pkgJson.name;
-            const localVersion = pkgJson.version;
-
-            if (pkgJson.private) {
-              console.log(`🔒 ${pkgName}@${localVersion} is private - skipping publish detection`);
-              skippedPrivatePackages.push({ name: pkgName, directory: dir, version: localVersion });
-              continue;
-            }
-
-            const published = getPublishedVersions(pkgName);
-
-            if (published.kind === 'error') {
-              console.error(`✗ Failed to inspect ${pkgName} on npm`);
-              console.error(published.error);
-              process.exit(1);
-            }
-
-            if (published.kind === 'not-found') {
-              if (allowedFirstPublishPackages.has(pkgName)) {
-                console.log(`📦 ${pkgName}@${localVersion} is not on npm yet but is first-publish allowlisted - will publish`);
-                matrix.push({ name: pkgName, directory: dir, version: localVersion, firstPublish: true });
-              } else {
-                console.log(`⚠️ ${pkgName}@${localVersion} is not on npm yet - skipping automatic first publish`);
-                firstPublishCandidates.push({ name: pkgName, directory: dir, version: localVersion });
-              }
-              continue;
-            }
-
-            probePackage ||= pkgName;
-
-            if (!published.versions.includes(localVersion)) {
-              console.log(`📦 ${pkgName}@${localVersion} missing from npm - will publish`);
-              matrix.push({ name: pkgName, directory: dir, version: localVersion, firstPublish: false });
-            } else {
-              console.log(`✓ ${pkgName}@${localVersion} already on npm - skipping`);
-            }
-          }
-
-          console.log('\nPackages to publish:', JSON.stringify(matrix, null, 2));
-          fs.appendFileSync(process.env.GITHUB_OUTPUT, `matrix=${JSON.stringify({ include: matrix })}\n`);
-          fs.appendFileSync(process.env.GITHUB_OUTPUT, `has_packages=${matrix.length > 0}\n`);
-          fs.appendFileSync(process.env.GITHUB_OUTPUT, `probe_package=${probePackage}\n`);
-          fs.appendFileSync(process.env.GITHUB_OUTPUT, `first_publish_candidates=${JSON.stringify(firstPublishCandidates)}\n`);
-          fs.appendFileSync(process.env.GITHUB_OUTPUT, `skipped_private_packages=${JSON.stringify(skippedPrivatePackages)}\n`);
-          EOF
-
-      - name: Summarize skipped packages
-        shell: bash
-        env:
-          FIRST_PUBLISH_CANDIDATES: ${{ steps.set-matrix.outputs.first_publish_candidates }}
-          SKIPPED_PRIVATE_PACKAGES: ${{ steps.set-matrix.outputs.skipped_private_packages }}
-        run: |
-          node << 'EOF'
-          const fs = require('fs');
-
-          const firstPublishCandidates = JSON.parse(process.env.FIRST_PUBLISH_CANDIDATES || '[]');
-          const skippedPrivatePackages = JSON.parse(process.env.SKIPPED_PRIVATE_PACKAGES || '[]');
-          const lines = [];
-
-          if (skippedPrivatePackages.length > 0) {
-            lines.push('### Skipped private packages');
-            lines.push('');
-            for (const pkg of skippedPrivatePackages) {
-              lines.push(`- ${pkg.name}@${pkg.version}`);
-            }
-            lines.push('');
-          }
-
-          if (firstPublishCandidates.length > 0) {
-            lines.push('### Skipped first-time publishes');
-            lines.push('');
-            lines.push('These packages are not on npm yet, so the workflow will not attempt an automatic first publish.');
-            lines.push('Bootstrap them manually after confirming the npm token has write access to the `@alt-stack` scope.');
-            lines.push('');
-            for (const pkg of firstPublishCandidates) {
-              lines.push(`- ${pkg.name}@${pkg.version}`);
-            }
-            lines.push('');
-          }
-
-          if (lines.length > 0) {
-            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${lines.join('\n')}\n`);
-          }
-          EOF
-
-  verify-publish-access:
-    needs: detect-unpublished
-    if: needs.detect-unpublished.outputs.has_packages == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+      - name: Create Release Pull Request or Publish to npm
+        id: changesets
+        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
         with:
-          egress-policy: audit
-
-      - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org/'
-
-      - name: Verify npm token can manage the package scope
-        shell: bash
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          PROBE_PACKAGE: ${{ needs.detect-unpublished.outputs.probe_package }}
-        run: |
-          if [ -z "$NODE_AUTH_TOKEN" ]; then
-            echo "Error: NPM_TOKEN secret is required"
-            exit 1
-          fi
-
-          if [ -z "$PROBE_PACKAGE" ]; then
-            echo "No published package requires an npm access probe"
-            exit 0
-          fi
-
-          NPM_ACCOUNT="$(npm whoami)"
-          echo "Authenticated to npm as ${NPM_ACCOUNT}"
-
-          if npm access list collaborators "$PROBE_PACKAGE" --json >/dev/null; then
-            echo "✓ Verified npm access for ${PROBE_PACKAGE}"
-            exit 0
-          fi
-
-          echo "::error::NPM account ${NPM_ACCOUNT} cannot manage ${PROBE_PACKAGE}. Update NPM_TOKEN with write access to the @alt-stack scope before rerunning this workflow."
-          exit 1
-
-  publish:
-    needs: [detect-unpublished, verify-publish-access]
-    if: needs.detect-unpublished.outputs.has_packages == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJson(needs.detect-unpublished.outputs.matrix) }}
-    env:
-      DRY_RUN: ${{ github.event.inputs.dry_run == 'true' }}
-      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-    steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
-        with:
-          egress-policy: audit
-
-      - name: Checkout code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-          persist-credentials: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org/'
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-
-      - name: Get pnpm store directory
-        shell: bash
-        run: echo "STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
-
-      - name: Setup pnpm cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: ${{ runner.os }}-pnpm-store-
-        continue-on-error: true
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Configure git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Build package
-        shell: bash
-        env:
-          PACKAGE_DIRECTORY: ${{ matrix.directory }}
-          PACKAGE_NAME: ${{ matrix.name }}
-        run: |
-          PKG_JSON="${PACKAGE_DIRECTORY}/package.json"
-          if node -e "const p=require('./' + process.argv[1]); process.exit(p.scripts?.build ? 0 : 1)" "$PKG_JSON" 2>/dev/null; then
-            echo "Building ${PACKAGE_NAME}..."
-            pnpm turbo run build --filter="${PACKAGE_NAME}"
-            echo "✓ Successfully built ${PACKAGE_NAME}"
-          else
-            echo "No build script found for ${PACKAGE_NAME}, skipping build"
-          fi
-
-      - name: Publish package
-        shell: bash
-        env:
-          PACKAGE_DIRECTORY: ${{ matrix.directory }}
-          PACKAGE_NAME: ${{ matrix.name }}
-          PACKAGE_VERSION: ${{ matrix.version }}
-        run: |
-          if [ "$DRY_RUN" == "true" ]; then
-            echo "🧪 [DRY-RUN] Would publish ${PACKAGE_NAME}@${PACKAGE_VERSION}"
-          else
-            if [ -z "$NODE_AUTH_TOKEN" ]; then
-              echo "Error: NPM_TOKEN secret is required"
-              exit 1
-            fi
-            echo "Publishing ${PACKAGE_NAME}@${PACKAGE_VERSION}..."
-            cd "$PACKAGE_DIRECTORY"
-            pnpm publish --access public --no-git-checks
-            echo "✓ Successfully published ${PACKAGE_NAME}@${PACKAGE_VERSION}"
-          fi
-
-      - name: Create git tag
-        if: env.DRY_RUN != 'true'
-        shell: bash
-        env:
-          PACKAGE_NAME: ${{ matrix.name }}
-          PACKAGE_VERSION: ${{ matrix.version }}
-        run: |
-          TAG_NAME="${PACKAGE_NAME}@${PACKAGE_VERSION}"
-          echo "Creating tag: $TAG_NAME"
-          git tag -a "$TAG_NAME" -m "Release $TAG_NAME" 2>/dev/null || echo "Tag $TAG_NAME already exists"
-
-      - name: Upload git tag
-        if: env.DRY_RUN != 'true'
-        shell: bash
-        env:
-          PACKAGE_NAME: ${{ matrix.name }}
-          PACKAGE_VERSION: ${{ matrix.version }}
-          TAG_FILE_ID: ${{ hashFiles(format('{0}/package.json', matrix.directory)) }}
-        run: |
-          mkdir -p /tmp/tags
-          printf '%s\n' "${PACKAGE_NAME}@${PACKAGE_VERSION}" > "/tmp/tags/${TAG_FILE_ID}.txt"
-
-      - name: Upload tag artifact
-        if: env.DRY_RUN != 'true'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: git-tag-${{ hashFiles(format('{0}/package.json', matrix.directory)) }}
-          path: /tmp/tags/
-          retention-days: 1
-
-      - name: Dry-run summary
-        if: env.DRY_RUN == 'true'
-        env:
-          PACKAGE_NAME: ${{ matrix.name }}
-          PACKAGE_VERSION: ${{ matrix.version }}
-        run: |
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "🧪 DRY-RUN SUMMARY for ${PACKAGE_NAME}"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "  • Would publish: ${PACKAGE_NAME}@${PACKAGE_VERSION}"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-  finalize:
-    needs: [detect-unpublished, publish]
-    if: always() && needs.detect-unpublished.outputs.has_packages == 'true' && needs.publish.result == 'success'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    env:
-      DRY_RUN: ${{ github.event.inputs.dry_run == 'true' }}
-    steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
-        with:
-          egress-policy: audit
-
-      - name: Checkout code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-          persist-credentials: false
-
-      - name: Configure git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Download all tag artifacts
-        if: env.DRY_RUN != 'true'
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          pattern: git-tag-*
-          path: /tmp/tags
-          merge-multiple: true
-        continue-on-error: true
-
-      - name: Push tags
-        if: env.DRY_RUN != 'true'
-        shell: bash
+          publish: pnpm release
+          version: pnpm version-packages
+          commit: "chore: version packages"
+          title: "chore: version packages"
+          prDraft: create
+          commitMode: github-api
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          shopt -s nullglob
-          for tag_file in /tmp/tags/*.txt; do
-            if [ -f "$tag_file" ]; then
-              TAG_NAME=$(cat "$tag_file")
-              echo "Creating tag: $TAG_NAME"
-              git tag -a "$TAG_NAME" -m "Release $TAG_NAME" 2>/dev/null || echo "Tag $TAG_NAME already exists"
-            fi
-          done
-          shopt -u nullglob
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-          AUTH_HEADER="$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 | tr -d '\n')"
-          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${AUTH_HEADER}" push origin --tags || echo "No new tags to push"
-
-      - name: Dry-run final summary
-        if: env.DRY_RUN == 'true'
+      - name: Summarize published packages
+        if: steps.changesets.outputs.published == 'true'
+        env:
+          PUBLISHED_PACKAGES: ${{ steps.changesets.outputs.publishedPackages }}
         run: |
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "🧪 DRY-RUN COMPLETE"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "✅ All checks passed! This workflow would have:"
-          echo "  • Published packages to npm"
-          echo "  • Created git tags"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          {
+            echo "### Published packages"
+            echo ""
+            echo '```json'
+            echo "$PUBLISHED_PACKAGES"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
