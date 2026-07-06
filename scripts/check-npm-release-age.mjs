@@ -173,7 +173,7 @@ function fetchJson(url) {
         url,
         {
           headers: {
-            Accept: "application/vnd.npm.install-v1+json, application/json",
+            Accept: "application/json",
             "User-Agent": "alt-stack-package-age-check",
           },
         },
@@ -207,7 +207,7 @@ function packageMetadataUrl(registry, packageName) {
 }
 
 async function mapWithConcurrency(items, concurrency, mapper) {
-  const results = new Array(items.length);
+  const results = Array.from({ length: items.length });
   let nextIndex = 0;
 
   async function worker() {
