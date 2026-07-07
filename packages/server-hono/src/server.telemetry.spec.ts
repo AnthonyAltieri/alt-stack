@@ -7,7 +7,17 @@ import {
 import { SpanStatusCode } from "@opentelemetry/api";
 import { z } from "zod";
 import { createServer } from "./server.js";
-import { Router, router, ok, err, initTelemetry, type HonoBaseContext } from "./index.js";
+import { Router, router, ok, err, initTelemetry } from "./index.js";
+
+type FinishedSpan = ReturnType<InMemorySpanExporter["getFinishedSpans"]>[number];
+
+function getOnlyFinishedSpan(exporter: InMemorySpanExporter): FinishedSpan {
+  const spans = exporter.getFinishedSpans();
+  expect(spans).toHaveLength(1);
+  const span = spans[0];
+  expect(span).toBeDefined();
+  return span as FinishedSpan;
+}
 
 describe("Hono telemetry", () => {
   let exporter: InMemorySpanExporter;
@@ -47,14 +57,13 @@ describe("Hono telemetry", () => {
 
       expect(res.status).toBe(200);
 
-      const spans = exporter.getFinishedSpans();
-      expect(spans).toHaveLength(1);
-      expect(spans[0].name).toBe("GET /api/users/{id}");
-      expect(spans[0].attributes["http.request.method"]).toBe("GET");
-      expect(spans[0].attributes["http.route"]).toBe("/api/users/{id}");
-      expect(spans[0].attributes["url.path"]).toBe("/api/users/123");
-      expect(spans[0].attributes["http.response.status_code"]).toBe(200);
-      expect(spans[0].status.code).toBe(SpanStatusCode.OK);
+      const span = getOnlyFinishedSpan(exporter);
+      expect(span.name).toBe("GET /api/users/{id}");
+      expect(span.attributes["http.request.method"]).toBe("GET");
+      expect(span.attributes["http.route"]).toBe("/api/users/{id}");
+      expect(span.attributes["url.path"]).toBe("/api/users/123");
+      expect(span.attributes["http.response.status_code"]).toBe(200);
+      expect(span.status.code).toBe(SpanStatusCode.OK);
     });
 
     it("creates span for POST request", async () => {
@@ -77,10 +86,9 @@ describe("Hono telemetry", () => {
 
       expect(res.status).toBe(200);
 
-      const spans = exporter.getFinishedSpans();
-      expect(spans).toHaveLength(1);
-      expect(spans[0].name).toBe("POST /api/items");
-      expect(spans[0].attributes["http.response.status_code"]).toBe(200);
+      const span = getOnlyFinishedSpan(exporter);
+      expect(span.name).toBe("POST /api/items");
+      expect(span.attributes["http.response.status_code"]).toBe(200);
     });
   });
 
@@ -108,9 +116,8 @@ describe("Hono telemetry", () => {
 
       expect(res.status).toBe(404);
 
-      const spans = exporter.getFinishedSpans();
-      expect(spans).toHaveLength(1);
-      expect(spans[0].attributes["http.response.status_code"]).toBe(404);
+      const span = getOnlyFinishedSpan(exporter);
+      expect(span.attributes["http.response.status_code"]).toBe(404);
     });
 
     it("sets status code 400 on validation error", async () => {
@@ -127,9 +134,8 @@ describe("Hono telemetry", () => {
 
       expect(res.status).toBe(400);
 
-      const spans = exporter.getFinishedSpans();
-      expect(spans).toHaveLength(1);
-      expect(spans[0].attributes["http.response.status_code"]).toBe(400);
+      const span = getOnlyFinishedSpan(exporter);
+      expect(span.attributes["http.response.status_code"]).toBe(400);
     });
 
     it("records exception and sets status code 500 on uncaught error", async () => {
@@ -147,15 +153,14 @@ describe("Hono telemetry", () => {
 
       expect(res.status).toBe(500);
 
-      const spans = exporter.getFinishedSpans();
-      expect(spans).toHaveLength(1);
-      expect(spans[0].attributes["http.response.status_code"]).toBe(500);
-      expect(spans[0].status.code).toBe(SpanStatusCode.ERROR);
+      const span = getOnlyFinishedSpan(exporter);
+      expect(span.attributes["http.response.status_code"]).toBe(500);
+      expect(span.status.code).toBe(SpanStatusCode.ERROR);
 
       // Check exception was recorded
-      const events = spans[0].events;
+      const events = span.events;
       expect(events.length).toBeGreaterThan(0);
-      expect(events[0].name).toBe("exception");
+      expect(events[0]?.name).toBe("exception");
     });
   });
 
@@ -190,9 +195,8 @@ describe("Hono telemetry", () => {
       expect(usersRes.status).toBe(200);
 
       // Only one span should exist (for /users)
-      const spans = exporter.getFinishedSpans();
-      expect(spans).toHaveLength(1);
-      expect(spans[0].name).toBe("GET /api/users");
+      const span = getOnlyFinishedSpan(exporter);
+      expect(span.name).toBe("GET /api/users");
     });
 
     it("ignores sub-paths of ignored routes", async () => {
@@ -320,10 +324,9 @@ describe("Hono telemetry", () => {
 
       expect(res.status).toBe(200);
 
-      const spans = exporter.getFinishedSpans();
-      expect(spans).toHaveLength(1);
-      expect(spans[0].attributes["custom.user_id"]).toBe("user-123");
-      expect(spans[0].attributes["custom.action"]).toBe("test");
+      const span = getOnlyFinishedSpan(exporter);
+      expect(span.attributes["custom.user_id"]).toBe("user-123");
+      expect(span.attributes["custom.action"]).toBe("test");
     });
   });
 
@@ -348,9 +351,8 @@ describe("Hono telemetry", () => {
 
       await app.fetch(new Request("http://localhost/api/test"));
 
-      const spans = exporter.getFinishedSpans();
-      expect(spans).toHaveLength(1);
-      expect(spans[0].instrumentationScope.name).toBe("my-hono-api");
+      const span = getOnlyFinishedSpan(exporter);
+      expect(span.instrumentationScope.name).toBe("my-hono-api");
     });
   });
 });

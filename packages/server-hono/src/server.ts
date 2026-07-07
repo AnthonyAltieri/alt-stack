@@ -3,8 +3,14 @@ import { Hono as HonoClass } from "hono";
 import type { z } from "zod";
 import type { ZodError } from "zod";
 import type { TypedContext, InputConfig, TelemetryOption } from "@alt-stack/server-core";
-import type { Procedure, ReadyProcedure } from "@alt-stack/server-core";
+import type { Procedure } from "@alt-stack/server-core";
 import type { Router } from "@alt-stack/server-core";
+import type {
+  ExternalRoute,
+  HonoBaseContext,
+  RequestMiddleware,
+  RequestMiddlewareContext,
+} from "./types.js";
 import {
   validateInput,
   middlewareMarker,
@@ -16,11 +22,8 @@ import {
   endSpanWithError,
   setSpanOk,
   withActiveSpan,
-  isOk,
   isErr,
-  ok as resultOk,
   err as resultErr,
-  extractTagsFromSchema,
   findHttpStatusForError,
 } from "@alt-stack/server-core";
 import type { MiddlewareResult, MiddlewareResultSuccess } from "@alt-stack/server-core";
@@ -77,7 +80,52 @@ function serializeError(error: Error & { _tag: string }): object {
   };
 }
 
-import type { HonoBaseContext } from "./types.js";
+function createRequestMiddlewareContext(c: Context): RequestMiddlewareContext {
+  const request = c.req.raw;
+  const url = new URL(request.url);
+
+  return {
+    request,
+    url,
+    method: request.method,
+    path: url.pathname,
+  };
+}
+
+function ensureResponse(response: unknown, source: string): Response {
+  if (response instanceof Response) {
+    return response;
+  }
+
+  throw new TypeError(`${source} must return a Response. Use return next() to continue.`);
+}
+
+async function runRequestMiddleware(
+  middleware: readonly RequestMiddleware[],
+  context: RequestMiddlewareContext,
+  finalHandler: () => Promise<Response>,
+): Promise<Response> {
+  let index = -1;
+
+  const dispatch = async (currentIndex: number): Promise<Response> => {
+    if (currentIndex <= index) {
+      throw new Error("next() called multiple times");
+    }
+
+    index = currentIndex;
+    const currentMiddleware = middleware[currentIndex];
+    if (!currentMiddleware) {
+      return finalHandler();
+    }
+
+    return ensureResponse(
+      await currentMiddleware(context, () => dispatch(currentIndex + 1)),
+      "requestMiddleware",
+    );
+  };
+
+  return dispatch(0);
+}
 
 export function createServer<
   TContext extends HonoBaseContext = HonoBaseContext,
@@ -85,12 +133,8 @@ export function createServer<
   config: Record<string, Router<TContext> | Router<TContext>[]>,
   options?: {
     createContext?: (c: Context) => Promise<Omit<TContext, "hono" | "span">> | Omit<TContext, "hono" | "span">;
-    middleware?: {
-      [path: string]: {
-        methods: string[];
-        handler: (c: Context) => Promise<Response> | Response;
-      };
-    };
+    requestMiddleware?: readonly RequestMiddleware[];
+    externalRoutes?: readonly ExternalRoute[];
     docs?: {
       path?: string;
       openapiPath?: string;
@@ -119,31 +163,29 @@ export function createServer<
     initTelemetry();
   }
 
-  // Apply middleware handlers before framework routes
-  if (options?.middleware) {
-    for (const [path, routeConfig] of Object.entries(options.middleware)) {
-      if (path === "*") {
-        // Apply as global middleware using app.use
-        // The handler can be a Hono middleware function (accepts next) or regular handler
-        // Check if handler is middleware-style by checking if it accepts 2 parameters
-        const handler = routeConfig.handler;
-        if (handler.length === 2) {
-          // Middleware function (c, next) - use directly
-          app.use("*", handler as any);
-        } else {
-          // Regular handler (c) - wrap it to work with app.use
-          app.use("*", async (c, next) => {
-            const result = await handler(c);
-            if (result instanceof Response) {
-              return result;
-            }
-            await next();
-          });
-        }
-      } else {
-        // Apply as route handler using app.on
-        app.on(routeConfig.methods, path, routeConfig.handler);
-      }
+  const requestMiddleware = options?.requestMiddleware ?? [];
+  if (requestMiddleware.length > 0) {
+    app.use("*", async (c, next) => {
+      return runRequestMiddleware(
+        requestMiddleware,
+        createRequestMiddlewareContext(c),
+        async () => {
+          await next();
+          return c.res;
+        },
+      );
+    });
+  }
+
+  // Apply external routes before framework routes so mounted handlers win on overlap.
+  if (options?.externalRoutes) {
+    for (const route of options.externalRoutes) {
+      app.on(Array.from(route.methods), convertPathToHono(route.path), async (c) => {
+        return ensureResponse(
+          await route.handler(createRequestMiddlewareContext(c)),
+          `externalRoutes handler for ${route.path}`,
+        );
+      });
     }
   }
 
@@ -539,4 +581,3 @@ export function createServer<
 
   return app;
 }
-

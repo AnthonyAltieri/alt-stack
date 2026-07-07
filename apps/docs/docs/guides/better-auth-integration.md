@@ -92,28 +92,26 @@ export async function getAuthUser(request: Request): Promise<User | null> {
 Mount Better Auth routes alongside your server framework routes. Better Auth handles all `/api/auth/*` routes:
 
 ```typescript
-import { Hono } from "hono";
 import { createServer } from "@alt-stack/server-hono";
 import { auth } from "./auth.js";
 import { todosRouter } from "./routes/todos.js";
 
-// Create base Hono app
-const app = new Hono();
-
-// Mount Better Auth routes
-app.on(["GET", "POST"], "/api/auth/*", async (c) => {
-  return auth.handler(c.req.raw);
+const app = createServer({
+  "/api": todosRouter,
+}, {
+  externalRoutes: [
+    {
+      path: "/api/auth/*",
+      methods: ["GET", "POST"],
+      handler: ({ request }) => auth.handler(request),
+    },
+  ],
 });
-
-// Mount your server framework routes
-const serverApp = createServer({
-  todos: todosRouter,
-});
-
-app.route("/", serverApp);
 
 export default app;
 ```
+
+If you need raw Hono middleware or app-level Hono composition, create a Hono app manually and mount the Alt Stack app with `app.route()`.
 
 ## Adding User to Context
 
@@ -165,4 +163,3 @@ const app = createServer({
   createContext,
 });
 ```
-
