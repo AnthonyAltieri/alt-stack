@@ -1,0 +1,22 @@
+{
+  "name": "worker-state-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:deps": "pnpm --filter @alt-stack/result --filter @alt-stack/workers-state-core --filter @alt-stack/workers-core --filter @alt-stack/workers-state-clickhouse --filter @alt-stack/workers-warpstream build",
+    "build": "pnpm run build:deps && pnpm --filter @worker-state/shared --filter @worker-state/api --filter @worker-state/worker --filter @worker-state/dispatcher build",
+    "check-types": "pnpm run build:deps && pnpm --filter @worker-state/shared --filter @worker-state/api --filter @worker-state/worker --filter @worker-state/dispatcher check-types",
+    "test": "pnpm run build:deps && pnpm --filter @worker-state/shared build && pnpm --filter @worker-state/shared test && pnpm --filter @worker-state/api test",
+    "lint": "oxlint apps packages --max-warnings 0",
+    "dev:api": "pnpm run build:deps && pnpm --filter @worker-state/shared build && pnpm --filter @worker-state/api dev",
+    "dev:worker": "pnpm run build:deps && pnpm --filter @worker-state/shared build && pnpm --filter @worker-state/worker dev",
+    "dev:dispatcher": "pnpm run build:deps && pnpm --filter @worker-state/shared build && pnpm --filter @worker-state/dispatcher dev",
+    "compose:up": "docker compose up --build",
+    "compose:down": "docker compose down --volumes"
+  },
+  "devDependencies": {
+    "oxlint": "^1.24.0",
+    "typescript": "5.9.2"
+  },
+  "packageManager": "pnpm@9.0.0"
+}

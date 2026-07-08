@@ -1,4 +1,6 @@
 import { z } from "zod";
+import type { QueueInputDefinition } from "@alt-stack/workers-state-core";
+import { normalizeQueueDefinition } from "@alt-stack/workers-state-core";
 import type {
   InputConfig,
   TypedWorkerContext,
@@ -390,7 +392,7 @@ export class BaseWorkerProcedureBuilder<
    * Create a queue-based job that processes messages from a specific queue.
    */
   queue(
-    queueName: string,
+    queueDefinition: QueueInputDefinition,
     handler: (opts: {
       input: InferInput<TBaseInput>;
       ctx: TypedWorkerContext<
@@ -408,9 +410,12 @@ export class BaseWorkerProcedureBuilder<
     MergeErrors<TBaseErrors, TMiddlewareErrors>,
     TCustomContext
   > {
+    const queueConfig = normalizeQueueDefinition(queueDefinition);
+
     return {
       type: "queue",
-      queue: queueName,
+      queue: queueConfig.name,
+      queueConfig,
       config: {
         ...this._baseConfig,
         errors: this._allErrors(),

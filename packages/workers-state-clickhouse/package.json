@@ -1,0 +1,38 @@
+{
+  "name": "@alt-stack/workers-state-clickhouse",
+  "version": "0.1.0",
+  "description": "ClickHouse-backed queue state storage for Alt Stack workers",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest",
+    "check-types": "tsc --noEmit"
+  },
+  "keywords": [
+    "clickhouse",
+    "workers",
+    "queue",
+    "state"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@alt-stack/workers-state-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "oxlint": "^1.24.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.9.2",
+    "vitest": "^4.0.3"
+  }
+}

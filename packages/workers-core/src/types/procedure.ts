@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import type { NormalizedQueueDefinition } from "@alt-stack/workers-state-core";
 import type { TypedWorkerContext, InferInput, InputConfig, WorkerHandlerResult } from "./context.js";
 import type { AnyMiddlewareFunction } from "../middleware.js";
 
@@ -29,6 +30,8 @@ export interface WorkerProcedure<
   cron?: CronConfig;
   /** Queue name if type is "queue" */
   queue?: string;
+  /** Normalized queue configuration when type is "queue" */
+  queueConfig?: NormalizedQueueDefinition;
   config: {
     input: TInput;
     output?: TOutput;
@@ -56,6 +59,7 @@ export interface ReadyWorkerProcedure<
   type: "task" | "cron" | "queue";
   cron?: CronConfig;
   queue?: string;
+  queueConfig?: NormalizedQueueDefinition;
   config: {
     input: TInput;
     output?: TOutput;

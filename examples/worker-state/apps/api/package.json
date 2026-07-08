@@ -1,0 +1,25 @@
+{
+  "name": "@worker-state/api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "check-types": "tsc --noEmit",
+    "test": "vitest run src/*.spec.ts"
+  },
+  "dependencies": {
+    "@alt-stack/workers-core": "workspace:*",
+    "@worker-state/shared": "workspace:*",
+    "@hono/node-server": "^1.0.0",
+    "hono": "^4.0.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@alt-stack/typescript-config": "workspace:*",
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "5.9.2",
+    "vitest": "^4.0.3"
+  }
+}

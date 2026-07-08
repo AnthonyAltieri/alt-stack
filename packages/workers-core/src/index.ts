@@ -73,6 +73,9 @@ export type {
   ExtractPayloadType,
 } from "./asyncapi.js";
 
+// Queue state exports
+export * from "@alt-stack/workers-state-core";
+
 // Telemetry exports
 export {
   initWorkerTelemetry,

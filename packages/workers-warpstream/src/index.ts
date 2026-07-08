@@ -3,7 +3,7 @@ export * from "@alt-stack/workers-core";
 
 // Export WarpStream-specific functionality
 export { createWorker } from "./worker.js";
-export { createJobClient } from "./client.js";
+export { createJobClient, dispatchDueJobs } from "./client.js";
 
 // Export types
 export type {
@@ -14,7 +14,8 @@ export type {
   RoutingStrategy,
   JobClient,
   EnqueueOptions,
+  DispatchDueJobsOptions,
+  DispatchDueJobsResult,
   InferJobNames,
   InferJobPayload,
 } from "./types.js";
-

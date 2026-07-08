@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import type { NormalizedQueueDefinition } from "@alt-stack/workers-state-core";
 import type {
   InputConfig,
   WorkerProcedure,
@@ -50,6 +51,7 @@ export class WorkerRouter<TCustomContext extends object = Record<string, never>>
       type: readyProcedure.type,
       cron: readyProcedure.cron,
       queue: readyProcedure.queue,
+      queueConfig: readyProcedure.queueConfig,
       config: readyProcedure.config,
       handler: readyProcedure.handler,
       middleware: readyProcedure.middleware,
@@ -77,7 +79,7 @@ export class WorkerRouter<TCustomContext extends object = Record<string, never>>
       Record<string, z.ZodTypeAny> | undefined,
       TCustomContext
     >,
-    options?: { cron?: string; queue?: string },
+    options?: { cron?: string; queue?: string; queueConfig?: NormalizedQueueDefinition },
   ): this {
     const procedure: WorkerProcedure<
       TInput,
@@ -89,6 +91,7 @@ export class WorkerRouter<TCustomContext extends object = Record<string, never>>
       type,
       cron: options?.cron ? { pattern: options.cron } : undefined,
       queue: options?.queue,
+      queueConfig: options?.queueConfig,
       config: pendingProcedure.config,
       handler: pendingProcedure.handler,
       middleware: pendingProcedure.middleware,
@@ -164,7 +167,7 @@ export class WorkerRouter<TCustomContext extends object = Record<string, never>>
 }
 
 // Type helper for router config values
-type RouterConfigValue<TCustomContext extends object, TJobName extends string> =
+type RouterConfigValue<TCustomContext extends object> =
   | ReadyWorkerProcedure<any, any, any, any>
   | WorkerRouter<TCustomContext>;
 
@@ -190,9 +193,9 @@ type RouterConfigValue<TCustomContext extends object, TJobName extends string> =
 export function workerRouter<
   TCustomContext extends object = Record<string, never>,
   TConfig extends {
-    [K in string]: RouterConfigValue<TCustomContext, K>;
+    [K in string]: RouterConfigValue<TCustomContext>;
   } = {
-    [K in string]: RouterConfigValue<TCustomContext, K>;
+    [K in string]: RouterConfigValue<TCustomContext>;
   },
 >(config: TConfig): WorkerRouter<TCustomContext> {
   const routerInstance = new WorkerRouter<TCustomContext>();

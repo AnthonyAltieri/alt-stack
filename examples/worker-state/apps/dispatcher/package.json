@@ -1,0 +1,20 @@
+{
+  "name": "@worker-state/dispatcher",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@worker-state/shared": "workspace:*",
+    "@alt-stack/workers-warpstream": "workspace:*"
+  },
+  "devDependencies": {
+    "@alt-stack/typescript-config": "workspace:*",
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "5.9.2"
+  }
+}

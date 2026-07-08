@@ -15,3 +15,18 @@ export type {
   ReadyWorkerProcedure,
   PendingWorkerProcedure,
 } from "./procedure.js";
+
+export type {
+  DeadLetterReason,
+  DeadLetterReasonCode,
+  DispatchKind,
+  NormalizedQueueDefinition,
+  QueueDeadLetterPolicy,
+  QueueDefinition,
+  QueueExecutionConfig,
+  QueueJobError,
+  QueueRedriveConfig,
+  QueueRetryBackoffConfig,
+  QueueRetryConfig,
+  RetryBackoffType,
+} from "@alt-stack/workers-state-core";
