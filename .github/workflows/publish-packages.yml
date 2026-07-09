@@ -34,6 +34,28 @@ jobs:
           node-version: "20"
           registry-url: "https://registry.npmjs.org/"
 
+      - name: Verify npm publishing access
+        shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          PROBE_PACKAGE: "@alt-stack/result"
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "Error: NPM_TOKEN secret is required"
+            exit 1
+          fi
+
+          NPM_ACCOUNT="$(npm whoami)"
+          echo "Authenticated to npm as ${NPM_ACCOUNT}"
+
+          if npm access list collaborators "$PROBE_PACKAGE" --json >/dev/null; then
+            echo "Verified npm access for ${PROBE_PACKAGE}"
+            exit 0
+          fi
+
+          echo "::error::NPM account ${NPM_ACCOUNT} cannot manage ${PROBE_PACKAGE}. Update NPM_TOKEN with write access to the @alt-stack scope before rerunning this workflow."
+          exit 1
+
       - name: Install pnpm
         uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
 
@@ -81,6 +103,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Summarize published packages
         if: steps.changesets.outputs.published == 'true'
