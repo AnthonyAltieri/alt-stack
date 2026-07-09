@@ -1,8 +1,24 @@
 import { describe, it, expectTypeOf, vi } from "vitest";
 import { z } from "zod";
 import { BaseProcedureBuilder } from "./procedure-builder.js";
-import { ok } from "@alt-stack/result";
+import { TaggedError, err, ok } from "@alt-stack/result";
 import type { HasTagLiteral, ValidateErrorConfig } from "./types/index.js";
+
+class DeclaredProcedureError extends TaggedError {
+  readonly _tag = "DeclaredProcedureError" as const;
+
+  constructor() {
+    super("Declared procedure error");
+  }
+}
+
+class UndeclaredProcedureError extends TaggedError {
+  readonly _tag = "UndeclaredProcedureError" as const;
+
+  constructor() {
+    super("Undeclared procedure error");
+  }
+}
 
 describe("ProcedureBuilder", () => {
   describe("BaseProcedureBuilder.use", () => {
@@ -318,6 +334,74 @@ describe("ProcedureBuilder", () => {
           age: z.ZodNumber;
         }>
       >();
+    });
+  });
+
+  describe("HandlerResult return contract", () => {
+    const outputSchema = z.object({
+      id: z.string(),
+    });
+
+    const errorSchemas = {
+      500: z.object({
+        _tag: z.literal("DeclaredProcedureError"),
+        message: z.string(),
+      }),
+    };
+
+    it("should reject raw return values from HTTP method handlers", () => {
+      const builder = new BaseProcedureBuilder()
+        .output(outputSchema)
+        .errors(errorSchemas);
+
+      // @ts-expect-error - procedure handlers must return ok(output) or err(declared error)
+      builder.get(() => ({
+        id: "raw",
+      }));
+    });
+
+    it("should reject raw return values from generic handlers", () => {
+      const builder = new BaseProcedureBuilder()
+        .output(outputSchema)
+        .errors(errorSchemas);
+
+      // @ts-expect-error - pending procedure handlers must also return Result wrappers
+      builder.handler(() => ({
+        id: "raw",
+      }));
+    });
+
+    it("should reject promised raw return values", () => {
+      const builder = new BaseProcedureBuilder()
+        .output(outputSchema)
+        .errors(errorSchemas);
+
+      // @ts-expect-error - async procedure handlers must resolve to Result wrappers
+      builder.get(async () => ({
+        id: "raw",
+      }));
+    });
+
+    it("should reject ok values that do not match the declared output schema", () => {
+      const builder = new BaseProcedureBuilder()
+        .output(outputSchema)
+        .errors(errorSchemas);
+
+      // @ts-expect-error - ok(...) payload must match the .output(...) schema
+      builder.get(() => ok({
+        id: 123,
+      }));
+    });
+
+    it("should reject err values that are not declared by errors", () => {
+      const builder = new BaseProcedureBuilder()
+        .output(outputSchema)
+        .errors(errorSchemas);
+
+      builder.get(() => err(new DeclaredProcedureError()));
+
+      // @ts-expect-error - err(...) must use one of the declared error _tag values
+      builder.get(() => err(new UndeclaredProcedureError()));
     });
   });
 
