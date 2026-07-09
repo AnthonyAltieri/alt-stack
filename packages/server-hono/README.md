@@ -166,6 +166,44 @@ In handlers and middleware, access the Hono context via `ctx.hono`:
 })
 ```
 
+## Request Middleware and External Routes
+
+Use `requestMiddleware` for Alt Stack-owned request middleware. Middleware must return a `Response`; return `next()` to continue to the next middleware or route:
+
+```typescript
+const app = createServer(
+  { api: appRouter },
+  {
+    requestMiddleware: [
+      ({ method }, next) => {
+        if (!["GET", "POST", "PUT", "PATCH", "DELETE"].includes(method)) {
+          return new Response("Unsupported method", { status: 405 });
+        }
+
+        return next();
+      },
+    ],
+  },
+);
+```
+
+Use `externalRoutes` for non-Alt-Stack handlers such as auth libraries:
+
+```typescript
+const app = createServer(
+  { api: appRouter },
+  {
+    externalRoutes: [
+      {
+        path: "/api/auth/*",
+        methods: ["GET", "POST"],
+        handler: ({ request }) => auth.handler(request),
+      },
+    ],
+  },
+);
+```
+
 ## OpenAPI Documentation
 
 Generate and serve OpenAPI docs:

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { z } from "zod";
 import { createServer } from "./server.js";
 import { Router, router, ok, type HonoBaseContext } from "./index.js";
@@ -188,6 +188,195 @@ describe("createServer", () => {
       const res = await app.fetch(new Request("http://localhost/api/protected"));
 
       expect(res.status).toBe(500);
+    });
+  });
+
+  describe("request middleware", () => {
+    it("should continue when middleware returns next response", async () => {
+      const baseRouter = new Router();
+      const testRouter = router({
+        "/hello": baseRouter.procedure
+          .output(z.object({ message: z.string() }))
+          .get(() => ok({ message: "Hello, World!" })),
+      });
+
+      const app = createServer(
+        { "/api": testRouter },
+        {
+          requestMiddleware: [
+            async (_context, next) => {
+              const response = await next();
+              response.headers.set("x-request-middleware", "seen");
+              return response;
+            },
+          ],
+        },
+      );
+
+      const res = await app.fetch(new Request("http://localhost/api/hello"));
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get("x-request-middleware")).toBe("seen");
+      expect(await res.json()).toEqual({ message: "Hello, World!" });
+    });
+
+    it("should allow request middleware to return an early response", async () => {
+      let handlerCalled = false;
+      const baseRouter = new Router();
+      const testRouter = router({
+        "/blocked": baseRouter.procedure
+          .output(z.object({ message: z.string() }))
+          .get(() => {
+            handlerCalled = true;
+            return ok({ message: "should not run" });
+          }),
+      });
+
+      const app = createServer(
+        { "/api": testRouter },
+        {
+          requestMiddleware: [
+            () => new Response("blocked", { status: 403 }),
+          ],
+        },
+      );
+
+      const res = await app.fetch(new Request("http://localhost/api/blocked"));
+
+      expect(res.status).toBe(403);
+      expect(await res.text()).toBe("blocked");
+      expect(handlerCalled).toBe(false);
+    });
+
+    it("should expose request details to request middleware", async () => {
+      const baseRouter = new Router();
+      const testRouter = router({
+        "/details": baseRouter.procedure
+          .output(z.object({ ok: z.boolean() }))
+          .get(() => ok({ ok: true })),
+      });
+
+      const seen: Array<{ method: string; path: string; query: string }> = [];
+      const app = createServer(
+        { "/api": testRouter },
+        {
+          requestMiddleware: [
+            async (context, next) => {
+              seen.push({
+                method: context.method,
+                path: context.path,
+                query: context.url.searchParams.get("page") ?? "",
+              });
+              return next();
+            },
+          ],
+        },
+      );
+
+      const res = await app.fetch(
+        new Request("http://localhost/api/details?page=2"),
+      );
+
+      expect(res.status).toBe(200);
+      expect(seen).toEqual([{ method: "GET", path: "/api/details", query: "2" }]);
+    });
+
+    it("should run before explicit external routes", async () => {
+      const app = createServer(
+        {},
+        {
+          requestMiddleware: [
+            async (_context, next) => {
+              const response = await next();
+              response.headers.set("x-before-external-route", "yes");
+              return response;
+            },
+          ],
+          externalRoutes: [
+            {
+              path: "/api/auth/*",
+              methods: ["GET", "POST"],
+              handler: ({ method, path }) =>
+                Response.json({ method, path }),
+            },
+          ],
+        },
+      );
+
+      const res = await app.fetch(
+        new Request("http://localhost/api/auth/session", { method: "POST" }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get("x-before-external-route")).toBe("yes");
+      expect(await res.json()).toEqual({
+        method: "POST",
+        path: "/api/auth/session",
+      });
+    });
+
+    it("should support unsupported method rejection through explicit middleware", async () => {
+      const baseRouter = new Router();
+      const testRouter = router({
+        "/hello": baseRouter.procedure
+          .output(z.object({ message: z.string() }))
+          .get(() => ok({ message: "Hello, World!" })),
+      });
+
+      const app = createServer(
+        { "/api": testRouter },
+        {
+          requestMiddleware: [
+            ({ method }, next) => {
+              if (!["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].includes(method)) {
+                return new Response("unsupported method", { status: 405 });
+              }
+
+              return next();
+            },
+          ],
+        },
+      );
+
+      const unsupportedRes = await app.fetch(
+        new Request("http://localhost/api/hello", { method: "PROPFIND" }),
+      );
+      const getRes = await app.fetch(new Request("http://localhost/api/hello"));
+
+      expect(unsupportedRes.status).toBe(405);
+      expect(await unsupportedRes.text()).toBe("unsupported method");
+      expect(getRes.status).toBe(200);
+    });
+
+    it("should fail closed when middleware does not return a response", async () => {
+      const baseRouter = new Router();
+      const testRouter = router({
+        "/hello": baseRouter.procedure
+          .output(z.object({ message: z.string() }))
+          .get(() => ok({ message: "Hello, World!" })),
+      });
+
+      const app = createServer(
+        { "/api": testRouter },
+        {
+          requestMiddleware: [
+            async (_context, next) => {
+              await next();
+              return undefined as unknown as Response;
+            },
+          ],
+        },
+      );
+
+      const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+      let res: Response | undefined;
+      try {
+        res = await app.fetch(new Request("http://localhost/api/hello"));
+      } finally {
+        consoleError.mockRestore();
+      }
+
+      expect(res?.status).toBe(500);
     });
   });
 

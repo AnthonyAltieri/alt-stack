@@ -140,4 +140,11 @@ export function mergeRouters<TCustomContext extends HonoBaseContext = HonoBaseCo
 export { createServer } from "./server.js";
 export { createDocsRouter } from "./docs.js";
 export type { CreateDocsRouterOptions } from "./docs.js";
-export type { HonoBaseContext } from "./types.js";
+export type {
+  ExternalRoute,
+  ExternalRouteHandler,
+  HonoBaseContext,
+  RequestMiddleware,
+  RequestMiddlewareContext,
+  RequestMiddlewareNext,
+} from "./types.js";
