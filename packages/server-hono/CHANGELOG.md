@@ -1,6 +1,6 @@
 # @alt-stack/server-hono
 
-## 0.5.0
+## 1.4.0
 
 ### Minor Changes
 
@@ -9,4 +9,4 @@
 ### Patch Changes
 
 - Updated dependencies [514884a]
-  - @alt-stack/server-core@0.5.0
+  - @alt-stack/server-core@1.4.0
