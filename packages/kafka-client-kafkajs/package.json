@@ -1,6 +1,6 @@
 {
   "name": "@alt-stack/kafka-client-kafkajs",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "KafkaJS binding for type-safe Kafka client",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
