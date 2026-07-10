@@ -4,7 +4,7 @@
 
 - Confirmed the repository is a pnpm/Turborepo monorepo with Docusaurus under `apps/docs` plus TypeScript, Rust, and Python packages.
 - Identified the initial public families: Result, Servers, HTTP Clients, Kafka, Workers, schema/code generation, generated SDK examples, and Zod error utilities.
-- Found no pre-existing `GOAL.md`, `WORKLOG.md`, `tasks/todo.md`, or `tasks/lessons.md` in the worktree.
+- Found no pre-existing durable goal packet, `WORKLOG.md`, `tasks/todo.md`, or `tasks/lessons.md` in the worktree.
 - Confirmed the worktree began clean and detached at `origin/main` commit `cafb8b1`.
 - Attempted the baseline docs build:
 
@@ -23,8 +23,8 @@
 
 ## Current state
 
-- Goal packet drafted and red-teamed in `GOAL.md`.
-- Activated the exact durable objective: `Complete and verify the Altstack documentation rebuild defined in /Users/anthonyaltieri/.codex/worktrees/b290/alt-stack/GOAL.md.`
+- Drafted and red-teamed the local durable goal packet.
+- Activated the durable objective to complete and verify the Altstack documentation rebuild.
 - Installed the root workspace from the committed lockfile. The pre-rewrite Docusaurus production build then passed, establishing that the original site had no build-time broken links; it still represented the user-declared stale content baseline.
 - Verified `@alt-stack/result` with 52 focused tests and verified `@alt-stack/zod-error` with its TypeScript check.
 - Removed 62 legacy Docusaurus/LLM files as a unit. No old narrative page remains in the canonical docs tree.

@@ -117,5 +117,5 @@ The shortstat covers tracked paths only; Git does not include the new replacemen
 - End-to-end path: `apps/docs/docs/together/quickstart.md`
 - Coverage manifest: `apps/docs/api-coverage.json`
 - Verifier: `apps/docs/scripts/verify-docs.mjs`
-- Goal contract: `GOAL.md`
+- Durable-goal state is local and intentionally ignored
 - Detailed evidence: `WORKLOG.md`
