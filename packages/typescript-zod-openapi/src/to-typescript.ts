@@ -356,6 +356,8 @@ export const openApiToZodTsCode = (
   lines.push(" * Do not manually edit this file");
   lines.push(" */");
   lines.push("");
+  lines.push("/* eslint-disable no-useless-escape -- generated regex literals preserve source patterns */");
+  lines.push("");
   lines.push("import { z } from 'zod';");
   lines.push(...(customImportLines ?? []));
   lines.push("");

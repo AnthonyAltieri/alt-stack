@@ -1,30 +1,21 @@
-# @alt-stack/openapi-test-spec
+# `@alt-stack/openapi-test-spec`
 
-Shared OpenAPI fixture(s) used as cross-language test vectors.
+Private cross-language conformance fixture for the TypeScript/Zod, Python/Pydantic, and Rust OpenAPI generators.
 
-## What this is
+This package is not an application SDK. Its only package export is:
 
-- `openapi.json` is the “master” OpenAPI 3.0 spec that exercises schema permutations we want to support across:
-  - OpenAPI → Zod (`packages/typescript-zod-openapi`)
-  - Zod → OpenAPI/JSON Schema (via `z.toJSONSchema`, and future generators)
-  - future language bindings (Python/Pydantic, Go, etc.)
-
-## Conventions
-
-- Uses OpenAPI `3.0.x` (`nullable: true`).
-- Uses vendor extensions for test vectors:
-  - `x-altstack-examples.valid`: array of values that **must** validate
-  - `x-altstack-examples.invalid`: array of values that **must not** validate
-
-## Referencing the fixture
-
-In Node/TS (ESM):
-
-```ts
-import { createRequire } from "node:module";
-import { readFileSync } from "node:fs";
-
-const require = createRequire(import.meta.url);
-const specPath = require.resolve("@alt-stack/openapi-test-spec/openapi.json");
-const spec = JSON.parse(readFileSync(specPath, "utf8"));
+```typescript
+import document from "@alt-stack/openapi-test-spec/openapi.json";
 ```
+
+The OpenAPI 3.0 document covers primitives, formats, constraints, arrays, objects, nullable/reference shapes, `oneOf`, `allOf`, route parameters/bodies/responses, and repeated error schemas. `x-altstack-examples.valid` and `.invalid` values drive test assertions; the extension is not a public generator option.
+
+Run the language-specific conformance suites after changing the fixture:
+
+```bash
+pnpm --filter @alt-stack/zod-openapi test --run
+uv run --project packages/python-pydantic-openapi pytest packages/python-pydantic-openapi/tests/test_master_openapi.py
+cargo test -p rust-openapi --test master_openapi
+```
+
+See [Generated SDKs and fixtures](../../apps/docs/docs/codegen/api/generated-sdks.md) for its role and [Code generation common patterns](../../apps/docs/docs/codegen/common-patterns.md) for supported-schema differences.

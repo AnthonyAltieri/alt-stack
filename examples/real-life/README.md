@@ -1,154 +1,108 @@
-# Real Life Example
+# Altstack multi-service example
 
-A complete example demonstrating all Alt-stack packages working together in a real-world scenario.
+This nested pnpm workspace demonstrates the complete contract flow across two Hono services, generated HTTP SDKs, a Next.js web client, and WarpStream-backed background jobs.
+
+It is an integration reference, not a production starter. Authentication, persistence, and job side effects are intentionally in-memory or illustrative.
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                          NextJS Web App                          │
-│              (uses http-client-ky + generated SDKs)              │
-└───────────────────────────────┬─────────────────────────────────┘
-                                │
-                    ┌───────────┴───────────┐
-                    │                       │
-                    ▼                       ▼
-        ┌───────────────────┐   ┌───────────────────┐
-        │   backend-auth    │   │   backend-logic   │
-        │   (Hono server)   │   │   (Hono server)   │
-        │                   │   │                   │
-        │ - POST /signup    │◄──│ validates tokens  │
-        │ - POST /login     │   │                   │
-        │ - POST /logout    │   │ - GET/POST /tasks │
-        │ - GET /me         │   │ - PUT/DELETE /{id}│
-        │ - GET /validate   │   │                   │
-        └───────────────────┘   └─────────┬─────────┘
-                                          │
-                                          │ triggers jobs
-                                          ▼
-                                ┌───────────────────┐
-                                │     WarpStream    │
-                                │     Workers       │
-                                │                   │
-                                │ - send-notification│
-                                │ - generate-report │
-                                └───────────────────┘
-```
+| Workspace | Responsibility |
+| --- | --- |
+| `apps/backend-auth` | signup, login, session validation, Hono server, and OpenAPI generation |
+| `apps/backend-logic` | task CRUD, Hono server, and worker-job production; create/update/delete are authenticated, while list/get are deliberately public in this demo |
+| `apps/workers` | notification/report job definitions and WarpStream worker runtime |
+| `apps/web` | Next.js UI using generated SDK maps through `@alt-stack/http-client-ky` |
+| `packages/backend-auth-sdk` | generated Zod schemas plus `Request`/`Response` maps |
+| `packages/backend-logic-sdk` | generated Zod schemas plus `Request`/`Response` maps |
+| `packages/workers-sdk` | generated AsyncAPI topic/job schemas |
 
-## Packages
+The services own their Zod routers. Generation scripts produce OpenAPI or AsyncAPI documents, and the SDK workspaces turn those documents into client-facing runtime schemas.
 
-| Package | Description |
-|---------|-------------|
-| `@real-life/backend-auth` | Auth service (Hono) |
-| `@real-life/backend-logic` | Business logic service (Hono) |
-| `@real-life/workers` | Background job workers (WarpStream) |
-| `@real-life/web` | NextJS frontend |
-| `@real-life/backend-auth-sdk` | Generated OpenAPI SDK |
-| `@real-life/backend-logic-sdk` | Generated OpenAPI SDK |
-| `@real-life/workers-sdk` | Generated AsyncAPI SDK |
+## Prerequisites
 
-## Getting Started
+- Node.js 20.19+ or 22.12+ (required by the nested lint toolchain)
+- pnpm 10
+- a Kafka-compatible broker reachable by the logic service and worker (WarpStream or local Kafka)
 
-### Prerequisites
+This example has its own `pnpm-workspace.yaml` and lockfile and pins the published Altstack 1.4 package line; it does not automatically link packages from the parent workspace. Run its commands from `examples/real-life`, not the repository root.
 
-- Node.js 20+
-- pnpm 9+
-- Docker (for WarpStream, or use a managed instance)
-
-### Install Dependencies
+## Install
 
 ```bash
 cd examples/real-life
-pnpm install
+pnpm install --frozen-lockfile
 ```
 
-### Generate SDKs
+No environment file is required for the local defaults:
+
+- auth service: `http://localhost:3001`;
+- logic service: `http://localhost:3002`;
+- web app: `http://localhost:3000`;
+- broker: `localhost:9092` unless `WARPSTREAM_URL` is exported.
+
+The `tsx` service scripts read the shell environment; they do not automatically load the included `.env.example` files. Export overrides before starting an individual service, for example:
 
 ```bash
-# Generate all specs and SDKs
+PORT=3102 \
+AUTH_SERVICE_URL=http://localhost:3101 \
+WARPSTREAM_URL=broker.example.test:9092 \
+pnpm --filter @real-life/backend-logic dev
+
+WARPSTREAM_URL=broker.example.test:9092 \
+GROUP_ID=real-life-workers-dev \
+pnpm --filter @real-life/workers dev
+```
+
+Next.js loads `apps/web/.env.local`; set `NEXT_PUBLIC_AUTH_URL` and `NEXT_PUBLIC_LOGIC_URL` there when the services do not use ports 3001 and 3002.
+
+## Generate contracts
+
+```bash
 pnpm generate:all
 ```
 
-### Start Services
+This runs each owning application's document generator before the matching SDK generator, in deterministic auth/logic/worker order. Router modules are import-safe, so generation does not start HTTP listeners or connect the worker. The SDK workspaces declare `tsx` directly because the published 1.4 generator launchers otherwise miss pnpm's virtual-store binary; the generator source in this checkout fixes that launcher path for a later release. Generated SDK files should change whenever the owning router contract changes.
+
+## Run
+
+Start the Kafka-compatible broker first, then run the workspace applications:
 
 ```bash
-# Terminal 1: Start auth service
+pnpm dev
+```
+
+The auth and logic services expose their OpenAPI documents beneath `/docs/openapi.json`. The web application calls both services through generated `Request` and `Response` maps; both services enable CORS for the documented `http://localhost:3000` web origin. Creating or completing a task attempts to enqueue a worker job.
+
+To run one application at a time:
+
+```bash
 pnpm --filter @real-life/backend-auth dev
-
-# Terminal 2: Start logic service
 pnpm --filter @real-life/backend-logic dev
-
-# Terminal 3: Start workers (requires WarpStream)
 pnpm --filter @real-life/workers dev
-
-# Terminal 4: Start web app
 pnpm --filter @real-life/web dev
 ```
 
-### Environment Variables
+## Verify
 
 ```bash
-# backend-logic
-AUTH_SERVICE_URL=http://localhost:3001
-WARPSTREAM_URL=localhost:9092
-
-# workers
-WARPSTREAM_URL=localhost:9092
-GROUP_ID=real-life-workers
-
-# web
-NEXT_PUBLIC_AUTH_URL=http://localhost:3001
-NEXT_PUBLIC_LOGIC_URL=http://localhost:3002
+pnpm build
+pnpm lint
 ```
 
-## SDK Generation Flow
+Live job delivery additionally requires the broker. A successful TypeScript build proves the workspace contracts compile; it does not prove broker connectivity, retry behavior, or external delivery.
 
-1. Services define routers with Zod schemas
-2. `generate-spec.ts` scripts produce OpenAPI/AsyncAPI JSON
-3. `zod-openapi`/`zod-asyncapi` CLI generates TypeScript SDKs
-4. SDKs export schemas and Request/Response types
-5. Consumers import SDKs and use them with type safety
+The lint command excludes generated SDK source, whose emitted regex literals intentionally preserve source-schema escapes; the build still type-checks every generated module and every consumer.
 
-## Key Patterns
+## Demo-only boundaries
 
-### Service-to-Service Auth
-`backend-logic` validates tokens by calling `backend-auth/api/validate`:
+- Users, sessions, and tasks are stored in process memory.
+- Password “hashing” is a visible placeholder and must not be used in production.
+- The browser stores a demo token in `localStorage`.
+- Task list/get routes are public and return unscoped in-memory data; they are not an authorization model.
+- HTTP CORS is fixed to `http://localhost:3000`, and the adapters' fallback 500 responses may expose thrown messages/stacks; configure both deliberately for production.
+- The logout route is a bodyless POST. The current TypeScript client requires `body: never` for that shape, so the demo contains a localized unsafe cast until that type-level limitation is fixed.
+- Generated OpenAPI describes flat declared errors while current server adapters send an `{ error: ... }` envelope; declared error responses can therefore fall into the client's unexpected-response branch.
+- Worker bodies log intended side effects rather than sending notifications or creating reports.
+- The logic service degrades when its lazy worker client cannot connect, so an HTTP request can succeed without demonstrating job delivery.
 
-```typescript
-const res = await ky.get(`${AUTH_SERVICE_URL}/api/validate`, {
-  headers: { authorization: token },
-}).json<{ valid: boolean; userId?: string }>();
-```
-
-### Worker Triggering
-`backend-logic` triggers jobs via the WarpStream client:
-
-```typescript
-await workerClient.trigger("send-notification", {
-  type: "task_created",
-  userId: ctx.userId,
-  taskId: id,
-  taskTitle: input.body.title,
-});
-```
-
-### SDK Consumption
-Frontend uses `@alt-stack/http-client-ky` with generated SDKs:
-
-```typescript
-import { createApiClient } from "@alt-stack/http-client-ky";
-import { Request, Response } from "@real-life/backend-logic-sdk";
-
-const client = createApiClient({
-  baseUrl: "http://localhost:3002",
-  Request,
-  Response,
-});
-
-// Type-safe API call with automatic validation
-const result = await client.get("/api/", {});
-if (result.success) {
-  console.log(result.body); // Typed as Task[]
-}
-```
-
+For the source-backed production patterns, see [Altstack Together](https://altstack-docs.vercel.app/together/quickstart).

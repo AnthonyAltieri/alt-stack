@@ -1,126 +1,63 @@
-# @alt-stack/server-tanstack-start
+# `@alt-stack/server-tanstack-start`
 
-TanStack Start server route adapter for Alt Stack.
+TanStack Start file-route adapter for Altstack procedures. It creates idiomatic uppercase `server.handlers`, attaches source metadata for OpenAPI generation, and preserves other TanStack route options.
 
-Use it when you want TanStack Start and TanStack Router files to stay idiomatic, while defining request validation, output validation, typed errors, middleware, and handlers with Alt Stack.
+## Quickstart
 
-```ts
-// src/routes/api/todos/$id.ts
-import { z } from "zod";
+```bash
+pnpm add @alt-stack/server-tanstack-start @tanstack/react-router zod
+```
+
+In a generated file route such as `routes/api/users/$id.ts`:
+
+```typescript
 import {
   createAltStackFileRoute,
   init,
   ok,
   type TanStackBaseContext,
 } from "@alt-stack/server-tanstack-start";
-
-interface AppContext extends TanStackBaseContext {
-  user: { id: string } | null;
-}
-
-const t = init<AppContext>();
-
-export const Route = createAltStackFileRoute("/api/todos/$id")({
-  server: {
-    handlers: {
-      GET: t.procedure
-        .input({
-          params: z.object({ id: z.string().uuid() }),
-          query: z.object({ includeCompleted: z.enum(["true", "false"]).optional() }),
-        })
-        .output(
-          z.object({
-            id: z.string(),
-            title: z.string(),
-            completed: z.boolean(),
-          }),
-        )
-        .handler(({ input }) =>
-          ok({
-            id: input.params.id,
-            title: "Write adapter",
-            completed: input.query.includeCompleted === "true",
-          }),
-        ),
-    },
-  },
-});
-```
-
-`createAltStackFileRoute` wraps TanStack's `createFileRoute` and attaches Alt Stack route metadata to the returned `Route`. The route path is defined once, uses TanStack's `$id` syntax, and is converted to Alt Stack's `{id}` path syntax internally for validation and OpenAPI. HTTP verbs live under `server.handlers` and use TanStack's uppercase method keys.
-
-## OpenAPI
-
-Export the `Route` object from each route module, then collect those exports in one OpenAPI registry file.
-
-```ts
-// src/routes/api/todos/index.ts
 import { z } from "zod";
-import { createAltStackFileRoute, init, ok, type TanStackBaseContext } from "@alt-stack/server-tanstack-start";
 
-interface AppContext extends TanStackBaseContext {
-  user: { id: string } | null;
-}
+const t = init<TanStackBaseContext>();
 
-const t = init<AppContext>();
-
-export const Route = createAltStackFileRoute("/api/todos")({
+export const Route = createAltStackFileRoute("/api/users/$id")({
   server: {
     handlers: {
       GET: t.procedure
-        .output(z.array(z.object({ id: z.string(), title: z.string() })))
-        .handler(() => ok([])),
+        .input({ params: z.object({ id: z.string() }) })
+        .output(z.object({ id: z.string() }))
+        .handler(({ input }) => ok({ id: input.params.id })),
     },
   },
 });
 ```
 
-```ts
-// src/routes/api/todos/$id.ts
-import { z } from "zod";
-import { createAltStackFileRoute, init, ok, type TanStackBaseContext } from "@alt-stack/server-tanstack-start";
+Use uppercase method keys with pending `.handler()` procedures. `$id` is recorded as `{id}` and requires an `input.params.id` schema. The path must exist in TanStack's generated `FileRoutesByPath` type.
 
-interface AppContext extends TanStackBaseContext {
-  user: { id: string } | null;
-}
+See the full [server quickstart](../../apps/docs/docs/server/quickstart.md).
 
-const t = init<AppContext>();
+## Common Patterns
 
-export const Route = createAltStackFileRoute("/api/todos/$id")({
-  server: {
-    handlers: {
-      GET: t.procedure
-        .input({ params: z.object({ id: z.string().uuid() }) })
-        .output(z.object({ id: z.string(), title: z.string() }))
-        .handler(({ input }) => ok({ id: input.params.id, title: "Write adapter" })),
-    },
-  },
-});
-```
+- Put application context creation in `server.createContext({ request, params, context })`; the adapter supplies `ctx.tanstack`.
+- Return `ok(new Response(...))` for custom statuses or non-JSON bodies.
+- Use `defineServerRoute()` when another layer owns file-route creation.
+- Pass file routes or defined routes to `generateOpenAPISpecFromServerRoutes()` and serve/write the returned object yourself.
+- Route options and extra server options are forwarded to TanStack; Altstack consumes `handlers`, `createContext`, and `defaultErrorHandlers`.
 
-```ts
-// src/openapi.ts
-import { generateOpenAPISpecFromServerRoutes } from "@alt-stack/server-tanstack-start";
-import { Route as listTodosRoute } from "./routes/api/todos";
-import { Route as getTodoRoute } from "./routes/api/todos/$id";
+Current caveats: there is no docs UI helper and no automatic telemetry option/span creation. Repeated query keys become arrays. Non-JSON bodies are read as text only when a body schema exists. Output validation is asynchronous (unlike the other adapters). Declared runtime errors are enveloped, while generated OpenAPI schemas are flat and always describe success as 200.
 
-export const openApiSpec = generateOpenAPISpecFromServerRoutes(
-  [listTodosRoute, getTodoRoute],
-  {
-    title: "Todos API",
-    version: "1.0.0",
-  },
-);
-```
+See [Server common patterns](../../apps/docs/docs/server/common-patterns.md).
 
-The registry is explicit because TanStack file routes are decentralized modules. `createAltStackFileRoute` attaches the same Alt Stack procedure metadata used by the request handlers to the exported TanStack `Route`, so OpenAPI generation can use those route exports directly.
+## API Documentation
 
-Handlers receive the native TanStack inputs on `ctx.tanstack`:
+[TanStack Start API Documentation](../../apps/docs/docs/server/api/tanstack-start.md) covers `createAltStackFileRoute`, `defineServerRoute`, `generateOpenAPISpecFromServerRoutes`, path utilities, every public type/property, runtime parsing, response/error behavior, exact core re-exports, and unsupported helpers.
 
-```ts
-ctx.tanstack.request;
-ctx.tanstack.params;
-ctx.tanstack.context;
-```
+## Peer dependencies
 
-For larger APIs, keep each API route as an exported `Route = createAltStackFileRoute(...)` value and compose those exports in registries such as OpenAPI generation, SDK generation, or route-level test setup. Avoid defining separate router paths for TanStack routes; the `createAltStackFileRoute` path is the source of truth for TanStack, Alt Stack, and OpenAPI.
+- `@tanstack/react-router` `^1.170.9`
+- `zod` `^4.0.0`
+
+## License
+
+MIT

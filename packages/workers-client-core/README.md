@@ -1,59 +1,42 @@
-# @alt-stack/workers-client-core
+# `@alt-stack/workers-client-core`
 
-Core types and interfaces for type-safe worker clients. This package provides the base interfaces used by runtime-specific implementations.
+Transport-neutral types and errors for clients that trigger jobs from generated Zod maps. It opens no connection and executes no worker handler.
 
-## Installation
+Most applications install a binding that re-exports this surface:
 
-```bash
-pnpm add @alt-stack/workers-client-core zod
-```
+- `@alt-stack/workers-client-trigger`
+- `@alt-stack/workers-client-warpstream`
 
-## Types
-
-### `WorkerClient<T>`
-
-The main interface for triggering workers:
+## Contract
 
 ```typescript
-interface WorkerClient<T extends JobsMap> {
-  trigger<K extends keyof T & string>(
-    jobName: K,
-    payload: z.infer<T[K]>,
-    options?: TriggerOptions,
-  ): Promise<TriggerResult>;
+import type { JobsMap, WorkerClient } from "@alt-stack/workers-client-core";
+import { z } from "zod";
 
-  triggerBatch<K extends keyof T & string>(
-    jobName: K,
-    payloads: z.infer<T[K]>[],
-    options?: TriggerOptions,
-  ): Promise<TriggerResult[]>;
+const Jobs = {
+  resize: z.object({ imageId: z.string() }),
+} satisfies JobsMap;
 
-  disconnect(): Promise<void>;
-}
+declare const client: WorkerClient<typeof Jobs>;
+
+const run = await client.trigger("resize", { imageId: "img_123" });
+console.info(run.id);
 ```
 
-### `TriggerOptions`
+`triggerBatch` validates and triggers multiple payloads. `TriggerOptions` contains `idempotencyKey`, `delay`, `maxRetries`, and `metadata`, but each binding supports only a subset.
 
-Options for triggering jobs:
+## Errors
 
-```typescript
-interface TriggerOptions {
-  idempotencyKey?: string;
-  delay?: string | Date;
-  maxRetries?: number;
-  metadata?: Record<string, string>;
-}
-```
+- `WorkerClientError(message, cause?)` is the base class.
+- `ValidationError(jobName, message, details?)` represents Zod failure.
+- `TriggerError(jobName, message, cause?)` represents provider send/trigger failure.
+- `ConnectionError(message, cause?)` represents persistent connection failure.
 
-### Error Classes
+## Documentation
 
-- `WorkerClientError` - Base error class
-- `ValidationError` - Payload validation failed
-- `TriggerError` - Job triggering failed
-- `ConnectionError` - Connection to backend failed
+[Complete client-core API](../../apps/docs/docs/workers/api/client-core.md)
 
-## Implementations
+## License
 
-- `@alt-stack/workers-client-trigger` - Trigger.dev
-- `@alt-stack/workers-client-warpstream` - WarpStream/Kafka
+MIT
 

@@ -1,3 +1,4 @@
+import { pathToFileURL } from "node:url";
 import { createWorker, init, workerRouter, ok } from "@alt-stack/workers-warpstream";
 import { z } from "zod";
 
@@ -72,4 +73,9 @@ async function main() {
   await new Promise(() => {});
 }
 
-main().catch(console.error);
+const isDirectExecution =
+  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isDirectExecution) {
+  main().catch(console.error);
+}

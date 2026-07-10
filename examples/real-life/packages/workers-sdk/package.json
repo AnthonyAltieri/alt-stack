@@ -18,7 +18,8 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
-    "@alt-stack/zod-asyncapi": "^1.0.0",
+    "@alt-stack/zod-asyncapi": "^1.4.0",
+    "tsx": "^4.0.0",
     "typescript": "^5.9.2",
     "zod": "^4.0.0"
   }

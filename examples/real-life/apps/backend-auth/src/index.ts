@@ -1,3 +1,4 @@
+import { pathToFileURL } from "node:url";
 import {
   createDocsRouter,
   createServer,
@@ -9,6 +10,8 @@ import {
   type HonoBaseContext,
 } from "@alt-stack/server-hono";
 import { serve } from "@hono/node-server";
+import type { Context } from "hono";
+import { cors } from "hono/cors";
 import { z } from "zod";
 import { env } from "./env.js";
 
@@ -221,13 +224,33 @@ const docsRouter = createDocsRouter<HonoBaseContext>(
 //     },
 //   },
 // );
-const app = createServer<HonoBaseContext>({ api: authRouter, docs: docsRouter });
+const browserCors = cors({
+  origin: "http://localhost:3000",
+  allowMethods: ["GET", "POST", "OPTIONS"],
+  allowHeaders: ["Authorization", "Content-Type"],
+});
+
+const app = createServer<HonoBaseContext>(
+  { api: authRouter, docs: docsRouter },
+  {
+    middleware: {
+      "*": {
+        methods: ["GET", "POST", "OPTIONS"],
+        // createServer recognizes native two-argument Hono middleware at runtime.
+        handler: browserCors as unknown as (c: Context) => Response | Promise<Response>,
+      },
+    },
+  },
+);
 
 export { authRouter };
 export default app;
 
-// Only start server when running directly (not as Lambda)
-if (!process.env.AWS_LAMBDA_FUNCTION_NAME) {
+const isDirectExecution =
+  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+// Only start the server for direct execution, never for imports or Lambda.
+if (isDirectExecution && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
   console.log(`Auth service running at http://localhost:${env.PORT}`);
   console.log(`OpenAPI docs at http://localhost:${env.PORT}/docs/openapi.json`);
   serve({ fetch: app.fetch, port: env.PORT });

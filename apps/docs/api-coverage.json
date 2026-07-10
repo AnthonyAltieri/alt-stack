@@ -1,0 +1,287 @@
+{
+  "families": {
+    "result": {
+      "quickstart": "result/quickstart.md",
+      "commonPatterns": "result/common-patterns.md",
+      "api": ["result/api.md"]
+    },
+    "server": {
+      "quickstart": "server/quickstart.md",
+      "commonPatterns": "server/common-patterns.md",
+      "api": [
+        "server/api/core.md",
+        "server/api/hono.md",
+        "server/api/express.md",
+        "server/api/bun.md",
+        "server/api/nestjs.md",
+        "server/api/tanstack-start.md"
+      ]
+    },
+    "http-client": {
+      "quickstart": "http-client/quickstart.md",
+      "commonPatterns": "http-client/common-patterns.md",
+      "api": [
+        "http-client/api/core.md",
+        "http-client/api/fetch.md",
+        "http-client/api/ky.md",
+        "http-client/api/rust-tokio.md"
+      ]
+    },
+    "kafka": {
+      "quickstart": "kafka/quickstart.md",
+      "commonPatterns": "kafka/common-patterns.md",
+      "api": [
+        "kafka/api/core.md",
+        "kafka/api/client-core.md",
+        "kafka/api/kafkajs.md",
+        "kafka/api/warpstream.md"
+      ]
+    },
+    "workers": {
+      "quickstart": "workers/quickstart.md",
+      "commonPatterns": "workers/common-patterns.md",
+      "api": [
+        "workers/api/core.md",
+        "workers/api/trigger.md",
+        "workers/api/warpstream.md",
+        "workers/api/client-core.md",
+        "workers/api/client-trigger.md",
+        "workers/api/client-warpstream.md"
+      ]
+    },
+    "codegen": {
+      "quickstart": "codegen/quickstart.md",
+      "commonPatterns": "codegen/common-patterns.md",
+      "api": [
+        "codegen/api/zod-openapi.md",
+        "codegen/api/pydantic-openapi.md",
+        "codegen/api/rust-openapi.md",
+        "codegen/api/rust-crate-gen.md",
+        "codegen/api/zod-asyncapi.md",
+        "codegen/api/generated-sdks.md"
+      ]
+    },
+    "utilities": {
+      "quickstart": "utilities/quickstart.md",
+      "commonPatterns": "utilities/common-patterns.md",
+      "api": ["utilities/api.md"]
+    },
+    "together": {
+      "quickstart": "together/quickstart.md",
+      "commonPatterns": "together/common-patterns.md",
+      "api": ["together/documentation.md"]
+    }
+  },
+  "typescriptPackages": {
+    "@alt-stack/result": {
+      "entrypoint": "packages/result/src/index.ts",
+      "docs": ["result/api.md"]
+    },
+    "@alt-stack/server-core": {
+      "entrypoint": "packages/server-core/src/index.ts",
+      "docs": ["server/api/core.md"],
+      "inherits": ["@alt-stack/result"]
+    },
+    "@alt-stack/server-hono": {
+      "entrypoint": "packages/server-hono/src/index.ts",
+      "docs": ["server/api/hono.md"],
+      "inherits": ["@alt-stack/server-core"]
+    },
+    "@alt-stack/server-express": {
+      "entrypoint": "packages/server-express/src/index.ts",
+      "docs": ["server/api/express.md"],
+      "inherits": ["@alt-stack/server-core"]
+    },
+    "@alt-stack/server-bun": {
+      "entrypoint": "packages/server-bun/src/index.ts",
+      "docs": ["server/api/bun.md"],
+      "inherits": ["@alt-stack/server-core"]
+    },
+    "@alt-stack/server-nestjs": {
+      "entrypoint": "packages/server-nestjs/src/index.ts",
+      "docs": ["server/api/nestjs.md"],
+      "inherits": ["@alt-stack/server-core"]
+    },
+    "@alt-stack/server-tanstack-start": {
+      "entrypoint": "packages/server-tanstack-start/src/index.ts",
+      "docs": ["server/api/tanstack-start.md"],
+      "inherits": ["@alt-stack/server-core"]
+    },
+    "@alt-stack/http-client-core": {
+      "entrypoint": "packages/http-client-core/src/index.ts",
+      "docs": ["http-client/api/core.md"]
+    },
+    "@alt-stack/http-client-fetch": {
+      "entrypoint": "packages/http-client-fetch/src/index.ts",
+      "docs": ["http-client/api/fetch.md"],
+      "inherits": ["@alt-stack/http-client-core"]
+    },
+    "@alt-stack/http-client-ky": {
+      "entrypoint": "packages/http-client-ky/src/index.ts",
+      "docs": ["http-client/api/ky.md"],
+      "inherits": ["@alt-stack/http-client-core"]
+    },
+    "@alt-stack/kafka-core": {
+      "entrypoint": "packages/kafka-core/src/index.ts",
+      "docs": ["kafka/api/core.md"],
+      "inherits": ["@alt-stack/result"]
+    },
+    "@alt-stack/kafka-client-core": {
+      "entrypoint": "packages/kafka-client-core/src/index.ts",
+      "docs": ["kafka/api/client-core.md"]
+    },
+    "@alt-stack/kafka-client-kafkajs": {
+      "entrypoint": "packages/kafka-client-kafkajs/src/index.ts",
+      "docs": ["kafka/api/kafkajs.md"],
+      "inherits": ["@alt-stack/kafka-client-core"]
+    },
+    "@alt-stack/kafka-client-warpstream": {
+      "entrypoint": "packages/kafka-client-warpstream/src/index.ts",
+      "docs": ["kafka/api/warpstream.md"],
+      "inherits": ["@alt-stack/kafka-client-core"]
+    },
+    "@alt-stack/workers-core": {
+      "entrypoint": "packages/workers-core/src/index.ts",
+      "docs": ["workers/api/core.md"],
+      "inherits": ["@alt-stack/result"]
+    },
+    "@alt-stack/workers-trigger": {
+      "entrypoint": "packages/workers-trigger/src/index.ts",
+      "docs": ["workers/api/trigger.md"],
+      "inherits": ["@alt-stack/workers-core"]
+    },
+    "@alt-stack/workers-warpstream": {
+      "entrypoint": "packages/workers-warpstream/src/index.ts",
+      "docs": ["workers/api/warpstream.md"],
+      "inherits": ["@alt-stack/workers-core"]
+    },
+    "@alt-stack/workers-client-core": {
+      "entrypoint": "packages/workers-client-core/src/index.ts",
+      "docs": ["workers/api/client-core.md"]
+    },
+    "@alt-stack/workers-client-trigger": {
+      "entrypoint": "packages/workers-client-trigger/src/index.ts",
+      "docs": ["workers/api/client-trigger.md"],
+      "inherits": ["@alt-stack/workers-client-core"]
+    },
+    "@alt-stack/workers-client-warpstream": {
+      "entrypoint": "packages/workers-client-warpstream/src/index.ts",
+      "docs": ["workers/api/client-warpstream.md"],
+      "inherits": ["@alt-stack/workers-client-core"]
+    },
+    "@alt-stack/zod-openapi": {
+      "entrypoint": "packages/typescript-zod-openapi/src/index.ts",
+      "docs": ["codegen/api/zod-openapi.md"],
+      "terms": ["zod-openapi", "--output", "--registry", "--include", "--help"]
+    },
+    "@alt-stack/zod-asyncapi": {
+      "entrypoint": "packages/zod-asyncapi/src/index.ts",
+      "docs": ["codegen/api/zod-asyncapi.md"],
+      "terms": ["zod-asyncapi", "--output", "--registry", "--include", "--help"]
+    },
+    "@alt-stack/zod-error": {
+      "entrypoint": "packages/zod-error/src/index.ts",
+      "docs": ["utilities/api.md"]
+    },
+    "@alt-stack/example-altstack-server-sdk": {
+      "entrypoint": "packages/example-altstack-server-sdk/src/index.ts",
+      "docs": ["codegen/api/generated-sdks.md"],
+      "generated": true
+    },
+    "@alt-stack/example-kafka-producer-sdk": {
+      "entrypoint": "packages/example-kafka-producer-sdk/src/index.ts",
+      "docs": ["codegen/api/generated-sdks.md"],
+      "generated": true
+    }
+  },
+  "manualSurfaces": [
+    {
+      "name": "http-client-rust-tokio",
+      "source": "packages/http-client-rust-tokio/src/lib.rs",
+      "readme": "packages/http-client-rust-tokio/README.md",
+      "docs": ["http-client/api/rust-tokio.md"],
+      "symbols": [
+        "ApiClientOptions",
+        "ApiClient",
+        "JsonRequest",
+        "JsonResponse",
+        "ApiResponse",
+        "ApiClientError",
+        "DefaultHeaderMap",
+        "HttpMethod"
+      ]
+    },
+    {
+      "name": "python-pydantic-openapi",
+      "source": "packages/python-pydantic-openapi/src/python_pydantic_openapi/__init__.py",
+      "readme": "packages/python-pydantic-openapi/README.md",
+      "docs": ["codegen/api/pydantic-openapi.md"],
+      "symbols": [
+        "SUPPORTED_STRING_FORMATS",
+        "clear_pydantic_schema_registry",
+        "get_schema_exported_variable_name_for_primitive_type",
+        "get_schema_exported_variable_name_for_string_format",
+        "openapi_to_pydantic_code",
+        "register_pydantic_type_to_openapi_schema",
+        "schema_registry"
+      ],
+      "terms": ["--output", "--registry", "--include"]
+    },
+    {
+      "name": "rust-openapi",
+      "source": "packages/rust-openapi/src/lib.rs",
+      "readme": "packages/rust-openapi/README.md",
+      "docs": ["codegen/api/rust-openapi.md"],
+      "symbols": [
+        "extract_schema_dependencies",
+        "topological_sort_schemas",
+        "convert_schema_to_rust_type",
+        "openapi_to_rust_code",
+        "GenerationOptions",
+        "clear_rust_schema_registry",
+        "register_rust_type_to_openapi_schema",
+        "schema_registry",
+        "RustOpenApiRegistration",
+        "SUPPORTED_STRING_FORMATS",
+        "rust_code_to_openapi",
+        "RustCodeToOpenApiError",
+        "build_route_schema_name",
+        "generate_route_module_name",
+        "generate_route_schema_names",
+        "parse_openapi_paths",
+        "HttpMethod",
+        "RouteInfo",
+        "RouteParameter",
+        "RouteSchemaNames"
+      ],
+      "terms": ["--output", "--include", "--no-routes"]
+    },
+    {
+      "name": "rust-openapi-crate-gen",
+      "source": "packages/rust-openapi-crate-gen/src/lib.rs",
+      "readme": "packages/rust-openapi-crate-gen/README.md",
+      "docs": ["codegen/api/rust-crate-gen.md"],
+      "symbols": [
+        "DEFAULT_RUNTIME_PACKAGE_NAME",
+        "DEFAULT_RUNTIME_CRATE_NAME",
+        "DEFAULT_RUNTIME_VERSION",
+        "RuntimeDependency",
+        "RustOpenApiCrateOptions",
+        "GeneratedRustCrate",
+        "WrittenRustCrate",
+        "RustOpenApiCrateGenError",
+        "generate_rust_crate",
+        "write_rust_crate"
+      ],
+      "terms": [
+        "--package-name",
+        "--output",
+        "--package-version",
+        "--description",
+        "--no-routes",
+        "--runtime-path",
+        "--runtime-version"
+      ]
+    }
+  ]
+}

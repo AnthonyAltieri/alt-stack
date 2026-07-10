@@ -18,7 +18,8 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
-    "@alt-stack/zod-openapi": "^1.0.0",
+    "@alt-stack/zod-openapi": "^1.4.0",
+    "tsx": "^4.0.0",
     "typescript": "^5.9.2",
     "zod": "^4.0.0"
   }

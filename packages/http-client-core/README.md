@@ -1,57 +1,53 @@
-# @alt-stack/http-client-core
+# `@alt-stack/http-client-core`
 
-Core types, errors, and logic for type-safe HTTP clients.
+Transport-neutral request validation, response typing, retries, logging, and errors for Altstack TypeScript HTTP clients.
 
-## Installation
+Most applications should install [`@alt-stack/http-client-fetch`](../http-client-fetch/README.md) or [`@alt-stack/http-client-ky`](../http-client-ky/README.md), which provide an executor and re-export this package.
+
+## Install
 
 ```bash
 pnpm add @alt-stack/http-client-core zod
 ```
 
-## Overview
+Zod 4 is required as a peer.
 
-This package provides the foundation for building type-safe HTTP clients. It is not meant to be used directly - instead, use one of the binding packages:
-
-- `@alt-stack/http-client-fetch` - Uses native fetch API
-- `@alt-stack/http-client-ky` - Uses ky library
-
-## What's Included
-
-- **Types**: Request/response type extraction utilities
-- **Errors**: `ApiClientError`, `ValidationError`, `TimeoutError`, `UnexpectedApiClientError`
-- **ApiClient**: Base client class that accepts an `HttpExecutor`
-- **HttpExecutor**: Interface for HTTP implementations
-
-## Creating Custom Bindings
-
-Implement the `HttpExecutor` interface:
+## Minimal custom executor
 
 ```typescript
-import { HttpExecutor, ExecuteRequest, ExecuteResponse } from "@alt-stack/http-client-core";
+import { ApiClient, type HttpExecutor } from "@alt-stack/http-client-core";
+import { z } from "zod";
 
-class MyExecutor implements HttpExecutor<MyRawResponse> {
-  async execute(request: ExecuteRequest): Promise<ExecuteResponse<MyRawResponse>> {
-    // Your implementation
+const Request = { "/health": { GET: {} } } as const;
+const Response = {
+  "/health": { GET: { "200": z.object({ ok: z.boolean() }) } },
+} as const;
+
+const executor: HttpExecutor<{ requestId: string }> = {
+  async execute(request) {
     return {
       status: 200,
       statusText: "OK",
-      data: parsedData,
-      raw: rawResponse,
+      data: { ok: true },
+      raw: { requestId: request.url },
     };
-  }
-}
-```
-
-Then create a client:
-
-```typescript
-import { ApiClient } from "@alt-stack/http-client-core";
+  },
+};
 
 const client = new ApiClient({
-  baseUrl: "https://api.example.com",
+  baseUrl: "https://api.example.test",
   Request,
   Response,
-  executor: new MyExecutor(),
+  executor,
 });
+
+const result = await client.get("/health", {});
 ```
 
+The executor owns I/O, timeout enforcement, and decoding. The core validates request/response schemas and returns documented HTTP statuses as a discriminated union.
+
+## Documentation
+
+- [Quickstart](../../apps/docs/docs/http-client/quickstart.md)
+- [Common Patterns](../../apps/docs/docs/http-client/common-patterns.md)
+- [API Documentation](../../apps/docs/docs/http-client/api/core.md)

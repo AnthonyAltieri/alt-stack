@@ -2,10 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { authApi, logicApi } from "@/lib/api";
-import type { z } from "zod";
-import type { TaskSchema } from "@real-life/backend-logic-sdk";
-
-type Task = z.infer<typeof TaskSchema>;
+import type { PostApiResponse as Task } from "@real-life/backend-logic-sdk";
 
 export default function Home() {
   const [token, setToken] = useState<string | null>(null);
@@ -240,4 +237,3 @@ export default function Home() {
     </main>
   );
 }
-

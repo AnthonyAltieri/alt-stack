@@ -38,6 +38,8 @@ const EXPECTED_ZOD_TS = String.raw`
  * Do not manually edit this file
  */
 
+/* eslint-disable no-useless-escape -- generated regex literals preserve source patterns */
+
 import { z } from 'zod';
 
 // Type assertion helper - verifies interface matches schema at compile time
