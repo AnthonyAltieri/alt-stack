@@ -47,4 +47,6 @@ __pycache__/
 
 # Local planning artifacts
 /tasks/
-GOAL.md
+/GOAL.md
+/WORKLOG.md
+/RESULT.md
