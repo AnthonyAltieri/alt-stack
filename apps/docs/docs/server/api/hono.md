@@ -15,10 +15,12 @@ The adapter supports Hono 4 and Zod 4. It returns a Hono app but does not choose
 
 ```typescript
 function createServer<TContext extends HonoBaseContext = HonoBaseContext>(
-  config: Record<string, Router<TContext> | Router<TContext>[]>,
+  config: Record<string, Router<TContext>>,
   options?: HonoServerOptions<TContext>,
 ): Hono;
 ```
+
+Each prefix accepts one router. Call `combineRouters()` before mounting multiple independent routers at the same prefix.
 
 `HonoServerOptions` is an anonymous public parameter shape rather than a named export:
 
@@ -69,7 +71,7 @@ Native handlers supplied through `options.middleware` are registered before Alts
 
 ```typescript
 function createDocsRouter<TCustomContext extends object = Record<string, never>>(
-  config: Record<string, CoreRouter<TCustomContext> | CoreRouter<TCustomContext>[]>,
+  config: Record<string, CoreRouter<TCustomContext>>,
   options?: CreateDocsRouterOptions,
 ): CoreRouter<TCustomContext>;
 ```
@@ -110,7 +112,7 @@ Handlers can access the native request, response helpers, environment, and varia
 
 ### `Router<TCustomContext>`
 
-A subclass of the core `Router` whose generic defaults to `HonoBaseContext`. It adds no runtime members. All inherited public methods are documented in the [core Router reference](./core.md#routertcustomcontext).
+A subclass of the core `Router` whose context generic defaults to `HonoBaseContext` and whose second generic carries tracked route signatures. It adds no runtime members. All inherited public methods are documented in the [core Router reference](./core.md#routertcustomcontext).
 
 ### `router(config)`
 
@@ -118,11 +120,11 @@ Calls core `router()` and casts the result to the Hono-typed subclass. The gener
 
 ### `createRouter(config?)`
 
-Creates an empty Hono-typed router or combines routers under prefixes. Its config accepts only `Router` or `Router[]`, not procedures.
+Creates an empty Hono-typed router or prefixes one router per config key. Its config accepts routers, not procedures or router arrays. Constructor-style routers are not tracked inputs for checked composition.
 
-### `mergeRouters(...routers)`
+### `combineRouters(...routers)`
 
-Appends procedures into a new Hono-typed router without prefixes or duplicate detection.
+Combines one or more tracked declarative routers without prefixes. It rejects matching `METHOD + canonical path` signatures at compile time and repeats the check at runtime; the same path with different methods is valid. See [core `combineRouters()`](./core.md#combineroutersrouters) for canonicalization, metadata requirements, and migration examples.
 
 ## Core re-exports
 
@@ -133,7 +135,7 @@ The following exports keep their core behavior. Follow the links for signatures,
 | Initialization | `init`, `publicProcedure`, `default400ErrorSchema`, `default500ErrorSchema`, `InitOptions`, `InitResult` |
 | Result values/types | `ok`, `err`, `isOk`, `isErr`, `map`, `flatMap`, `mapError`, `catchError`, `unwrap`, `unwrapOr`, `unwrapOrElse`, `match`, `fold`, `tryCatch`, `tryCatchAsync`, `isResultError`, `assertResultError`, `ResultAggregateError`, `TaggedError`, `Result`, `Ok`, `Err`, `ResultError`, `InferErrorTag`, `InferErrorTags`, `NarrowError` |
 | Middleware | `createMiddleware`, `createMiddlewareWithErrors`, `middlewareMarker`, `middlewareOk`, `MiddlewareFunction`, `MiddlewareBuilder`, `MiddlewareResult`, `MiddlewareResultSuccess`, `MiddlewareFunctionWithErrors`, `MiddlewareBuilderWithErrors`, `MiddlewareBuilderWithErrorsStaged`, `AnyMiddlewareBuilderWithErrors`, `AnyMiddlewareFunctionWithErrors`, `Overwrite` |
-| Procedures/context | `BaseProcedureBuilder`, `ProcedureBuilder`, `InputConfig`, `TypedContext`, `BaseContext`, `InferInput`, `Procedure`, `ReadyProcedure`, `PendingProcedure`, `RouterConfigValue` |
+| Procedures/context | `BaseProcedureBuilder`, `ProcedureBuilder`, `InputConfig`, `TypedContext`, `BaseContext`, `InferInput`, `Procedure`, `ReadyProcedure`, `PendingProcedure`, `RouterConfigValue`, `RouterContext`, `RouterRouteSignatures`, `RouteSignature`, `RouteSignaturesForConfig`, `ValidateRouterCombination`, `ValidateRouterConfig` |
 | OpenAPI | `generateOpenAPISpec`, `OpenAPISpec`, `GenerateOpenAPISpecOptions`, `OpenAPIPathItem`, `OpenAPIOperation`, `OpenAPIParameter`, `OpenAPIRequestBody`, `OpenAPIResponse` |
 | Validation | `validateInput`, `parseSchema`, `mergeInputs`, `ParseResult`, `StructuredInput` |
 | Telemetry | `resolveTelemetryConfig`, `shouldIgnoreRoute`, `initTelemetry`, `createRequestSpan`, `endSpanWithError`, `setSpanOk`, `TelemetryConfig`, `TelemetryOption`, `ResolvedTelemetryConfig`, `Span` |

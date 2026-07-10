@@ -1,6 +1,8 @@
 import type { z } from "zod";
-import type { TypedContext, InferInput, InferOutput, InputConfig, HandlerResult } from "./context.js";
+import type { TypedContext, InferInput, InputConfig, HandlerResult } from "./context.js";
 import type { AnyMiddlewareFunction } from "../middleware.js";
+
+export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 export type ExtractPathParams<T extends string> = T extends `${string}{${infer Param}}${infer Rest}`
   ? Param extends `${infer Key}`
@@ -87,8 +89,9 @@ export interface ReadyProcedure<
   TOutput extends z.ZodTypeAny | undefined,
   TErrors extends Record<number, z.ZodTypeAny> | undefined,
   TCustomContext extends object = Record<string, never>,
+  TMethod extends HttpMethod = HttpMethod,
 > {
-  method: string;
+  method: TMethod;
   config: {
     input: TInput;
     output?: TOutput;
@@ -122,4 +125,3 @@ export interface PendingProcedure<
   /** Flags indicating which middleware return Result types (true) vs throw (false) */
   middlewareWithErrorsFlags?: boolean[];
 }
-

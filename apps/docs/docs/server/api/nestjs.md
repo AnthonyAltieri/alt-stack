@@ -16,11 +16,7 @@ The adapter supports NestJS 9, 10, or 11 on `@nestjs/platform-express`, Express 
 ```typescript
 function registerAltStack<TCustomContext extends object = {}>(
   app: NestAppLike,
-  config: Record<
-    string,
-    | Router<NestBaseContext & TCustomContext>
-    | Router<NestBaseContext & TCustomContext>[]
-  >,
+  config: Record<string, Router<NestBaseContext & TCustomContext>>,
   options?: RegisterAltStackOptions<TCustomContext>,
 ): void;
 ```
@@ -31,7 +27,7 @@ Gets Nest's underlying Express application, creates an Altstack Express app, and
 @alt-stack/server-nestjs requires NestJS on the Express platform (@nestjs/platform-express).
 ```
 
-when the HTTP adapter does not expose an Express-style `use()` function.
+when the HTTP adapter does not expose an Express-style `use()` function. Each prefix accepts one router; call `combineRouters()` before mounting multiple independent routers at the same prefix.
 
 Call `app.setGlobalPrefix(...)` before `registerAltStack()` so the current prefix can be read.
 
@@ -199,7 +195,7 @@ If no schema directly maps the tag, status 500 is used. See [core tag matching](
 
 ### `Router<TCustomContext>`
 
-A core `Router` subclass whose generic defaults to `NestBaseContext`. It adds no runtime members.
+A core `Router` subclass whose context generic defaults to `NestBaseContext` and whose second generic carries tracked route signatures. It adds no runtime members.
 
 ### `router(config)`
 
@@ -207,11 +203,11 @@ Runs the core declarative router builder and returns the Nest-typed subclass. It
 
 ### `createRouter(config?)`
 
-Creates an empty Nest-typed router or combines routers under prefixes. The config contains only routers or router arrays.
+Creates an empty Nest-typed router or prefixes one router per config key. Its config accepts routers, not procedures or router arrays. Constructor-style routers are not tracked inputs for checked composition.
 
-### `mergeRouters(...routers)`
+### `combineRouters(...routers)`
 
-Appends procedures to a new Nest-typed router without adding prefixes or detecting duplicates.
+Combines one or more tracked declarative routers without prefixes. It rejects matching `METHOD + canonical path` signatures at compile time and repeats the check at runtime; the same path with different methods is valid. See [core `combineRouters()`](./core.md#combineroutersrouters) for canonicalization, metadata requirements, and migration examples.
 
 ## Route runtime behavior
 

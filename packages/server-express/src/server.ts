@@ -72,7 +72,7 @@ function serializeError(error: Error & { _tag: string }): object {
 import type { ExpressBaseContext } from "./types.js";
 
 export function createServer<TContext extends ExpressBaseContext = ExpressBaseContext>(
-  config: Record<string, Router<TContext> | Router<TContext>[]>,
+  config: Record<string, Router<TContext>>,
   options?: {
     basePath?: string;
     createContext?: (req: Request, res: Response) => Promise<Omit<TContext, "express" | "span">> | Omit<TContext, "express" | "span">;
@@ -111,18 +111,12 @@ export function createServer<TContext extends ExpressBaseContext = ExpressBaseCo
     TContext
   >[] = [];
 
-  for (const [prefix, routerOrRouters] of Object.entries(config)) {
-    const routers = Array.isArray(routerOrRouters) ? routerOrRouters : [routerOrRouters];
-
-    for (const router of routers) {
-      const routerProcedures = router.getProcedures();
-
-      for (const procedure of routerProcedures) {
-        procedures.push({
-          ...procedure,
-          path: normalizePath(prefix, procedure.path),
-        });
-      }
+  for (const [prefix, router] of Object.entries(config)) {
+    for (const procedure of router.getProcedures()) {
+      procedures.push({
+        ...procedure,
+        path: normalizePath(prefix, procedure.path),
+      });
     }
   }
 

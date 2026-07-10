@@ -2,7 +2,16 @@ import { describe, expectTypeOf, it } from "vitest";
 import type { Request, Response } from "express";
 import type { BaseContext } from "@alt-stack/server-core";
 import type { ExpressBaseContext } from "@alt-stack/server-express";
-import { init, type NestBaseContext, type NestServiceLocator } from "./index.js";
+import {
+  Router,
+  combineRouters,
+  init,
+  ok,
+  router,
+  type NestBaseContext,
+  type NestServiceLocator,
+  type RouterRouteSignatures,
+} from "./index.js";
 
 describe("Nest Types", () => {
   it("extends the shared base context with express and nest helpers", () => {
@@ -30,5 +39,46 @@ describe("Nest Types", () => {
       expectTypeOf(ctx.user).toEqualTypeOf<{ id: string } | null>();
       return { _tag: "Ok", value: { ok: true as const } };
     });
+  });
+
+  it("preserves route metadata through the context-bound factory", () => {
+    const factory = init();
+    const healthRouter = factory.router({
+      "/health": factory.procedure.get(() => ok(undefined)),
+    });
+    const usersRouter = factory.router({
+      "/users": factory.procedure.get(() => ok(undefined)),
+    });
+    const combined = factory.combineRouters(healthRouter, usersRouter);
+    const assertConflict = () => {
+      factory.combineRouters(
+        // @ts-expect-error - canonical GET /health routes conflict
+        healthRouter,
+        factory.router({
+          "health/": factory.procedure.get(() => ok(undefined)),
+        }),
+      );
+    };
+    void assertConflict;
+
+    expectTypeOf<RouterRouteSignatures<typeof combined>>().toEqualTypeOf<
+      "GET /health" | "GET /users"
+    >();
+  });
+
+  it("preserves the Nest router type through the adapter entrypoint", () => {
+    const baseRouter = new Router();
+    const healthRouter = router({
+      "/health": baseRouter.procedure.get(() => ok(undefined)),
+    });
+    const usersRouter = router({
+      "/users": baseRouter.procedure.get(() => ok(undefined)),
+    });
+    const combined = combineRouters(healthRouter, usersRouter);
+
+    expectTypeOf(combined).toMatchTypeOf<Router>();
+    expectTypeOf<RouterRouteSignatures<typeof combined>>().toEqualTypeOf<
+      "GET /health" | "GET /users"
+    >();
   });
 });

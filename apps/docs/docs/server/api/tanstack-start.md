@@ -137,7 +137,7 @@ function generateOpenAPISpecFromServerRoutes(
 ): OpenAPISpec;
 ```
 
-Accepts values returned by `defineServerRoute()` or full file routes returned by `createAltStackFileRoute()`. It collects each route's attached core router and delegates to core `generateOpenAPISpec()` under the root prefix.
+Accepts values returned by `defineServerRoute()` or full file routes returned by `createAltStackFileRoute()`. It combines each route's attached core router, then delegates to core `generateOpenAPISpec()` under the root prefix. An empty route list produces a spec with no paths. Duplicate canonical method/path pairs throw `Route conflict: METHOD /canonical/path` instead of silently overwriting an operation.
 
 ```typescript
 const spec = generateOpenAPISpecFromServerRoutes(

@@ -2,7 +2,13 @@ import {
   Router as BaseRouter,
   router as baseRouter,
   createRouter as baseCreateRouter,
-  mergeRouters as baseMergeRouters,
+  combineRouters as baseCombineRouters,
+} from "@alt-stack/server-core";
+import type {
+  RouteSignaturesForConfig,
+  RouterRouteSignatures,
+  ValidateRouterCombination,
+  ValidateRouterConfig,
 } from "@alt-stack/server-core";
 import type { ExpressBaseContext } from "./types.js";
 
@@ -97,42 +103,65 @@ export type {
   TypedContext,
   BaseContext,
   InferInput,
+  HttpMethod,
   Procedure,
   ReadyProcedure,
   PendingProcedure,
+  RouteSignature,
+  RouteSignaturesForConfig,
+  RouterContext,
+  RouterRouteSignatures,
+  ValidateRouterCombination,
+  ValidateRouterConfig,
 } from "@alt-stack/server-core";
 
 // Pre-typed Router with Express context baked in
 export class Router<
   TCustomContext extends ExpressBaseContext = ExpressBaseContext,
-> extends BaseRouter<TCustomContext> {}
+  TRouteSignatures extends string = string,
+> extends BaseRouter<TCustomContext, TRouteSignatures> {}
 
 /**
  * Pre-typed router function with Express context as default.
  * Routes defined with this function will have `ctx.express` properly typed.
  */
-export function router<TCustomContext extends ExpressBaseContext = ExpressBaseContext>(
-  config: Parameters<typeof baseRouter<TCustomContext>>[0],
-): Router<TCustomContext> {
-  return baseRouter<TCustomContext>(config) as Router<TCustomContext>;
+export function router<
+  TCustomContext extends ExpressBaseContext = ExpressBaseContext,
+  const TConfig extends Record<string, unknown> = Record<string, unknown>,
+>(
+  config: TConfig & ValidateRouterConfig<TConfig, TCustomContext>,
+): Router<TCustomContext, RouteSignaturesForConfig<TConfig>> {
+  return baseRouter<TCustomContext, TConfig>(config) as Router<
+    TCustomContext,
+    RouteSignaturesForConfig<TConfig>
+  >;
 }
 
 /**
  * Pre-typed createRouter function with Express context as default.
  */
 export function createRouter<TCustomContext extends ExpressBaseContext = ExpressBaseContext>(
-  config?: Record<string, Router<TCustomContext> | Router<TCustomContext>[]>,
+  config?: Record<string, Router<TCustomContext>>,
 ): Router<TCustomContext> {
   return baseCreateRouter<TCustomContext>(config) as Router<TCustomContext>;
 }
 
 /**
- * Pre-typed mergeRouters function with Express context as default.
+ * Combine tracked Express routers while preserving their context and route metadata.
  */
-export function mergeRouters<TCustomContext extends ExpressBaseContext = ExpressBaseContext>(
-  ...routers: Router<TCustomContext>[]
-): Router<TCustomContext> {
-  return baseMergeRouters<TCustomContext>(...routers) as Router<TCustomContext>;
+export function combineRouters<
+  TCustomContext extends ExpressBaseContext,
+  const TRouters extends readonly [
+    Router<TCustomContext, string>,
+    ...Router<TCustomContext, string>[],
+  ],
+>(
+  ...routers: TRouters & ValidateRouterCombination<TRouters>
+): Router<TCustomContext, RouterRouteSignatures<TRouters[number]>> {
+  const combine = baseCombineRouters as unknown as (
+    ...items: Router<TCustomContext, string>[]
+  ) => Router<TCustomContext, RouterRouteSignatures<TRouters[number]>>;
+  return combine(...routers);
 }
 
 // Export Express-specific functionality

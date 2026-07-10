@@ -87,7 +87,55 @@ const appRouter = t.router({
 });
 ```
 
-You can also pass an array of routers at one prefix to `createServer()` or `generateOpenAPISpec()`, or flatten independent routers with `mergeRouters(a, b)`. These operations append procedures; they do not detect duplicate method/path pairs. Framework registration order decides what happens when routes collide.
+Use `combineRouters()` when independent routers should share the same mount prefix:
+
+```typescript
+const metricsRouter = t.router({
+  "/metrics": t.procedure.get(() => ok({ healthy: true })),
+});
+
+const apiRouter = t.combineRouters(appRouter, metricsRouter);
+
+createServer({
+  "/api": apiRouter,
+});
+```
+
+`combineRouters()` requires at least one tracked declarative router. A route identity is its uppercase HTTP method plus its canonical path: leading slashes are added, trailing slashes are removed except for `/`, and parameter names are normalized to `{param}`. Thus `GET users/{id}` conflicts with `GET /users/{userId}/`. The same canonical path with a different method is valid.
+
+```typescript
+const readItems = t.router({
+  "/items": t.procedure.get(() => ok([])),
+});
+const createItem = t.router({
+  "/items": t.procedure.post(() => ok({ id: "1" })),
+});
+
+// Valid: GET /items and POST /items are distinct route signatures.
+const items = t.combineRouters(readItems, createItem);
+```
+
+Build inputs with `router()` so their route metadata remains available to TypeScript. Routers assembled with `new Router()`, `createRouter()`, or imperative `register*()` calls are not accepted as statically checked inputs. The runtime repeats conflict detection as a backstop for JavaScript, casts, and dynamically mutated routers.
+
+Migrate flat composition and router arrays before mounting:
+
+```typescript
+// Before:
+const api = mergeRouters(usersRouter, postsRouter);
+createServer({ "/api": [usersRouter, postsRouter] });
+
+// After:
+const api = combineRouters(usersRouter, postsRouter);
+createServer({ "/api": api });
+```
+
+When two routers intentionally reuse a method and path, give them distinct prefixes before combining:
+
+```typescript
+const v1 = t.router({ "/v1": v1Router });
+const v2 = t.router({ "/v2": v2Router });
+const versionedApi = t.combineRouters(v1, v2);
+```
 
 For multiple methods on one path, use a methods object and pending `.handler()` procedures:
 

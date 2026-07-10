@@ -15,6 +15,7 @@ export type {
 
 // Re-export all types from procedure.ts
 export type {
+  HttpMethod,
   ExtractPathParams,
   RequireParamsForPath,
   ValidateInputForPath,
@@ -24,4 +25,3 @@ export type {
   ReadyProcedure,
   PendingProcedure,
 } from "./procedure.js";
-

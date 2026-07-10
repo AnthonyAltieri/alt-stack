@@ -1,7 +1,17 @@
 import { describe, it, expect, expectTypeOf } from "vitest";
 import { z } from "zod";
-import { Router, router, createRouter, mergeRouters, route, routerFromRoutes } from "./router.js";
+import {
+  Router,
+  router,
+  createRouter,
+  combineRouters,
+  route,
+  routerFromRoutes,
+  type RouterContext,
+  type RouterRouteSignatures,
+} from "./router.js";
 import { err, ok } from "@alt-stack/result";
+import { init } from "./init.js";
 import type {
   ExtractPathParams,
   ValidateInputForPath,
@@ -32,24 +42,6 @@ describe("Router", () => {
       expect(procedures[0]?.path).toBe("/api/item");
     });
 
-    it("should merge multiple routers for same prefix", () => {
-      const baseRouter = new Router();
-      const router1 = router({
-        "/a": baseRouter.procedure.output(z.object({ a: z.string() })).get(() => ok({ a: "1" })),
-      });
-
-      const router2 = router({
-        "/b": baseRouter.procedure.output(z.object({ b: z.string() })).get(() => ok({ b: "2" })),
-      });
-
-      const parentRouter = new Router({
-        "/api": [router1, router2],
-      });
-
-      const procedures = parentRouter.getProcedures();
-      expect(procedures).toHaveLength(2);
-      expect(procedures.map((p) => p.path).sort()).toEqual(["/api/a", "/api/b"]);
-    });
   });
 
   describe("router function", () => {
@@ -170,8 +162,24 @@ describe("Router", () => {
     });
   });
 
-  describe("mergeRouters function", () => {
-    it("should merge multiple routers", () => {
+  describe("combineRouters function", () => {
+    it("is exposed by init() with route metadata and no mergeRouters alias", () => {
+      const factory = init<{ requestId: string }>();
+      const healthRouter = factory.router({
+        "/health": factory.procedure.get(() => ok(undefined)),
+      });
+      const usersRouter = factory.router({
+        "/users": factory.procedure.get(() => ok(undefined)),
+      });
+      const combined = factory.combineRouters(healthRouter, usersRouter);
+
+      expect(factory).not.toHaveProperty("mergeRouters");
+      expectTypeOf<RouterRouteSignatures<typeof combined>>().toEqualTypeOf<
+        "GET /health" | "GET /users"
+      >();
+    });
+
+    it("should combine one or more non-conflicting routers and preserve metadata", () => {
       const baseRouter = new Router();
       const router1 = router({
         "/r1": baseRouter.procedure.output(z.object({ from: z.literal("router1") })).get(() => ok({ from: "router1" as const })),
@@ -181,9 +189,181 @@ describe("Router", () => {
         "/r2": baseRouter.procedure.output(z.object({ from: z.literal("router2") })).get(() => ok({ from: "router2" as const })),
       });
 
-      const merged = mergeRouters(router1, router2);
+      const single = combineRouters(router1);
+      const combined = combineRouters(router1, router2);
 
-      expect(merged.getProcedures()).toHaveLength(2);
+      expect(single.getProcedures()).toHaveLength(1);
+      expect(combined.getProcedures()).toHaveLength(2);
+      expectTypeOf<RouterRouteSignatures<typeof combined>>().toEqualTypeOf<
+        "GET /r1" | "GET /r2"
+      >();
+    });
+
+    it("should allow different methods on the same path", () => {
+      const baseRouter = new Router();
+      const getRouter = router({
+        "/items": baseRouter.procedure
+          .output(z.object({ method: z.literal("GET") }))
+          .get(() => ok({ method: "GET" as const })),
+      });
+      const postRouter = router({
+        "items/": baseRouter.procedure
+          .output(z.object({ method: z.literal("POST") }))
+          .post(() => ok({ method: "POST" as const })),
+      });
+
+      const combined = combineRouters(getRouter, postRouter);
+
+      expect(combined.getProcedures()).toHaveLength(2);
+      expectTypeOf<RouterRouteSignatures<typeof combined>>().toEqualTypeOf<
+        "GET /items" | "POST /items"
+      >();
+    });
+
+    it("should require the first router context to satisfy every input router", () => {
+      interface RequestContext {
+        requestId: string;
+      }
+      interface UserContext extends RequestContext {
+        userId: string;
+      }
+
+      const requestBaseRouter = new Router<RequestContext>();
+      const userBaseRouter = new Router<UserContext>();
+      const requestRouter = router<RequestContext>({
+        "/request": requestBaseRouter.procedure
+          .output(z.object({ requestId: z.string() }))
+          .get(({ ctx }) => ok({ requestId: ctx.requestId })),
+      }) as Router<RequestContext, "GET /request">;
+      const userRouter = router<UserContext>({
+        "/user": userBaseRouter.procedure
+          .output(z.object({ userId: z.string() }))
+          .get(({ ctx }) => ok({ userId: ctx.userId })),
+      }) as Router<UserContext, "GET /user">;
+
+      const combined = combineRouters(userRouter, requestRouter);
+      const assertInvalidContextOrder = () => {
+        // @ts-expect-error - RequestContext cannot satisfy UserContext procedures
+        combineRouters(requestRouter, userRouter);
+      };
+      void assertInvalidContextOrder;
+
+      expect(combined.getProcedures()).toHaveLength(2);
+      expectTypeOf<RouterContext<typeof combined>>().toEqualTypeOf<UserContext>();
+    });
+
+    it("should require init().router for tracked custom-context composition", () => {
+      interface RequestContext {
+        requestId: string;
+      }
+
+      const baseRouter = new Router<RequestContext>();
+      const widenedRouter = router<RequestContext>({
+        "/request": baseRouter.procedure.get(() => ok(undefined)),
+      });
+      const factory = init<RequestContext>();
+      const trackedRouter = factory.router({
+        "/tracked": factory.procedure.get(() => ok(undefined)),
+      });
+      const combined = factory.combineRouters(trackedRouter);
+      const assertWidenedRouterIsRejected = () => {
+        // @ts-expect-error - an explicit router<TContext> call widens route metadata
+        combineRouters(widenedRouter);
+      };
+      void assertWidenedRouterIsRejected;
+
+      expectTypeOf<RouterRouteSignatures<typeof widenedRouter>>().toEqualTypeOf<string>();
+      expectTypeOf<RouterRouteSignatures<typeof combined>>().toEqualTypeOf<
+        "GET /tracked"
+      >();
+    });
+
+    it("should report compile-time conflicts using canonical route signatures", () => {
+      const baseRouter = new Router();
+      const getUserById = router({
+        "/users/{id}/": baseRouter.procedure
+          .input({ params: z.object({ id: z.string() }) })
+          .output(z.object({ id: z.string() }))
+          .get(({ input }) => ok({ id: input.params.id })),
+      });
+      const getUserByUserId = router({
+        "users/{userId}": baseRouter.procedure
+          .input({ params: z.object({ userId: z.string() }) })
+          .output(z.object({ id: z.string() }))
+          .get(({ input }) => ok({ id: input.params.userId })),
+      });
+      const getUserByMethodsObject = router({
+        "/users/{accountId}": {
+          get: baseRouter.procedure
+            .input({ params: z.object({ accountId: z.string() }) })
+            .output(z.object({ id: z.string() }))
+            .handler(({ input }) => ok({ id: input.params.accountId })),
+        },
+      });
+      const nestedUsers = router({
+        "/api/": router({
+          "/users": baseRouter.procedure
+            .output(z.object({ source: z.literal("nested") }))
+            .get(() => ok({ source: "nested" as const })),
+        }),
+      });
+      const directUsers = router({
+        "api/users/": baseRouter.procedure
+          .output(z.object({ source: z.literal("direct") }))
+          .get(() => ok({ source: "direct" as const })),
+      });
+      const combined = combineRouters(getUserById, directUsers);
+
+      const assertInvalidCombinations = () => {
+        // @ts-expect-error - canonical paths conflict despite slash and param-name differences
+        combineRouters(getUserById, getUserByUserId);
+        // @ts-expect-error - ready-procedure and methods-object routes conflict
+        combineRouters(getUserById, getUserByMethodsObject);
+        // @ts-expect-error - nested and direct canonical paths conflict
+        combineRouters(nestedUsers, directUsers);
+        // @ts-expect-error - combined routers preserve metadata for later conflict checks
+        combineRouters(combined, getUserByUserId);
+        // @ts-expect-error - imperative routers do not carry reliable route metadata
+        combineRouters(createRouter());
+        // @ts-expect-error - use combineRouters instead of router arrays
+        createRouter({ "/api": [getUserById, directUsers] });
+        // @ts-expect-error - at least one router is required
+        combineRouters();
+      };
+      void assertInvalidCombinations;
+
+      expectTypeOf<RouterRouteSignatures<typeof getUserById>>().toEqualTypeOf<
+        "GET /users/{param}"
+      >();
+      expectTypeOf<RouterRouteSignatures<typeof nestedUsers>>().toEqualTypeOf<
+        "GET /api/users"
+      >();
+    });
+
+    it("should guard against runtime conflicts and empty JavaScript calls", () => {
+      const baseRouter = new Router();
+      const router1 = router({
+        "/users/{id}/": baseRouter.procedure
+          .input({ params: z.object({ id: z.string() }) })
+          .output(z.object({ id: z.string() }))
+          .get(({ input }) => ok({ id: input.params.id })),
+      });
+      const router2 = router({
+        "users/{userId}": baseRouter.procedure
+          .input({ params: z.object({ userId: z.string() }) })
+          .output(z.object({ id: z.string() }))
+          .get(({ input }) => ok({ id: input.params.userId })),
+      });
+      const callWithoutTypeChecking = combineRouters as unknown as (
+        ...routers: Router[]
+      ) => Router;
+
+      expect(() => callWithoutTypeChecking()).toThrow(
+        "combineRouters requires at least one router",
+      );
+      expect(() => callWithoutTypeChecking(router1, router2)).toThrow(
+        "Route conflict: GET /users/{param}",
+      );
     });
   });
 
@@ -221,6 +401,23 @@ describe("Router", () => {
       });
 
       expect(parent.getProcedures()[0]?.path).toBe("/api/route");
+    });
+
+    it("should normalize repeated trailing prefix slashes like the route metadata", () => {
+      const baseRouter = new Router();
+      const child = router({
+        "/route": baseRouter.procedure
+          .output(z.object({ ok: z.boolean() }))
+          .get(() => ok({ ok: true })),
+      });
+      const parent = router({
+        "/api///": child,
+      });
+
+      expect(parent.getProcedures()[0]?.path).toBe("/api/route");
+      expectTypeOf<RouterRouteSignatures<typeof parent>>().toEqualTypeOf<
+        "GET /api/route"
+      >();
     });
   });
 
@@ -363,17 +560,6 @@ describe("Router", () => {
         // Helper to check if a type is never
         type IsNever<T> = [T] extends [never] ? true : false;
 
-        // Good config - procedure has params
-        type GoodConfig = {
-          "/users/{id}": {
-            get: ReturnType<
-              ReturnType<
-                ReturnType<Router<AppContext>["procedure"]["input"]>["output"]
-              >["handler"]
-            >;
-          };
-        };
-
         // Bad config - procedure lacks params for path with {id}
         type BadConfig = {
           "/users/{id}": {
@@ -386,9 +572,9 @@ describe("Router", () => {
         // Import the validation type
         type ValidatedBad = import("./router.js").ValidateRouterConfig<BadConfig, AppContext>;
 
-        // The get property should be never after validation
-        type GetType = ValidatedBad["/users/{id}"]["get"];
-        expectTypeOf<IsNever<GetType>>().toEqualTypeOf<true>();
+        expectTypeOf<
+          IsNever<ValidatedBad["/users/{id}"]["get"]>
+        >().toEqualTypeOf<true>();
       });
 
       it("should pass through valid procedures", () => {

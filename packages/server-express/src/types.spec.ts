@@ -1,6 +1,13 @@
 import { describe, it, expectTypeOf } from "vitest";
 import type { Request, Response } from "express";
 import type { BaseContext } from "@alt-stack/server-core";
+import {
+  Router,
+  combineRouters,
+  ok,
+  router,
+  type RouterRouteSignatures,
+} from "./index.js";
 import type { ExpressBaseContext } from "./types.js";
 
 describe("Express Types", () => {
@@ -45,5 +52,25 @@ describe("Express Types", () => {
       expectTypeOf(ctx.requestId).toEqualTypeOf<string>();
     });
   });
-});
 
+  it("preserves route metadata through the adapter entrypoint", () => {
+    const baseRouter = new Router();
+    const healthRouter = router({
+      "/health": baseRouter.procedure.get(() => ok(undefined)),
+    });
+    const usersRouter = router({
+      "/users": baseRouter.procedure.get(() => ok(undefined)),
+    });
+    const combined = combineRouters(healthRouter, usersRouter);
+    const assertConflict = () => {
+      // @ts-expect-error - canonical GET /health routes conflict
+      combineRouters(healthRouter, router({ "health/": baseRouter.procedure.get(() => ok(undefined)) }));
+    };
+    void assertConflict;
+
+    expectTypeOf<RouterRouteSignatures<typeof combined>>().toEqualTypeOf<
+      "GET /health" | "GET /users"
+    >();
+    expectTypeOf(combined).toMatchTypeOf<Router>();
+  });
+});

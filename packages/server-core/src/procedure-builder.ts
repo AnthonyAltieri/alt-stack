@@ -428,7 +428,8 @@ export class BaseProcedureBuilder<
     TBaseInput,
     TBaseOutput,
     MergeErrors<TDefaultErrors, MergeErrors<TBaseErrors, TMiddlewareErrors>>,
-    TCustomContext
+    TCustomContext,
+    "GET"
   > {
     return {
       method: "GET",
@@ -465,7 +466,8 @@ export class BaseProcedureBuilder<
     TBaseInput,
     TBaseOutput,
     MergeErrors<TDefaultErrors, MergeErrors<TBaseErrors, TMiddlewareErrors>>,
-    TCustomContext
+    TCustomContext,
+    "POST"
   > {
     return {
       method: "POST",
@@ -502,7 +504,8 @@ export class BaseProcedureBuilder<
     TBaseInput,
     TBaseOutput,
     MergeErrors<TDefaultErrors, MergeErrors<TBaseErrors, TMiddlewareErrors>>,
-    TCustomContext
+    TCustomContext,
+    "PUT"
   > {
     return {
       method: "PUT",
@@ -539,7 +542,8 @@ export class BaseProcedureBuilder<
     TBaseInput,
     TBaseOutput,
     MergeErrors<TDefaultErrors, MergeErrors<TBaseErrors, TMiddlewareErrors>>,
-    TCustomContext
+    TCustomContext,
+    "PATCH"
   > {
     return {
       method: "PATCH",
@@ -576,7 +580,8 @@ export class BaseProcedureBuilder<
     TBaseInput,
     TBaseOutput,
     MergeErrors<TDefaultErrors, MergeErrors<TBaseErrors, TMiddlewareErrors>>,
-    TCustomContext
+    TCustomContext,
+    "DELETE"
   > {
     return {
       method: "DELETE",
@@ -716,4 +721,3 @@ export class ProcedureBuilder<
     };
   }
 }
-

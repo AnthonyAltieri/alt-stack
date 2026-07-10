@@ -2,10 +2,17 @@ import {
   Router as BaseRouter,
   router as baseRouter,
   createRouter as baseCreateRouter,
-  mergeRouters as baseMergeRouters,
+  combineRouters as baseCombineRouters,
   init as baseInit,
 } from "@alt-stack/server-core";
-import type { InitOptions, InitResult } from "@alt-stack/server-core";
+import type {
+  InitOptions,
+  InitResult,
+  RouteSignaturesForConfig,
+  RouterRouteSignatures,
+  ValidateRouterCombination,
+  ValidateRouterConfig,
+} from "@alt-stack/server-core";
 import type { NestBaseContext } from "./types.js";
 
 export {
@@ -89,10 +96,17 @@ export type {
   TypedContext,
   BaseContext,
   InferInput,
+  HttpMethod,
   Procedure,
   ReadyProcedure,
   PendingProcedure,
+  RouteSignature,
+  RouteSignaturesForConfig,
+  RouterContext,
   RouterConfigValue,
+  RouterRouteSignatures,
+  ValidateRouterCombination,
+  ValidateRouterConfig,
 } from "@alt-stack/server-core";
 
 export { registerAltStack } from "./register.js";
@@ -115,22 +129,38 @@ export function init<TCustomContext extends object = Record<string, never>>(
 
 export class Router<
   TCustomContext extends NestBaseContext = NestBaseContext,
-> extends BaseRouter<TCustomContext> {}
+  TRouteSignatures extends string = string,
+> extends BaseRouter<TCustomContext, TRouteSignatures> {}
 
-export function router<TCustomContext extends NestBaseContext = NestBaseContext>(
-  config: Parameters<typeof baseRouter<TCustomContext>>[0],
-): Router<TCustomContext> {
-  return baseRouter<TCustomContext>(config) as Router<TCustomContext>;
+export function router<
+  TCustomContext extends NestBaseContext = NestBaseContext,
+  const TConfig extends Record<string, unknown> = Record<string, unknown>,
+>(
+  config: TConfig & ValidateRouterConfig<TConfig, TCustomContext>,
+): Router<TCustomContext, RouteSignaturesForConfig<TConfig>> {
+  return baseRouter<TCustomContext, TConfig>(config) as Router<
+    TCustomContext,
+    RouteSignaturesForConfig<TConfig>
+  >;
 }
 
 export function createRouter<TCustomContext extends NestBaseContext = NestBaseContext>(
-  config?: Record<string, Router<TCustomContext> | Router<TCustomContext>[]>,
+  config?: Record<string, Router<TCustomContext>>,
 ): Router<TCustomContext> {
   return baseCreateRouter<TCustomContext>(config) as Router<TCustomContext>;
 }
 
-export function mergeRouters<TCustomContext extends NestBaseContext = NestBaseContext>(
-  ...routers: Router<TCustomContext>[]
-): Router<TCustomContext> {
-  return baseMergeRouters<TCustomContext>(...routers) as Router<TCustomContext>;
+export function combineRouters<
+  TCustomContext extends NestBaseContext,
+  const TRouters extends readonly [
+    Router<TCustomContext, string>,
+    ...Router<TCustomContext, string>[],
+  ],
+>(
+  ...routers: TRouters & ValidateRouterCombination<TRouters>
+): Router<TCustomContext, RouterRouteSignatures<TRouters[number]>> {
+  const combine = baseCombineRouters as unknown as (
+    ...items: Router<TCustomContext, string>[]
+  ) => Router<TCustomContext, RouterRouteSignatures<TRouters[number]>>;
+  return combine(...routers);
 }

@@ -4,15 +4,14 @@ import { createFileRoute } from "@tanstack/react-router";
 import type { FileRoutesByPath } from "@tanstack/react-router";
 import {
   Router as BaseRouter,
+  combineRouters,
   createRouter as baseCreateRouter,
   err as resultErr,
   findHttpStatusForError,
   generateOpenAPISpec,
   isErr,
-  mergeRouters as baseMergeRouters,
   middlewareMarker,
   middlewareOk,
-  router as baseRouter,
   setSpanOk,
   validateInput,
 } from "@alt-stack/server-core";
@@ -24,7 +23,6 @@ import type {
   Procedure,
   GenerateOpenAPISpecOptions,
   OpenAPISpec,
-  RouterConfigValue,
   TypedContext,
 } from "@alt-stack/server-core";
 import { tanStackPathToOpenApiPath } from "./path.js";
@@ -141,7 +139,7 @@ export interface CreateTanStackRouteHandlersOptions<
 
 type RouterOrConfig<TContext extends object> =
   | BaseRouter<TContext>
-  | Record<string, BaseRouter<TContext> | BaseRouter<TContext>[]>;
+  | Record<string, BaseRouter<TContext>>;
 
 function createRouterFromMethods<
   TPath extends string,
@@ -205,18 +203,12 @@ function collectProcedures<TContext extends object>(
   }
 
   const procedures: AnyProcedure<TContext>[] = [];
-  for (const [prefix, routerOrRouters] of Object.entries(routerOrConfig)) {
-    const routers = Array.isArray(routerOrRouters)
-      ? routerOrRouters
-      : [routerOrRouters];
-
-    for (const router of routers) {
-      for (const procedure of router.getProcedures()) {
-        procedures.push({
-          ...procedure,
-          path: normalizePath(prefix, procedure.path),
-        } as AnyProcedure<TContext>);
-      }
+  for (const [prefix, router] of Object.entries(routerOrConfig)) {
+    for (const procedure of router.getProcedures()) {
+      procedures.push({
+        ...procedure,
+        path: normalizePath(prefix, procedure.path),
+      } as AnyProcedure<TContext>);
     }
   }
   return procedures;
@@ -807,44 +799,35 @@ function getOpenAPIRouter(route: OpenAPISpecRouteSource): BaseRouter<any> {
   return route.altStack.router;
 }
 
+function combineOpenAPIRouters(
+  routers: readonly BaseRouter<any>[],
+): BaseRouter<any> {
+  const [first, ...rest] = routers;
+  if (!first) {
+    return baseCreateRouter();
+  }
+
+  const runtimeCombine = combineRouters as unknown as (
+    first: BaseRouter<any>,
+    ...rest: BaseRouter<any>[]
+  ) => BaseRouter<any>;
+  return runtimeCombine(first, ...rest);
+}
+
 export function generateOpenAPISpecFromServerRoutes<
   const TRoutes extends readonly OpenAPISpecRouteSource[],
 >(
   routes: TRoutes,
   options?: GenerateOpenAPISpecOptions,
 ): OpenAPISpec {
+  const combinedRouter = combineOpenAPIRouters(
+    routes.map((route) => getOpenAPIRouter(route)),
+  );
+
   return generateOpenAPISpec(
     {
-      "/": routes.map((route) => getOpenAPIRouter(route)),
+      "/": combinedRouter,
     },
     options,
   );
 }
-
-export class Router<
-  TCustomContext extends TanStackBaseContext = TanStackBaseContext,
-> extends BaseRouter<TCustomContext> {}
-
-export function router<
-  TCustomContext extends TanStackBaseContext = TanStackBaseContext,
->(
-  config: Parameters<typeof baseRouter<TCustomContext>>[0],
-): Router<TCustomContext> {
-  return baseRouter<TCustomContext>(config) as Router<TCustomContext>;
-}
-
-export function createRouter<
-  TCustomContext extends TanStackBaseContext = TanStackBaseContext,
->(
-  config?: Record<string, Router<TCustomContext> | Router<TCustomContext>[]>,
-): Router<TCustomContext> {
-  return baseCreateRouter<TCustomContext>(config) as Router<TCustomContext>;
-}
-
-export function mergeRouters<
-  TCustomContext extends TanStackBaseContext = TanStackBaseContext,
->(...routers: Router<TCustomContext>[]): Router<TCustomContext> {
-  return baseMergeRouters<TCustomContext>(...routers) as Router<TCustomContext>;
-}
-
-export type { RouterConfigValue };

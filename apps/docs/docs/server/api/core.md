@@ -27,8 +27,8 @@ Creates one typed factory. The return type is `InitResult`; the returned object 
 
 | Property | Description |
 | --- | --- |
-| `router(config)` | Builds a `Router<TCustomContext>` from path/procedure entries and performs the public path-param type checks. |
-| `mergeRouters(...routers)` | Appends all procedures to a new router. |
+| `router(config)` | Builds a declarative `Router<TCustomContext, TRouteSignatures>` from path/procedure entries, tracks its canonical route signatures, and performs the public path-param type checks. |
+| `combineRouters(...routers)` | Combines one or more tracked declarative routers after rejecting conflicting method/path signatures. |
 | `procedure` | A fresh `BaseProcedureBuilder` bound to `TCustomContext` and the configured default-error types. |
 | `defaultErrorHandlers` | The resolved 400/500 callbacks plus their schemas. It is typed as optional but is always present at runtime. |
 
@@ -73,19 +73,35 @@ Builds a router from a declarative config. Each key can contain:
 
 Paths are normalized to start with `/`. A `{param}` path requires `input.params` with that key at compile time. The check does not reject additional params keys, and a TypeScript limitation means not every invalid generic call produces an immediate call-site diagnostic.
 
+The returned router carries a type-only union of route signatures such as `"GET /users/{param}"`. `combineRouters()` uses that metadata to detect conflicts. Build routers that will be combined with this declarative helper, preferably through `init<TContext>().router()` when using custom context.
+
 ### `createRouter(config?)`
 
 ```typescript
 function createRouter<TCustomContext extends object = Record<string, never>>(
-  config?: Record<string, Router<TCustomContext> | Router<TCustomContext>[]>,
+  config?: Record<string, Router<TCustomContext>>,
 ): Router<TCustomContext>;
 ```
 
-Creates an empty router or merges nested routers under the supplied prefixes. This constructor-style helper does not accept procedure entries; use `router()` for a route config.
+Creates an empty router or prefixes one router per config key. This constructor-style helper does not accept procedure entries or router arrays; use `router()` for declarative route config and `combineRouters()` before mounting independent routers at one prefix. Routers created through `createRouter()` do not have precise route metadata for checked composition.
 
-### `mergeRouters(...routers)`
+### `combineRouters(...routers)`
 
-Returns a new router and appends every source procedure in argument order without adding a prefix or checking duplicates. Source routers are not mutated.
+Combines a non-empty tuple of routers into a new router without adding a prefix or mutating its inputs. Every argument must be a tracked declarative router created by `router()`; `new Router()`, `createRouter()`, and routers assembled through imperative registration do not carry the precise metadata required for the compile-time check.
+
+A conflict is the same uppercase HTTP method plus the same canonical path. Canonical paths have a leading slash, omit trailing slashes except for `/`, and normalize every OpenAPI parameter name to `{param}`. Therefore `GET users/{id}` conflicts with `GET /users/{userId}/`, while `GET /users/{id}` and `POST /users/{userId}` can coexist.
+
+TypeScript reports conflicting signatures at the call site. The runtime repeats the same check and throws `Route conflict: METHOD /canonical/path` as a backstop for JavaScript, casts, dynamically mutated routers, and other ways static metadata can be bypassed.
+
+```typescript
+const api = t.combineRouters(usersRouter, postsRouter);
+
+// Before this breaking change:
+// const api = mergeRouters(usersRouter, postsRouter);
+// createServer({ "/api": [usersRouter, postsRouter] });
+
+createServer({ "/api": api });
+```
 
 ### `Router<TCustomContext>`
 
@@ -97,7 +113,8 @@ The public members are:
 
 | Member | Behavior |
 | --- | --- |
-| `constructor(config?)` | Accepts the same prefix-to-router or prefix-to-router-array map as `createRouter()`. |
+| `_routeSignatures` | Type-only metadata containing the router's canonical `METHOD /path` signature union. It is declared for inference and has no runtime value. |
+| `constructor(config?)` | Accepts the same one-router-per-prefix map as `createRouter()`. Constructor-created routers are not tracked for `combineRouters()`. |
 | `registerProcedure(path, readyProcedure)` | Normalizes `path`, converts a ready procedure to a stored `Procedure`, appends it, and returns `this`. |
 | `registerPendingProcedure(path, method, pendingProcedure)` | Uppercases `method`, materializes the pending procedure, appends it, and returns `this`. |
 | `register(procedure)` | Appends an already materialized procedure and returns `this`. |
@@ -110,6 +127,21 @@ The public members are:
 ### `RouterConfigValue<TCustomContext>`
 
 A structural union of `ReadyProcedure`, a lowercase method map, or `Router<TCustomContext>`. It describes one router config value; it does not apply the path-param validation by itself.
+
+### Route metadata types
+
+These types support declarative route tracking and checked composition. Most applications rely on inference rather than naming them directly.
+
+| Type | Meaning |
+| --- | --- |
+| `HttpMethod` | Closed `"GET" | "POST" | "PUT" | "PATCH" | "DELETE"` union retained by ready procedures so route conflicts can distinguish methods. |
+| `RouteSignature` | Canonical `METHOD /path` string shape used as a route identity. |
+| `RouteSignaturesForConfig<TConfig>` | Extracts the canonical signature union from a declarative `router()` config, including prefixed nested routers. |
+| `RouterRouteSignatures<TRouter>` | Extracts the route-signature union carried by a router's second generic. |
+| `RouterContext<TRouter>` | Extracts a router's custom-context type. |
+| `AnyRouter` | Broad router type used by router-tuple helpers. |
+| `ValidateRouterCombination<TRouters>` | Resolves to an error shape when any router is untracked or when the tuple contains overlapping signatures. |
+| `ValidateRouterConfig<TConfig, TContext>` | Validates declarative config values, procedure context, and required path-parameter input at the type level. |
 
 ## Procedure builders
 
@@ -277,7 +309,7 @@ Iterates status entries in object order and returns the first status whose extra
 
 ```typescript
 function generateOpenAPISpec<TContext extends object>(
-  config: Record<string, Router<TContext> | Router<TContext>[]>,
+  config: Record<string, Router<TContext>>,
   options?: GenerateOpenAPISpecOptions,
 ): OpenAPISpec;
 ```
@@ -303,7 +335,7 @@ Current contract gaps:
 - automatic validation/uncaught errors are omitted;
 - declared error schemas are documented as flat bodies although adapters wrap them under `error`;
 - generated operations do not set `summary`, `description`, `tags`, security, headers, cookies, or servers;
-- duplicate method/path entries overwrite in collection order.
+- a router that was imperatively mutated to contain duplicate method/path entries still overwrites in collection order; use tracked declarative routers and `combineRouters()` so its runtime backstop rejects duplicates before generation.
 
 ### OpenAPI types
 
