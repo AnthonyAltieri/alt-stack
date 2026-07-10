@@ -1,118 +1,75 @@
-# Example Kafka Consumer
+# Kafka consumer example
 
-A complete example Kafka consumer application built with `@alt-stack/kafka-core`, demonstrating type-safe message consumption with Zod validation.
-
-## Features
-
-- ✅ Type-safe message handling
-- ✅ Automatic input/output validation
-- ✅ Middleware support
-- ✅ Custom context
-- ✅ Error handling
-- ✅ Multiple topic subscriptions
+A runnable `@alt-stack/kafka-core` consumer showing Zod message schemas, custom context, ordinary middleware, topic metadata, multiple topics, and Result-returning handlers.
 
 ## Prerequisites
 
-- Kafka broker running (default: `localhost:9092`)
-- Node.js 20+
+- Node.js 18+
+- pnpm 10
+- a Kafka-compatible broker reachable at `localhost:9092` by default
+- provisioned `user-events`, `orders/created`, and `notifications` topics
 
-## Setup
+Install the workspace once from the repository root:
 
 ```bash
-# Install dependencies
 pnpm install
-
-# Make sure Kafka is running
-# You can use Docker Compose or a local Kafka installation
-
-# Start the consumer
-pnpm dev
 ```
 
 ## Configuration
 
-The consumer is configured via environment variables. Copy `.env.example` to `.env` and configure your settings:
+The example reads process environment variables directly; no `.env` file is required.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `KAFKA_BROKERS` | `localhost:9092` | comma-separated brokers |
+| `KAFKA_CLIENT_ID` | `example-consumer` | KafkaJS client ID |
+| `KAFKA_GROUP_ID` | `example-group` | consumer group |
+| `SKIP_ENV_VALIDATION` | unset | any truthy value skips `@t3-oss/env-core` validation |
+
+## Run
 
 ```bash
-cp .env.example .env
+pnpm --filter kafka-consumer dev
 ```
 
-Environment variables are validated using `@t3-oss/env-core` on startup:
+The process connects, subscribes from the group's latest position (`fromBeginning: false`), and remains active inside KafkaJS `consumer.run`. `SIGINT` and `SIGTERM` disconnect cleanly.
 
-- `KAFKA_BROKERS`: Comma-separated list of Kafka brokers (default: `localhost:9092`)
-- `KAFKA_CLIENT_ID`: Client ID for the Kafka consumer (default: `example-consumer`)
-- `KAFKA_GROUP_ID`: Consumer group ID (default: `example-group`)
+## Send compatible records
 
-## Example Topics
+Use the companion producer example:
 
-### User Events (`user-events`)
-
-Handles user-related events with validation.
-
-**Message Schema:**
-```typescript
-{
-  userId: string;
-  eventType: "created" | "updated" | "deleted";
-  timestamp: number;
-  metadata?: Record<string, unknown>;
-}
+```bash
+pnpm --filter kafka-producer dev
 ```
 
-### Order Events (`orders/created`)
+Or publish JSON with any Kafka client. Representative payloads are:
 
-Handles order creation events.
-
-**Message Schema:**
-```typescript
-{
-  orderId: string;
-  userId: string;
-  items: Array<{
-    productId: string;
-    quantity: number;
-    price: number;
-  }>;
-  total: number;
-}
+```json
+{"userId":"u_123","eventType":"created","timestamp":1720000000000}
 ```
 
-## Usage
-
-1. Start the consumer:
-   ```bash
-   pnpm dev
-   ```
-
-2. Send messages to Kafka topics using `kafka-console-producer` or any Kafka client:
-
-   ```bash
-   # User event
-   echo '{"userId":"123","eventType":"created","timestamp":1234567890}' | \
-     kafka-console-producer --broker-list localhost:9092 --topic user-events
-
-   # Order event
-   echo '{"orderId":"order-1","userId":"123","items":[{"productId":"prod-1","quantity":2,"price":29.99}],"total":59.98}' | \
-     kafka-console-producer --broker-list localhost:9092 --topic orders/created
-   ```
-
-## Type Safety
-
-All message handlers are fully type-safe:
-
-- **Input validation**: Message payloads are validated against Zod schemas
-- **Output validation**: Handler return values are validated against output schemas
-- **Full inference**: `ctx.input` is fully typed based on your input configuration
-- **Context access**: Access to Kafka message metadata (topic, partition, offset, headers)
-
-## Project Structure
-
-```
-src/
-  index.ts    # Main consumer file with topic handlers
+```json
+{"orderId":"o_123","userId":"u_123","items":[{"productId":"p_1","quantity":2,"price":29.99}],"total":59.98}
 ```
 
-## Error Handling
+## Source map
 
-The consumer includes error handling that logs errors and continues processing. You can customize error handling via the `onError` callback in `createConsumer`.
+- `src/env.ts` validates broker/client/group configuration.
+- `src/index.ts` defines schemas, reusable procedures, middleware, router, context, consumer, and shutdown.
+
+The custom logger prefixes output with topic, partition, and offset. The example's middleware logs before/after each handler.
+
+## Current output-schema limitation
+
+The `orders/created` procedure declares an output schema and returns `ok(value)`. The current consumer validates the entire Result envelope rather than the inner successful value, so this handler demonstrates a known runtime mismatch and will throw output validation after processing a valid record. Remove `.output(OrderProcessedSchema)` to run that topic under the current adapter, or change the schema to describe the actual Result envelope.
+
+Returned `err(...)` values are likewise not converted into Kafka failures by the current consumer. Throw when KafkaJS must observe failed processing.
+
+## Verify
+
+```bash
+pnpm --filter kafka-consumer check-types
+```
+
+See the [Kafka quickstart](../../apps/docs/docs/kafka/quickstart.md) for a minimal production-oriented path.
 

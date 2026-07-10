@@ -1,3 +1,4 @@
+import { pathToFileURL } from "node:url";
 import {
   createDocsRouter,
   createServer,
@@ -11,6 +12,7 @@ import {
 import { createWarpStreamClient } from "@alt-stack/workers-client-warpstream";
 import { serve } from "@hono/node-server";
 import type { Context } from "hono";
+import { cors } from "hono/cors";
 import ky from "ky";
 import { z } from "zod";
 import { Topics } from "@real-life/workers-sdk";
@@ -314,13 +316,34 @@ const docsRouter = createDocsRouter({ api: taskRouter }, { title: "Tasks API", v
 //     },
 //   },
 // );
-const app = createServer<AppContext>({ api: taskRouter, docs: docsRouter }, { createContext });
+const browserCors = cors({
+  origin: "http://localhost:3000",
+  allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowHeaders: ["Authorization", "Content-Type"],
+});
+
+const app = createServer<AppContext>(
+  { api: taskRouter, docs: docsRouter },
+  {
+    createContext,
+    middleware: {
+      "*": {
+        methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        // createServer recognizes native two-argument Hono middleware at runtime.
+        handler: browserCors as unknown as (c: Context) => Response | Promise<Response>,
+      },
+    },
+  },
+);
 
 export { taskRouter };
 export default app;
 
-// Only start server when running directly (not as Lambda)
-if (!process.env.AWS_LAMBDA_FUNCTION_NAME) {
+const isDirectExecution =
+  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+// Only start the server for direct execution, never for imports or Lambda.
+if (isDirectExecution && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
   console.log(`Logic service running at http://localhost:${env.PORT}`);
   console.log(`OpenAPI docs at http://localhost:${env.PORT}/docs/openapi.json`);
   serve({ fetch: app.fetch, port: env.PORT });

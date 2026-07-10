@@ -1,134 +1,104 @@
-# Example Todo Server
+# Hono Todo server example
 
-A complete example todo application built with `@alt-stack/server-hono`, demonstrating type-safe API endpoints with Zod validation.
+A runnable Hono application that exercises `@alt-stack/server-hono`: structured input, output validation, tagged errors, reusable auth procedures, nested routers, OpenAPI docs, and Result-returning business logic.
 
-## Features
+The source of truth is [`src/index.ts`](./src/index.ts); the in-memory database resets whenever the process starts.
 
-- ✅ Full CRUD operations for todos
-- ✅ Type-safe request/response handling
-- ✅ Automatic input validation
-- ✅ Type-safe error handling with `ctx.error()`
-- ✅ Query parameter filtering
-- ✅ In-memory data store
+## Quickstart
 
-## API Endpoints
-
-### GET /todos
-
-List all todos with optional filtering.
-
-**Query Parameters:**
-- `completed` (optional): Filter by completion status (`"true"` or `"false"`)
-
-**Example:**
-```bash
-curl http://localhost:3000/todos
-curl http://localhost:3000/todos?completed=true
-```
-
-### GET /todos/{id}
-
-Get a single todo by ID.
-
-**Example:**
-```bash
-curl http://localhost:3000/todos/1
-```
-
-### POST /todos
-
-Create a new todo.
-
-**Request Body:**
-```json
-{
-  "title": "Buy groceries",
-  "description": "Milk, eggs, bread"
-}
-```
-
-**Example:**
-```bash
-curl -X POST http://localhost:3000/todos \
-  -H "Content-Type: application/json" \
-  -d '{"title": "Buy groceries", "description": "Milk, eggs, bread"}'
-```
-
-### PATCH /todos/{id}
-
-Update an existing todo.
-
-**Request Body:**
-```json
-{
-  "title": "Updated title",
-  "description": "Updated description",
-  "completed": true
-}
-```
-
-**Example:**
-```bash
-curl -X PATCH http://localhost:3000/todos/1 \
-  -H "Content-Type: application/json" \
-  -d '{"completed": true}'
-```
-
-### DELETE /todos/{id}
-
-Delete a todo by ID.
-
-**Example:**
-```bash
-curl -X DELETE http://localhost:3000/todos/1
-```
-
-## Running the Server
+From the repository root, install workspace dependencies and start the example:
 
 ```bash
-# Install dependencies
 pnpm install
-
-# Copy environment variables (optional - defaults are provided)
-cp .env.example .env
-
-# Start the development server
-pnpm dev
+pnpm --filter altstack-server dev
 ```
 
-The server will start on `http://localhost:3000` (or the port specified by `PORT` environment variable).
+The server listens on `http://localhost:3000`. No environment file is required by the current entry point.
 
-Environment variables are validated using `@t3-oss/env-core` on startup. See `.env.example` for available configuration options.
-
-## Type Safety
-
-All endpoints are fully type-safe:
-
-- **Input validation**: Request parameters, query strings, and body are validated against Zod schemas
-- **Output validation**: Response data is validated against output schemas
-- **Error handling**: Type-safe error throwing with `ctx.error()` - TypeScript ensures you only throw errors matching the defined error schemas
-- **Full inference**: `ctx.input` is fully typed based on your input configuration
-
-## Project Structure
-
-```
-src/
-  index.ts    # Main server file with route definitions
-  store.ts    # In-memory todo store
+```bash
+curl 'http://localhost:3000/api/todos?completed=false&limit=10'
+curl 'http://localhost:3000/docs/openapi.json'
 ```
 
-## Error Responses
+Swagger UI is mounted at `http://localhost:3000/docs` and loads its browser assets from `unpkg.com`.
 
-All endpoints return consistent error responses:
+## Authentication
 
-```json
-{
-  "error": {
-    "code": "NOT_FOUND",
-    "message": "Todo with id 1 not found"
-  }
-}
+The demo treats the raw `Authorization` header as a user ID. Two users are seeded:
+
+| Role | Header value |
+| --- | --- |
+| administrator | `00000000-0000-0000-0000-000000000001` |
+| regular user | `00000000-0000-0000-0000-000000000002` |
+
+```bash
+curl 'http://localhost:3000/api/users/me' \
+  -H 'Authorization: 00000000-0000-0000-0000-000000000002'
 ```
 
-Status codes are automatically inferred from error schemas when using `ctx.error()`. Always use `throw ctx.error(...)` to throw errors.
+This is intentionally not a real authentication scheme.
 
+## Routes
+
+| Method and path | Auth | Purpose |
+| --- | --- | --- |
+| `GET /api/todos` | public | list todos; query supports `completed`, coerced `limit`, and coerced `offset` |
+| `POST /api/todos` | user | create a todo from `title` and optional `description` |
+| `GET /api/todos/{id}` | public | fetch a todo; returns tagged 404 when absent |
+| `PUT /api/todos/{id}` | user | update fields; optional `notify` query value is coerced to boolean |
+| `DELETE /api/todos/{id}` | user | delete a todo |
+| `PATCH /api/todos/{id}/complete` | user | set `completed` |
+| `GET /api/users/me` | user | return the current profile |
+| `GET /api/users/{id}` | public | return a public user projection |
+| `GET /api/admin/users` | admin | list users, optionally filtered by `role` |
+| `DELETE /api/admin/users/{id}` | admin | delete a user and their todos |
+| `PUT /api/v2/todos/{id}` | user | return a domain `Result` directly from update logic |
+| `DELETE /api/v2/todos/{id}` | user | return a domain `Result` directly from delete logic |
+| `GET /api/v2/todos/{id}/details` | public | compose a domain `Result` and calculate `canEdit` |
+
+Example create request:
+
+```bash
+curl -X POST 'http://localhost:3000/api/todos' \
+  -H 'content-type: application/json' \
+  -H 'Authorization: 00000000-0000-0000-0000-000000000002' \
+  -d '{"title":"Document the API","description":"Verify every example"}'
+```
+
+## Common Patterns demonstrated
+
+- `init<AppContext>()` binds application context to every procedure.
+- `createContext(c)` resolves the current user before middleware/handlers run.
+- `protectedProcedure` and `adminProcedure` add tagged auth errors while narrowing `ctx.user`.
+- Router nesting produces `/todos`, `/users`, `/admin`, and `/v2/todos` prefixes.
+- URL params use OpenAPI braces and string-compatible schemas; query numbers/booleans use Zod coercion.
+- `TaggedError` schemas map domain tags to 400/401/403/404 status codes.
+- `createDocsRouter()` generates the OpenAPI JSON and Swagger UI routes.
+- V2 routes show `Result` values flowing from business logic without throw/catch translation.
+
+Runtime tagged errors use `{ error: { code, message, ...properties } }`. Generated OpenAPI currently describes the declared error schema as a flat body, so the two are not exact wire equivalents. See [Server common patterns](../../apps/docs/docs/server/common-patterns.md#error-wire-formats-and-openapi).
+
+## Verify the example
+
+```bash
+pnpm --filter altstack-server check-types
+pnpm --filter altstack-server build
+pnpm --filter altstack-server test:e2e
+```
+
+The end-to-end suite calls the Hono app in process. It covers CRUD, authorization, role checks, validation, error envelopes, router composition, and the V2 Result flows.
+
+## Project map
+
+| File | Role |
+| --- | --- |
+| `src/index.ts` | routers, schemas, errors, context, in-memory data, server bootstrap |
+| `src/index.e2e.spec.ts` | in-process HTTP contract tests |
+| `src/auth.ts`, `src/store.ts`, `src/env.ts` | additional small example modules; the current server entry point keeps its active demo logic in `index.ts` |
+| `generated-types.ts` | preserved generated artifact; it is not imported by the active server and is not the authority for current routes |
+
+## Documentation
+
+- [Server quickstart](../../apps/docs/docs/server/quickstart.md)
+- [Server common patterns](../../apps/docs/docs/server/common-patterns.md)
+- [Hono API Documentation](../../apps/docs/docs/server/api/hono.md)

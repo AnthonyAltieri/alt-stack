@@ -8,16 +8,16 @@ type StringLiteral<T> = string extends T ? never : T;
  * Base class for Result errors that automatically sets `name` from `_tag`.
  * The `_tag` property must be a const string literal (not just `string`).
  *
- * The type parameter is optional and will be inferred from the `_tag` property value.
- * When provided explicitly, it enforces that `_tag` matches the specified literal type.
+ * The type parameter defaults to `string`; TypeScript does not infer a base-class
+ * generic from a property declared by the subclass. Provide the literal type
+ * explicitly when `_tag` must match a particular value.
  * Subclasses must define `_tag` as a readonly property.
  * The `name` property will automatically return the value of `_tag`.
  *
  * @example
  * ```typescript
- * // Type parameter can be omitted - TypeScript infers from _tag
- * class NotFoundError extends TaggedError {
- *   readonly _tag = "NotFoundError";
+ * class NotFoundError extends TaggedError<"NotFoundError"> {
+ *   readonly _tag = "NotFoundError" as const;
  *   constructor(public readonly database: string, public readonly resourceId: string) {
  *     super(`Resource ${resourceId} not found in ${database}`);
  *   }

@@ -1,139 +1,41 @@
-# @alt-stack/http-client-ky
+# `@alt-stack/http-client-ky`
 
-Type-safe HTTP client using ky library.
+Typed Zod-backed HTTP client using Ky. It supports a preconfigured `KyInstance` or adapter-wide Ky options and exposes `KyResponse` as `raw`.
 
-## Installation
+## Install
 
 ```bash
 pnpm add @alt-stack/http-client-ky zod
 ```
 
-## Usage
+Zod 4 is required as a peer. Ky is a direct dependency.
 
-```typescript
-import { createApiClient } from "@alt-stack/http-client-ky";
-import { Request, Response } from "./generated-types.js";
-
-const client = createApiClient({
-  baseUrl: "https://api.example.com",
-  Request,
-  Response,
-  headers: { Authorization: "Bearer token" },
-});
-
-const result = await client.get("/users/{id}", {
-  params: { id: "123" },
-});
-
-if (result.success) {
-  console.log(result.body); // Typed response body
-} else {
-  console.error(result.error); // Typed error
-}
-```
-
-## Features
-
-- **Type inference** from Request/Response schemas
-- **Discriminated responses** typed by status code
-- **Automatic validation** of params, query, body, and responses
-- **Retry logic** with exponential backoff
-- **Timeout support**
-- **Raw KyResponse access** for streaming, headers, etc.
-- **Ky hooks** for request/response interception
-
-## Validation Hook
-
-Capture schema mismatches (e.g. unexpected response shapes) by passing `onValidationError`:
-
-```typescript
-const client = createApiClient({
-  baseUrl: "https://api.example.com",
-  Request,
-  Response,
-  onValidationError: ({ kind, location, endpoint, method, issues }) => {
-    console.error("Validation failed", { kind, location, endpoint, method, issues });
-  },
-});
-```
-
-## Ky Options
-
-Pass ky-specific options like hooks, retry config, etc.:
-
-```typescript
-const client = createApiClient({
-  baseUrl: "https://api.example.com",
-  Request,
-  Response,
-  kyOptions: {
-    hooks: {
-      beforeRequest: [
-        (request) => {
-          console.log("Request:", request.url);
-        },
-      ],
-      afterResponse: [
-        (request, options, response) => {
-          console.log("Response:", response.status);
-        },
-      ],
-    },
-  },
-});
-```
-
-## Custom Ky Instance
-
-Use a pre-configured ky instance:
+## Quick use
 
 ```typescript
 import ky from "ky";
+import { createApiClient } from "@alt-stack/http-client-ky";
+import { Request, Response } from "./generated-api.js";
 
-const customKy = ky.create({
-  prefixUrl: "https://api.example.com",
-  headers: { "X-Custom": "value" },
+const transport = ky.create({
+  hooks: {
+    beforeRequest: [(request) => request.headers.set("X-App", "dashboard")],
+  },
 });
 
-const client = createApiClient({
-  baseUrl: "", // Can be empty if using prefixUrl
+const api = createApiClient({
+  baseUrl: "https://api.example.test",
   Request,
   Response,
-  ky: customKy,
+  ky: transport,
 });
 ```
 
-## Raw Response Access
+The executor forces `throwHttpErrors: false` so documented non-2xx responses become typed result values. Avoid combining Ky retries with core `retries` unless two retry layers are intentional.
 
-Access the underlying `KyResponse` object for advanced use cases:
+## Documentation
 
-```typescript
-const result = await client.get("/users/{id}", { params: { id: "123" } });
-
-if (result.success) {
-  // Access raw KyResponse
-  console.log(result.raw.headers.get("x-request-id"));
-  console.log(result.raw.status);
-}
-```
-
-## Request Options
-
-| Option | Type | Description |
-|--------|------|-------------|
-| `params` | `object` | Path parameters |
-| `query` | `object` | Query parameters |
-| `body` | `object` | Request body (POST, PUT, PATCH) |
-| `headers` | `object` | Additional headers |
-| `timeout` | `number` | Timeout in milliseconds |
-| `retries` | `number` | Number of retry attempts |
-| `shouldRetry` | `function` | Custom retry logic |
-
-## Error Classes
-
-| Class | Description |
-|-------|-------------|
-| `ValidationError` | Schema validation failed |
-| `TimeoutError` | Request exceeded timeout |
-| `UnexpectedApiClientError` | Network error or unexpected response |
-| `ApiClientError` | Base class for all errors |
+- [Quickstart](../../apps/docs/docs/http-client/quickstart.md)
+- [Common Patterns](../../apps/docs/docs/http-client/common-patterns.md)
+- [Ky API Documentation](../../apps/docs/docs/http-client/api/ky.md)
+- [Shared core API Documentation](../../apps/docs/docs/http-client/api/core.md)

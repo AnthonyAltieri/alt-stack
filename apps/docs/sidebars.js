@@ -1,181 +1,69 @@
-/**
- * Creating a sidebar enables you to:
- * - create an ordered group of docs
- * - render a sidebar for each doc of that group
- * - provide next/previous navigation
- *
- * The sidebars can be generated from the filesystem, or explicitly defined here.
- *
- * Create as many sidebars as you want.
- */
+const doc = (id, label) => ({ type: "doc", id, label });
+
+const apiCategory = (items) => ({
+  type: "category",
+  label: "API Documentation",
+  collapsed: true,
+  items,
+});
+
+const family = (label, root, apiItems) => ({
+  type: "category",
+  label,
+  collapsed: true,
+  items: [
+    doc(`${root}/quickstart`, "Quickstart"),
+    doc(`${root}/common-patterns`, "Common Patterns"),
+    apiCategory(apiItems),
+  ],
+});
+
 module.exports = {
   tutorialSidebar: [
-    {
-      type: 'doc',
-      id: 'intro',
-      label: 'Introduction',
-    },
-    {
-      type: 'category',
-      label: 'Real Life Example',
-      items: [
-        'real-life/index',
-        'real-life/project-structure',
-        'real-life/auth-service',
-        'real-life/logic-service',
-        'real-life/workers',
-        'real-life/frontend',
-        'real-life/sdk-generation',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Result',
-      items: [
-        'result/index',
-        'result/constructors',
-        'result/type-guards',
-        'result/transformations',
-        'result/extraction',
-        'result/pattern-matching',
-        'result/async',
-        'result/combinators',
-        'result/type-inference',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Server',
-      items: [
-        {
-          type: 'category',
-          label: 'Getting Started',
-          items: [
-            'getting-started/installation',
-            'getting-started/quickstart',
-            'getting-started/basic-routes',
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Core Concepts',
-          items: [
-            'core-concepts/input-validation',
-            'core-concepts/output-validation',
-            'core-concepts/result-type',
-            'core-concepts/error-handling',
-            'core-concepts/custom-context',
-            'core-concepts/middleware',
-            'core-concepts/reusable-procedures',
-            'core-concepts/combining-routers',
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Guides',
-          items: [
-            'guides/better-auth-integration',
-            'guides/protected-routes',
-            'guides/cors-configuration',
-            'guides/client-side-usage',
-            'guides/openapi-documentation',
-            'guides/openapi-to-typescript',
-            'guides/asyncapi-to-typescript',
-            'guides/ci-cd-sdk-generation',
-            'guides/telemetry',
-          ],
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Client',
-      items: [
-        {
-          type: 'category',
-          label: 'Getting Started',
-          items: [
-            'client/getting-started/installation',
-            'client/getting-started/quickstart',
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Core Concepts',
-          items: [
-            'client/core-concepts/basic-usage',
-            'client/core-concepts/validation',
-            'client/core-concepts/error-handling',
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Guides',
-          items: [
-            'client/guides/server-integration',
-          ],
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Kafka',
-      items: [
-        {
-          type: 'category',
-          label: 'Getting Started',
-          items: [
-            'kafka/getting-started/installation',
-            'kafka/getting-started/quickstart',
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Core Concepts',
-          items: [
-            'kafka/core-concepts/topics-and-procedures',
-            'kafka/core-concepts/consumers',
-            'kafka/core-concepts/producers',
-            'kafka/core-concepts/middleware',
-            'kafka/core-concepts/custom-context',
-            'kafka/core-concepts/error-handling',
-            'kafka/core-concepts/combining-routers',
-          ],
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Workers (WarpStream)',
-      items: [
-        {
-          type: 'category',
-          label: 'Getting Started',
-          items: [
-            'workers-warpstream/getting-started/installation',
-            'workers-warpstream/getting-started/quickstart',
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Core Concepts',
-          items: [
-            'workers-warpstream/core-concepts/routing-strategies',
-            'workers-warpstream/core-concepts/job-client',
-            'workers-warpstream/core-concepts/custom-context',
-            'workers-warpstream/core-concepts/middleware',
-            'workers-warpstream/core-concepts/error-handling',
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Guides',
-          items: [
-            'workers-warpstream/guides/sdk-generation',
-            'workers-warpstream/guides/telemetry',
-          ],
-        },
-      ],
-    },
+    doc("intro", "Overview"),
+    doc("start/package-map", "Choose Your Packages"),
+    family("Result", "result", [doc("result/api", "Result API")]),
+    family("Servers", "server", [
+      doc("server/api/core", "Core"),
+      doc("server/api/hono", "Hono"),
+      doc("server/api/express", "Express"),
+      doc("server/api/bun", "Bun"),
+      doc("server/api/nestjs", "NestJS"),
+      doc("server/api/tanstack-start", "TanStack Start"),
+    ]),
+    family("HTTP Clients", "http-client", [
+      doc("http-client/api/core", "Core"),
+      doc("http-client/api/fetch", "Fetch"),
+      doc("http-client/api/ky", "Ky"),
+      doc("http-client/api/rust-tokio", "Rust / Tokio"),
+    ]),
+    family("Kafka", "kafka", [
+      doc("kafka/api/core", "Core"),
+      doc("kafka/api/client-core", "Client Core"),
+      doc("kafka/api/kafkajs", "KafkaJS Client"),
+      doc("kafka/api/warpstream", "WarpStream Client"),
+    ]),
+    family("Workers", "workers", [
+      doc("workers/api/core", "Core"),
+      doc("workers/api/trigger", "Trigger.dev Runtime"),
+      doc("workers/api/warpstream", "WarpStream Runtime"),
+      doc("workers/api/client-core", "Client Core"),
+      doc("workers/api/client-trigger", "Trigger.dev Client"),
+      doc("workers/api/client-warpstream", "WarpStream Client"),
+    ]),
+    family("Schema & SDK Generation", "codegen", [
+      doc("codegen/api/zod-openapi", "OpenAPI → TypeScript / Zod"),
+      doc("codegen/api/pydantic-openapi", "OpenAPI → Python / Pydantic"),
+      doc("codegen/api/rust-openapi", "OpenAPI → Rust"),
+      doc("codegen/api/rust-crate-gen", "Rust Crate Generation"),
+      doc("codegen/api/zod-asyncapi", "AsyncAPI → TypeScript / Zod"),
+      doc("codegen/api/generated-sdks", "Generated SDK Shape"),
+    ]),
+    family("Utilities", "utilities", [
+      doc("utilities/api", "Zod Error Formatting"),
+    ]),
+    family("Altstack Together", "together", [
+      doc("together/documentation", "Integration Reference"),
+    ]),
   ],
 };

@@ -71,7 +71,7 @@ export const authApi = {
 
 export const logicApi = {
   async listTasks(token?: string) {
-    const result = await logicClient.get("/api/", {
+    const result = await logicClient.get("/api", {
       headers: token ? { authorization: `Bearer ${token}` } : undefined,
     });
     if (!result.success) throw new Error("Failed to list tasks");
@@ -79,7 +79,7 @@ export const logicApi = {
   },
 
   async createTask(token: string, data: { title: string; description?: string }) {
-    const result = await logicClient.post("/api/", {
+    const result = await logicClient.post("/api", {
       body: data,
       headers: { authorization: `Bearer ${token}` },
     });

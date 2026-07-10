@@ -4,8 +4,8 @@
   "scripts": {
     "dev": "pnpm -r run dev",
     "build": "pnpm -r run build",
-    "generate:all": "pnpm -r run generate",
-    "lint": "oxlint .",
+    "generate:all": "pnpm --filter @real-life/backend-auth generate && pnpm --filter @real-life/backend-logic generate && pnpm --filter @real-life/workers generate",
+    "lint": "oxlint . --ignore-pattern 'packages/*-sdk/src/index.ts' --deny-warnings",
     "lint:fix": "oxlint . --fix",
     "format": "oxlint . --fix",
     "format:check": "oxlint ."

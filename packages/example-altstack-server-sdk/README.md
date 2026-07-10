@@ -1,52 +1,30 @@
-# @alt-stack/example-altstack-server-sdk
+# `@alt-stack/example-altstack-server-sdk`
 
-Auto-generated TypeScript SDK for the altstack-server API.
+Generated TypeScript/Zod snapshot for the repository's example Altstack HTTP server.
 
-## Installation
+> This is route-specific generated output, not a hand-authored framework API. Regeneration may change any schema or route alias.
+
+## Use the snapshot
 
 ```bash
-npm install @alt-stack/example-altstack-server-sdk
-# or
-pnpm add @alt-stack/example-altstack-server-sdk
+pnpm add @alt-stack/example-altstack-server-sdk @alt-stack/http-client-fetch zod
 ```
-
-## Usage
 
 ```typescript
-import { Request, Response } from '@alt-stack/example-altstack-server-sdk';
+import { Request, Response } from "@alt-stack/example-altstack-server-sdk";
+import { createApiClient } from "@alt-stack/http-client-fetch";
 
-// Request contains Zod schemas for all API request inputs
-// Response contains Zod schemas for all API responses
-
-// Example: validate a todo creation request
-const body = Request['/api/todos'].POST.body.parse({
-  title: 'My Todo',
-  description: 'Optional description',
+const api = createApiClient({
+  baseUrl: "http://127.0.0.1:3000",
+  Request,
+  Response,
 });
-
-// Example: validate a response
-const todo = Response['/api/todos/{id}'].GET['200'].parse(apiResponse);
 ```
 
-## Generation
+Zod 4 is required as a peer. `src/index.ts` is generated and must not be hand-edited.
 
-This package is automatically generated from the `altstack-server` OpenAPI schema using the "Cut Example Server Version" GitHub Actions workflow.
+## Documentation
 
-**Do not manually edit `src/index.ts`** - changes will be overwritten on the next generation.
-
-### Regenerating
-
-1. Go to the repository's Actions tab
-2. Select "Cut Example Server Version" workflow
-3. Click "Run workflow"
-4. The workflow will:
-   - Analyze conventional commits to determine version bump
-   - Bump the server version
-   - Start the server and fetch the OpenAPI schema
-   - Generate TypeScript types using `@alt-stack/zod-openapi`
-   - Update this SDK package with matching version
-   - Commit all changes
-
-## License
-
-MIT
+- [Generated export inventory](../../apps/docs/docs/codegen/api/generated-sdks.md)
+- [Code generation Quickstart](../../apps/docs/docs/codegen/quickstart.md)
+- [HTTP client Quickstart](../../apps/docs/docs/http-client/quickstart.md)

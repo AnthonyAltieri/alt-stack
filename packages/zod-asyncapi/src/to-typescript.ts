@@ -19,7 +19,7 @@ function parseAsyncAPIChannels(spec: AsyncAPISpec): TopicInfo[] {
   const messages = spec.components?.messages ?? {};
   const schemas = spec.components?.schemas ?? {};
 
-  for (const [channelId, channel] of Object.entries(channels)) {
+  for (const channel of Object.values(channels)) {
     const topic = channel.address;
     const channelMessages = channel.messages ?? {};
 
@@ -247,6 +247,8 @@ export function asyncApiToZodTsCode(
   lines.push(" * Do not manually edit this file");
   lines.push(" */");
   lines.push("");
+  lines.push("/* eslint-disable no-useless-escape -- generated regex literals preserve source patterns */");
+  lines.push("");
   lines.push("import { z } from 'zod';");
   if (customImportLines) {
     lines.push(...customImportLines);
@@ -303,4 +305,3 @@ export function asyncApiToZodTsCode(
 
   return lines.join("\n");
 }
-

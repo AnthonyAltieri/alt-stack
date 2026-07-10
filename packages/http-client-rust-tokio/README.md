@@ -1,45 +1,40 @@
-# http-client-rust-tokio
+# `http-client-rust-tokio`
 
-Typed JSON HTTP client runtime for generated Rust OpenAPI SDKs.
+Reqwest/Tokio JSON runtime for generated Rust OpenAPI SDKs.
 
-## Features
+## Add to a crate
 
-- Async Tokio/reqwest transport
-- Path interpolation and query serialization helpers
-- Typed success/error JSON decoding
-- Simple request builder for path params, query, body, headers, and timeout
+```toml
+[dependencies]
+http-client-rust-tokio = { path = "../alt-stack/packages/http-client-rust-tokio" }
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+```
 
-## Usage
+This is currently a workspace crate in this repository. Replace the path with a version only when the crate is available from your configured Cargo registry. Generated SDK crates normally re-export the runtime as `default_http_client`.
+
+## Quick use
 
 ```rust
-use http_client_rust_tokio::{ApiClient, ApiClientOptions, JsonRequest};
-use serde::{Deserialize, Serialize};
+use http_client_rust_tokio::{ApiClient, ApiClientOptions, ApiResponse, JsonRequest};
 
-#[derive(Deserialize)]
-struct User {
-    id: String,
-    name: String,
-}
+let client = ApiClient::new(ApiClientOptions::new("http://127.0.0.1:3000"));
+let request = JsonRequest::new().with_path_param("id", "u_1");
 
-#[derive(Deserialize)]
-struct ApiError {
-    code: String,
-    message: String,
-}
+let response = client
+    .get::<User, ApiError>("/users/{id}", request)
+    .await?;
 
-#[derive(Serialize)]
-struct UsersQuery {
-    limit: u32,
-}
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = ApiClient::new(ApiClientOptions::new("https://api.example.com"));
-    let request = JsonRequest::new()
-        .with_query(&UsersQuery { limit: 10 })?;
-
-    let response = client.get::<Vec<User>, ApiError>("/users", request).await?;
-    println!("{}", response.status());
-    Ok(())
+match response {
+    ApiResponse::Success(value) => println!("{}", value.status),
+    ApiResponse::Error(value) => eprintln!("{}", value.status),
 }
 ```
+
+All 2xx statuses decode as `TSuccess`; all other statuses decode as `TError`. Serialization, transport, and deserialization failures use `ApiClientError`. The runtime does not add retries or OpenAPI constraint validation.
+
+## Documentation
+
+- [HTTP client Quickstart](../../apps/docs/docs/http-client/quickstart.md)
+- [Common Patterns](../../apps/docs/docs/http-client/common-patterns.md)
+- [Rust/Tokio API Documentation](../../apps/docs/docs/http-client/api/rust-tokio.md)

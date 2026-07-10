@@ -7,16 +7,17 @@ const darkCodeTheme = require('prism-react-renderer').themes.dracula;
 /** @type {import('@docusaurus/types').Config} */
 const config = {
   title: 'Altstack',
-  tagline: 'Type-safe server and client framework built on Hono with Zod validation',
+  tagline: 'Type-safe boundaries for HTTP, events, workers, and generated SDKs',
   favicon: 'img/favicon.ico',
   url: 'https://altstack-docs.vercel.app',
   baseUrl: '/',
-  organizationName: 'repo',
+  organizationName: 'AnthonyAltieri',
   projectName: 'altstack',
   onBrokenLinks: 'throw',
+  onBrokenAnchors: 'throw',
   markdown: {
     hooks: {
-      onBrokenMarkdownLinks: 'warn',
+      onBrokenMarkdownLinks: 'throw',
     },
   },
   i18n: {
@@ -72,7 +73,7 @@ const config = {
             type: 'docSidebar',
             sidebarId: 'tutorialSidebar',
             position: 'left',
-            label: 'Docs',
+            label: 'Documentation',
           },
           {
             href: 'https://github.com/AnthonyAltieri/altstack',
@@ -88,12 +89,16 @@ const config = {
             title: 'Docs',
             items: [
               {
-                label: 'Getting Started',
+                label: 'Overview',
                 to: '/',
               },
               {
-                label: 'Core Concepts',
-                to: '/core-concepts/input-validation',
+                label: 'Choose Your Packages',
+                to: '/start/package-map',
+              },
+              {
+                label: 'Altstack Together',
+                to: '/together/quickstart',
               },
             ],
           },
@@ -112,10 +117,9 @@ const config = {
       prism: {
         theme: lightCodeTheme,
         darkTheme: darkCodeTheme,
-        additionalLanguages: ['bash', 'json'],
+        additionalLanguages: ['bash', 'json', 'python', 'rust'],
       },
     }),
 };
 
 module.exports = config;
-

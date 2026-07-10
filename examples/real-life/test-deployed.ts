@@ -75,7 +75,7 @@ async function retryCurl<T>(
         continue;
       }
       return { ok: false, status: res.status, data };
-    } catch (e) {
+    } catch {
       if (attempt < maxAttempts) {
         debug(`Request failed, retry ${attempt}/${maxAttempts}...`);
         await Bun.sleep(attempt * 2000);
@@ -314,4 +314,3 @@ if (failed > 0) {
   console.log("");
   console.log(green("All tests passed!"));
 }
-

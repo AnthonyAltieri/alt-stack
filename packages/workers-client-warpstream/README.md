@@ -1,8 +1,12 @@
-# @alt-stack/workers-client-warpstream
+# `@alt-stack/workers-client-warpstream`
 
-WarpStream/Kafka client for type-safe worker triggering. Works with SDKs generated from AsyncAPI specs.
+Caller-side KafkaJS/WarpStream client typed and validated by a generated Zod job map. It publishes one topic per job and does not execute handlers.
 
-## Installation
+## Requirements
+
+- KafkaJS 2.x
+- Zod 3.25+ or Zod 4
+- pre-provisioned job topics
 
 ```bash
 pnpm add @alt-stack/workers-client-warpstream kafkajs zod
@@ -10,88 +14,33 @@ pnpm add @alt-stack/workers-client-warpstream kafkajs zod
 
 ## Usage
 
-### Generate SDK from Worker Router
-
-First, generate an AsyncAPI spec from your worker router:
-
 ```typescript
-// generate-spec.ts
-import { generateAsyncAPISpec } from "@alt-stack/workers-core";
-import { appRouter } from "./routers";
-import { writeFileSync } from "node:fs";
-
-const spec = generateAsyncAPISpec(appRouter, {
-  title: "Workers API",
-  version: "1.0.0",
-});
-
-writeFileSync("asyncapi.json", JSON.stringify(spec, null, 2));
-```
-
-Then generate TypeScript types:
-
-```bash
-npx asyncapi-to-zod asyncapi.json -o ./sdk/index.ts
-```
-
-### Trigger Workers
-
-```typescript
-import { Topics } from "./sdk";
 import { createWarpStreamClient } from "@alt-stack/workers-client-warpstream";
+import { Topics } from "./generated-jobs.js";
 
 const client = await createWarpStreamClient({
-  bootstrapServer: "my-cluster.warpstream.com:9092",
+  bootstrapServer: "localhost:9092",
+  clientId: "api-jobs",
+  topicPrefix: "jobs.",
   jobs: Topics,
 });
 
-// Type-safe: only valid job names and payloads allowed
-await client.trigger("send-welcome-email", {
-  userId: "123",
-  email: "user@example.com",
-});
-
-// Batch triggering
-await client.triggerBatch("process-image", [
-  { imageUrl: "https://example.com/1.jpg" },
-  { imageUrl: "https://example.com/2.jpg" },
-]);
+const run = await client.trigger("resize", { imageId: "img_123" });
+console.info(run.id);
 
 await client.disconnect();
 ```
 
-### Options
+The topic is the direct concatenation of prefix and job name. The client maps `idempotencyKey` to the Kafka key and `metadata` to headers, stamps `x-created-at`, and ignores `delay`/`maxRetries`. Returned IDs are local identifiers, not Kafka offsets or worker-run IDs.
 
-```typescript
-const client = await createWarpStreamClient({
-  bootstrapServer: "my-cluster.warpstream.com:9092",
-  jobs: Topics,
-  topicPrefix: "prod-",  // Topics become "prod-send-welcome-email", etc.
-  clientId: "my-producer",
-  onError: (error) => console.error("Error:", error),
-});
-```
+This generated client supports topic-per-job only. Use `@alt-stack/workers-warpstream#createJobClient` with a live router for single-queue envelopes or full KafkaJS configuration.
 
-## WarpStream Optimizations
+## Documentation
 
-This client uses WarpStream-recommended defaults:
-- LZ4 compression for better throughput
-- Extended connection timeout (10s)
-- Extended metadata max age (60s)
+- [Worker client contract](../../apps/docs/docs/workers/api/client-core.md)
+- [WarpStream client API](../../apps/docs/docs/workers/api/client-warpstream.md)
 
-## API
+## License
 
-### `createWarpStreamClient(options)`
-
-Creates a type-safe WarpStream client.
-
-Options:
-- `bootstrapServer` - WarpStream server URL (required)
-- `jobs` - Jobs map from generated SDK (required)
-- `topicPrefix` - Prefix for topic names (optional, default: "")
-- `clientId` - Kafka client ID (optional)
-- `producerConfig` - Override producer settings (optional)
-- `onError` - Error callback (optional)
-
-Returns a `Promise<WorkerClient>` instance.
+MIT
 
