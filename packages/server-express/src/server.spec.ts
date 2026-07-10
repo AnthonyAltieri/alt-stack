@@ -2,7 +2,14 @@ import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import request from "supertest";
 import { createServer } from "./server.js";
-import { Router, combineRouters, router, ok, type ExpressBaseContext } from "./index.js";
+import {
+  Router,
+  combineRouters,
+  router,
+  ok,
+  type ExpressBaseContext,
+  type ExpressCorsOptions,
+} from "./index.js";
 
 describe("createServer", () => {
   describe("basic routing", () => {
@@ -138,6 +145,120 @@ describe("createServer", () => {
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ success: true });
     });
+  });
+
+  describe("CORS", () => {
+    it("should apply the native cors defaults to actual responses when enabled", async () => {
+      const baseRouter = new Router();
+      const testRouter = router({
+        "/hello": baseRouter.procedure
+          .output(z.object({ message: z.string() }))
+          .get(() => ok({ message: "Hello" })),
+      });
+
+      const app = createServer({ "/api": testRouter }, { cors: true });
+      const res = await request(app)
+        .get("/api/hello")
+        .set("Origin", "https://client.example.com");
+
+      expect(res.status).toBe(200);
+      expect(res.headers["access-control-allow-origin"]).toBe("*");
+    });
+
+    it("should pass native cors options through for actual responses", async () => {
+      const baseRouter = new Router();
+      const testRouter = router({
+        "/hello": baseRouter.procedure
+          .output(z.object({ message: z.string() }))
+          .get(() => ok({ message: "Hello" })),
+      });
+
+      const app = createServer(
+        { "/api": testRouter },
+        {
+          cors: {
+            origin: "https://client.example.com",
+            credentials: true,
+            exposedHeaders: ["X-Request-Id"],
+          },
+        },
+      );
+      const res = await request(app)
+        .get("/api/hello")
+        .set("Origin", "https://client.example.com");
+
+      expect(res.status).toBe(200);
+      expect(res.headers["access-control-allow-origin"]).toBe(
+        "https://client.example.com",
+      );
+      expect(res.headers["access-control-allow-credentials"]).toBe("true");
+      expect(res.headers["access-control-expose-headers"]).toBe("X-Request-Id");
+    });
+
+    it("should handle preflight with a native options delegate before context creation", async () => {
+      const baseRouter = new Router();
+      const testRouter = router({
+        "/items": baseRouter.procedure
+          .input({ body: z.object({ name: z.string() }) })
+          .output(z.object({ created: z.boolean() }))
+          .post(() => ok({ created: true })),
+      });
+      let contextCalls = 0;
+      const cors: ExpressCorsOptions = (_req, callback) => {
+        callback(null, {
+          origin: "https://client.example.com",
+          methods: ["POST"],
+          allowedHeaders: ["Content-Type", "Authorization"],
+          optionsSuccessStatus: 200,
+        });
+      };
+
+      const app = createServer(
+        { "/api": testRouter },
+        {
+          cors,
+          createContext: () => {
+            contextCalls += 1;
+            return {};
+          },
+        },
+      );
+      const res = await request(app)
+        .options("/api/items")
+        .set("Origin", "https://client.example.com")
+        .set("Access-Control-Request-Method", "POST")
+        .set("Access-Control-Request-Headers", "Content-Type, Authorization");
+
+      expect(res.status).toBe(200);
+      expect(res.headers["access-control-allow-origin"]).toBe(
+        "https://client.example.com",
+      );
+      expect(res.headers["access-control-allow-methods"]).toBe("POST");
+      expect(res.headers["access-control-allow-headers"]).toBe(
+        "Content-Type,Authorization",
+      );
+      expect(contextCalls).toBe(0);
+    });
+
+    it.each([undefined, false] as const)(
+      "should skip cors middleware when configured as %s",
+      async (cors) => {
+        const baseRouter = new Router();
+        const testRouter = router({
+          "/hello": baseRouter.procedure
+            .output(z.object({ message: z.string() }))
+            .get(() => ok({ message: "Hello" })),
+        });
+
+        const app = createServer({ "/api": testRouter }, { cors });
+        const res = await request(app)
+          .get("/api/hello")
+          .set("Origin", "https://client.example.com");
+
+        expect(res.status).toBe(200);
+        expect(res.headers["access-control-allow-origin"]).toBeUndefined();
+      },
+    );
   });
 
   describe("custom context", () => {

@@ -35,13 +35,33 @@ serve({ fetch: app.fetch, port: 3000 });
 
 See the full [server quickstart](../../apps/docs/docs/server/quickstart.md).
 
+## CORS
+
+Use the `cors` option to install Hono's native `hono/cors` middleware before routes:
+
+```typescript
+const app = createServer(
+  { "/api": api },
+  {
+    cors: {
+      origin: "https://app.example.com",
+      allowHeaders: ["Content-Type", "Authorization"],
+      allowMethods: ["GET", "POST", "OPTIONS"],
+      credentials: true,
+    },
+  },
+);
+```
+
+Set `cors: true` for Hono's defaults or omit it to leave CORS disabled. Option objects use Hono's native CORS type without reshaping.
+
 ## Common Patterns
 
 - Extend `HonoBaseContext`, pass that type to `init()`, and return only application fields from `createContext(c)`; the adapter supplies `ctx.hono` and `ctx.span`.
 - Mount `createDocsRouter()` as another Altstack router to serve OpenAPI JSON and optional Swagger UI.
 - Return `ok(new Response(...))` for HTML, streams, redirects, or custom status codes.
 - Enable telemetry with `telemetry: true` or a config object after installing/configuring `@opentelemetry/api`.
-- Use `createServer().middleware` for simple native Hono handlers, or attach fully typed Hono middleware to the returned app.
+- Apply cross-cutting behavior with Alt Stack procedure middleware via `.use(...)`; `createServer()` does not accept native Hono app middleware.
 
 Current caveats: `createServer().docs` is declared but unused; create and mount a docs router explicitly. Hono attempts JSON parsing for every procedure and uses `{}` when parsing fails. Output schemas are parsed synchronously. Declared runtime errors are enveloped, but generated OpenAPI error schemas are flat.
 

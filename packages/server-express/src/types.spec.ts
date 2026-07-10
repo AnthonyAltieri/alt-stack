@@ -1,14 +1,22 @@
 import { describe, it, expectTypeOf } from "vitest";
 import type { Request, Response } from "express";
+import type expressCors from "cors";
 import type { BaseContext } from "@alt-stack/server-core";
 import {
   Router,
   combineRouters,
   ok,
   router,
+  type createServer,
+  type ExpressCorsOptions,
   type RouterRouteSignatures,
 } from "./index.js";
 import type { ExpressBaseContext } from "./types.js";
+
+type NativeExpressCorsOptions = NonNullable<
+  Parameters<typeof expressCors>[0]
+>;
+type CreateServerOptions = NonNullable<Parameters<typeof createServer>[1]>;
 
 describe("Express Types", () => {
   describe("ExpressBaseContext", () => {
@@ -72,5 +80,30 @@ describe("Express Types", () => {
       "GET /health" | "GET /users"
     >();
     expectTypeOf(combined).toMatchTypeOf<Router>();
+  });
+
+  describe("CORS", () => {
+    it("should expose the native cors middleware options", () => {
+      expectTypeOf<ExpressCorsOptions>().toEqualTypeOf<NativeExpressCorsOptions>();
+    });
+
+    it("should accept boolean or native cors options", () => {
+      expectTypeOf<CreateServerOptions["cors"]>().toEqualTypeOf<
+        boolean | ExpressCorsOptions | undefined
+      >();
+    });
+
+    it("should accept native static and delegated options", () => {
+      const staticOptions = {
+        origin: "https://client.example.com",
+        credentials: true,
+      } satisfies ExpressCorsOptions;
+      const delegatedOptions = ((_req, callback) => {
+        callback(null, { origin: true });
+      }) satisfies ExpressCorsOptions;
+
+      expectTypeOf(staticOptions).toMatchTypeOf<ExpressCorsOptions>();
+      expectTypeOf(delegatedOptions).toMatchTypeOf<ExpressCorsOptions>();
+    });
   });
 });

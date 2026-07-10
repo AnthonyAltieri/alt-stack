@@ -57,6 +57,11 @@ export type AltStackFileRouteOptions<
 > = {
   server: {
     handlers: TMethods & ValidateMethodsForTanStackPath<TPath, TMethods>;
+    /**
+     * TanStack Start does not provide a native CORS option. Configure CORS with
+     * TanStack Start request middleware or a custom server entry instead.
+     */
+    cors?: never;
   } & CreateTanStackRouteHandlersOptions<TContext, TParams, TRouteContext> &
     Record<string, unknown>;
 } & Record<string, unknown>;

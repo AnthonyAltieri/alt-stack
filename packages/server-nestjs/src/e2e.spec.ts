@@ -321,6 +321,17 @@ describe("NestJS E2E with Alt Stack router", () => {
 
     registerAltStack(app, { "/": apiRouter }, { mountPath: "/api" });
     registerAltStack(app, { "/": dedupeRouter }, { mountPath: "/v1/dedup" });
+    registerAltStack(
+      app,
+      { "/": dedupeRouter },
+      {
+        mountPath: "/v1/cors",
+        cors: {
+          origin: "https://app.example.com",
+          credentials: true,
+        },
+      },
+    );
 
     await app.init();
     server = app.getHttpServer();
@@ -469,6 +480,36 @@ describe("NestJS E2E with Alt Stack router", () => {
     expect(expected.status).toBe(200);
     expect(expected.body).toEqual({ ok: true });
     expect(doublePrefixed.status).toBe(404);
+  });
+
+  it("applies CORS only to the configured Alt Stack mount", async () => {
+    const origin = "https://app.example.com";
+    const alt = await dispatch(server, {
+      method: "GET",
+      url: "/v1/cors/ping",
+      headers: { origin },
+    });
+    const preflight = await dispatch(server, {
+      method: "OPTIONS",
+      url: "/v1/cors/ping",
+      headers: {
+        origin,
+        "access-control-request-method": "GET",
+      },
+    });
+    const controller = await dispatch(server, {
+      method: "GET",
+      url: "/v1/controller/users/123",
+      headers: { origin },
+    });
+
+    expect(alt.status).toBe(200);
+    expect(alt.headers["access-control-allow-origin"]).toBe(origin);
+    expect(alt.headers["access-control-allow-credentials"]).toBe("true");
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers["access-control-allow-origin"]).toBe(origin);
+    expect(controller.status).toBe(200);
+    expect(controller.headers["access-control-allow-origin"]).toBeUndefined();
   });
 
   it("matches request-scoped controller behavior on the same Nest app", async () => {

@@ -105,6 +105,34 @@ describe("registerAltStack()", () => {
     expect(expressUse).toHaveBeenCalledWith("/api", { __alt: true });
   });
 
+  test("forwards CORS options to the mount-scoped Express server", async () => {
+    const { registerAltStack } = await import("./register.js");
+    const { createServer } = await import("@alt-stack/server-express");
+
+    const expressUse = vi.fn();
+    const app = {
+      getHttpAdapter: () => ({
+        getInstance: () => ({ use: expressUse }),
+      }),
+      get: vi.fn(() => ({})),
+    };
+    const cors = {
+      origin: "https://app.example.com",
+      credentials: true,
+    } as const;
+
+    registerAltStack(app as any, { api: {} as any }, {
+      mountPath: "/api",
+      cors,
+    });
+
+    expect(createServer).toHaveBeenCalledWith(
+      { api: {} },
+      expect.objectContaining({ cors }),
+    );
+    expect(expressUse).toHaveBeenCalledWith("/api", { __alt: true });
+  });
+
   test("throws if the underlying platform is not Express", async () => {
     const { registerAltStack } = await import("./register.js");
 

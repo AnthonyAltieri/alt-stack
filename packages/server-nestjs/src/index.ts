@@ -112,6 +112,7 @@ export type {
 export { registerAltStack } from "./register.js";
 export type {
   NestAppLike,
+  NestCorsOptions,
   RegisterAltStackOptions,
   RegisterAltStackDocsOptions,
 } from "./register.js";
