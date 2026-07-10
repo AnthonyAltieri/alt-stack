@@ -9,7 +9,9 @@ import {
   ok,
   router,
   type NestBaseContext,
+  type NestCorsOptions,
   type NestServiceLocator,
+  type RegisterAltStackOptions,
   type RouterRouteSignatures,
 } from "./index.js";
 
@@ -80,5 +82,15 @@ describe("Nest Types", () => {
     expectTypeOf<RouterRouteSignatures<typeof combined>>().toEqualTypeOf<
       "GET /health" | "GET /users"
     >();
+  });
+
+  it("exposes the mount-scoped Express CORS options", () => {
+    const cors = {
+      origin: "https://app.example.com",
+      credentials: true,
+    } satisfies NestCorsOptions;
+    const options: RegisterAltStackOptions<Record<string, never>> = { cors };
+
+    expectTypeOf(options.cors).toMatchTypeOf<boolean | NestCorsOptions | undefined>();
   });
 });

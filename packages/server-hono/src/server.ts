@@ -1,5 +1,6 @@
 import type { Context, Hono } from "hono";
 import { Hono as HonoClass } from "hono";
+import { cors as honoCors } from "hono/cors";
 import type { z } from "zod";
 import type { ZodError } from "zod";
 import type { TypedContext, InputConfig, TelemetryOption } from "@alt-stack/server-core";
@@ -76,37 +77,43 @@ function serializeError(error: Error & { _tag: string }): object {
 
 import type { HonoBaseContext } from "./types.js";
 
+export type HonoCorsOptions = NonNullable<Parameters<typeof honoCors>[0]>;
+
+export interface CreateServerOptions<
+  TContext extends HonoBaseContext = HonoBaseContext,
+> {
+  createContext?: (
+    c: Context,
+  ) =>
+    | Promise<Omit<TContext, "hono" | "span">>
+    | Omit<TContext, "hono" | "span">;
+  docs?: {
+    path?: string;
+    openapiPath?: string;
+  };
+  defaultErrorHandlers?: {
+    default400Error: (
+      errors: Array<
+        [error: ZodError, variant: "body" | "param" | "query", value: unknown]
+      >,
+    ) => [z.ZodObject<any>, z.infer<z.ZodObject<any>>];
+    default500Error: (
+      error: unknown,
+    ) => [z.ZodObject<any>, z.infer<z.ZodObject<any>>];
+    default400ErrorSchema?: z.ZodObject<any>;
+    default500ErrorSchema?: z.ZodObject<any>;
+  };
+  /** Enable OpenTelemetry tracing */
+  telemetry?: TelemetryOption;
+  /** Configure Hono's native CORS middleware; `true` uses Hono defaults. */
+  cors?: boolean | HonoCorsOptions;
+}
+
 export function createServer<
   TContext extends HonoBaseContext = HonoBaseContext,
 >(
   config: Record<string, Router<TContext>>,
-  options?: {
-    createContext?: (c: Context) => Promise<Omit<TContext, "hono" | "span">> | Omit<TContext, "hono" | "span">;
-    middleware?: {
-      [path: string]: {
-        methods: string[];
-        handler: (c: Context) => Promise<Response> | Response;
-      };
-    };
-    docs?: {
-      path?: string;
-      openapiPath?: string;
-    };
-    defaultErrorHandlers?: {
-      default400Error: (
-        errors: Array<
-          [error: ZodError, variant: "body" | "param" | "query", value: unknown]
-        >,
-      ) => [z.ZodObject<any>, z.infer<z.ZodObject<any>>];
-      default500Error: (
-        error: unknown,
-      ) => [z.ZodObject<any>, z.infer<z.ZodObject<any>>];
-      default400ErrorSchema?: z.ZodObject<any>;
-      default500ErrorSchema?: z.ZodObject<any>;
-    };
-    /** Enable OpenTelemetry tracing */
-    telemetry?: TelemetryOption;
-  },
+  options?: CreateServerOptions<TContext>,
 ): Hono {
   const app = new HonoClass();
   const telemetryConfig = resolveTelemetryConfig(options?.telemetry);
@@ -116,32 +123,8 @@ export function createServer<
     initTelemetry();
   }
 
-  // Apply middleware handlers before framework routes
-  if (options?.middleware) {
-    for (const [path, routeConfig] of Object.entries(options.middleware)) {
-      if (path === "*") {
-        // Apply as global middleware using app.use
-        // The handler can be a Hono middleware function (accepts next) or regular handler
-        // Check if handler is middleware-style by checking if it accepts 2 parameters
-        const handler = routeConfig.handler;
-        if (handler.length === 2) {
-          // Middleware function (c, next) - use directly
-          app.use("*", handler as any);
-        } else {
-          // Regular handler (c) - wrap it to work with app.use
-          app.use("*", async (c, next) => {
-            const result = await handler(c);
-            if (result instanceof Response) {
-              return result;
-            }
-            await next();
-          });
-        }
-      } else {
-        // Apply as route handler using app.on
-        app.on(routeConfig.methods, path, routeConfig.handler);
-      }
-    }
+  if (options?.cors) {
+    app.use("*", options.cors === true ? honoCors() : honoCors(options.cors));
   }
 
   // Collect all procedures from all routers

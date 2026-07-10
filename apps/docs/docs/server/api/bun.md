@@ -32,6 +32,10 @@ Unlike the Hono and Express adapters, this function starts a listener immediatel
 | `port` | `number`; default `3000` | Passed to `Bun.serve()`. Use `0` for an ephemeral port in tests. |
 | `hostname` | `string`; default `"0.0.0.0"` | Passed to `Bun.serve()`. |
 
+### CORS
+
+`Bun.serve()` does not provide a dedicated CORS option or middleware for Altstack to map, so this adapter does not expose `cors`. Configure CORS in a reverse proxy or implement it explicitly with Bun's routing and `Request`/`Response` APIs.
+
 ```typescript
 const server = createServer(
   { "/api": api },

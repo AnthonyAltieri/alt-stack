@@ -3844,6 +3844,10 @@ Unlike the Hono and Express adapters, this function starts a listener immediatel
 | `port` | `number`; default `3000` | Passed to `Bun.serve()`. Use `0` for an ephemeral port in tests. |
 | `hostname` | `string`; default `"0.0.0.0"` | Passed to `Bun.serve()`. |
 
+### CORS
+
+`Bun.serve()` does not provide a dedicated CORS option or middleware for Altstack to map, so this adapter does not expose `cors`. Configure CORS in a reverse proxy or implement it explicitly with Bun's routing and `Request`/`Response` APIs.
+
 ```typescript
 const server = createServer(
   { "/api": api },
@@ -4420,13 +4424,14 @@ function createServer<TContext extends ExpressBaseContext = ExpressBaseContext>(
 ): Express;
 ```
 
-The function creates a new Express application, installs `express.json()`, registers Altstack routes, and returns the app. It does not listen on a port. Each prefix accepts one router; call `combineRouters()` before mounting multiple independent routers at the same prefix.
+The function creates a new Express application, optionally installs the Express-maintained `cors` middleware, installs `express.json()`, registers Altstack routes, and returns the app. It does not listen on a port. Each prefix accepts one router; call `combineRouters()` before mounting multiple independent routers at the same prefix.
 
 `ExpressServerOptions` is an anonymous public parameter shape:
 
 | Property | Type / default | Runtime behavior |
 | --- | --- | --- |
 | `basePath` | `string`; no routing default | Used only as a fallback prefix in telemetry's `http.route` when `req.baseUrl` is empty. It does **not** mount or prefix routes. |
+| `cors` | `boolean \| ExpressCorsOptions`; default disabled | `true` installs the official `cors` middleware with native defaults. A native options object or per-request delegate is passed through unchanged. |
 | `createContext` | `(req, res) => Omit<TContext, "express" \| "span"> \| Promise<...>` | Runs after input validation for each matched procedure. |
 | `defaultErrorHandlers` | resolved handlers from `init()` or the same shape | Customizes 400/500 payloads. Both callbacks are required when supplied; optional schema properties are ignored by the adapter. |
 | `telemetry` | `boolean \| TelemetryConfig`; default disabled | Creates OpenTelemetry server spans except ignored routes. |
@@ -4441,6 +4446,10 @@ const parent = express();
 parent.use("/v1", createServer({ "/api": api }));
 parent.listen(3000);
 ```
+
+### CORS
+
+`ExpressCorsOptions` is derived from the official `cors` middleware rather than an Altstack-owned policy shape. CORS runs before JSON parsing and generated routes, so the native middleware owns preflight status, headers, defaults, and dynamic option delegates.
 
 The adapter converts `{param}` to Express `:param`, reads `req.params`, `req.query`, and `req.body`, validates input asynchronously, and supplies:
 
@@ -4569,18 +4578,18 @@ The adapter supports Hono 4 and Zod 4. It returns a Hono app but does not choose
 ```typescript
 function createServer<TContext extends HonoBaseContext = HonoBaseContext>(
   config: Record<string, Router<TContext>>,
-  options?: HonoServerOptions<TContext>,
+  options?: CreateServerOptions<TContext>,
 ): Hono;
 ```
 
 Each prefix accepts one router. Call `combineRouters()` before mounting multiple independent routers at the same prefix.
 
-`HonoServerOptions` is an anonymous public parameter shape rather than a named export:
+`CreateServerOptions` is exported by `@alt-stack/server-hono`:
 
 | Property | Type / default | Runtime behavior |
 | --- | --- | --- |
 | `createContext` | `(c: Context) => Omit<TContext, "hono" \| "span"> \| Promise<...>` | Runs after input validation for every matched procedure. Its fields are spread before adapter-owned context. |
-| `middleware` | map of path to `{ methods: string[]; handler(c): Response \| Promise<Response> }` | Registers native Hono handlers before Altstack routes. `"*"` uses `app.use`; other paths use `app.on(methods, path, handler)`. |
+| `cors` | `boolean \| HonoCorsOptions`; default disabled | `true` installs Hono's native `hono/cors` middleware with its defaults. A native options object is passed through unchanged. |
 | `docs` | `{ path?: string; openapiPath?: string }` | **Currently unused.** It does not create or mount docs. Use `createDocsRouter()` explicitly. |
 | `defaultErrorHandlers` | resolved handlers from `init()` or the same shape | Customizes validation and uncaught-error payloads. Both callbacks are required when the object is supplied; schema properties are optional and ignored by the adapter. |
 | `telemetry` | `boolean \| TelemetryConfig`; default disabled | Creates OpenTelemetry server spans except ignored routes. |
@@ -4609,16 +4618,20 @@ Only GET, POST, PUT, PATCH, and DELETE procedures are registered. Unknown routes
 
 See [Error wire formats and OpenAPI](../common-patterns.md#error-wire-formats-and-openapi) for the schema mismatch.
 
-### Native Hono middleware
+### Middleware boundary
 
-The declared `middleware` handler accepts one `Context` argument. Runtime code special-cases a JavaScript function whose `.length` is 2 as Hono `(c, next)` middleware, but that two-argument form is not represented by the public TypeScript option. Prefer attaching fully typed Hono middleware to the returned app when you need Hono's native middleware signature:
+`createServer()` does not accept arbitrary Hono middleware. Define application policies with Altstack procedure middleware so context narrowing, typed errors, and handler composition remain inside the shared server contract:
 
 ```typescript
-const app = createServer({ "/api": api });
-app.use("*", logger());
+const protectedProcedure = t.procedure.use(async ({ ctx, next }) => {
+  const actor = await authenticate(ctx.hono.req);
+  return actor
+    ? next({ ctx: { actor } })
+    : err(new UnauthorizedError("Sign in required"));
+});
 ```
 
-Native handlers supplied through `options.middleware` are registered before Altstack routes and can short-circuit them.
+The dedicated `cors` option is the only adapter-owned native middleware hook. `HonoCorsOptions` is derived from `hono/cors`, and the adapter installs it before generated routes without reshaping its behavior.
 
 ## `createDocsRouter(config, options?)`
 
@@ -4742,6 +4755,7 @@ Call `app.setGlobalPrefix(...)` before `registerAltStack()` so the current prefi
 | `createContext` | omitted | `(req, res) => TCustomContext \| Promise<TCustomContext>`. Runs through the Express adapter. |
 | `defaultErrorHandlers` | omitted | Resolved 400/500 handlers, usually `factory.defaultErrorHandlers`. |
 | `telemetry` | disabled | `boolean \| TelemetryConfig`, forwarded to Express. |
+| `cors` | disabled | `boolean \| NestCorsOptions`, forwarded unchanged to the mounted Altstack Express child. |
 | `respectGlobalPrefix` | `true` | Prepends Nest's global prefix unless `mountPath` already equals or begins with it. |
 | `docs` | omitted | Mounts the Express docs router beneath the effective mount path. |
 
@@ -4759,6 +4773,8 @@ Request context is assembled in this order:
 3. adapter-owned `nest`, `express`, `input`, and `span` fields.
 
 The generated docs spec uses the prefixes in `config`, not the effective Nest/Express `mountPath`. A global prefix and `mountPath` therefore do not appear automatically in `spec.paths`, even though the docs router itself is mounted beneath them.
+
+`NestCorsOptions` aliases the Express adapter's native-derived CORS type. This option is mount-scoped: it applies to the Altstack child application, not unrelated Nest controllers. Use Nest's `app.enableCors()` when CORS should cover the entire Nest application.
 
 ### `RegisterAltStackDocsOptions`
 
@@ -4998,6 +5014,7 @@ This type preserves TanStack's open route/server option space while requiring:
 {
   server: {
     handlers: TanStackRouteMethods;
+    cors?: never;
     createContext?: CreateTanStackRouteHandlersOptions["createContext"];
     defaultErrorHandlers?: CreateTanStackRouteHandlersOptions["defaultErrorHandlers"];
     // other TanStack server options are allowed
@@ -5007,6 +5024,10 @@ This type preserves TanStack's open route/server option space while requiring:
 ```
 
 Top-level options and extra server options are forwarded to `createFileRoute()`. Altstack consumes `handlers`, `createContext`, and `defaultErrorHandlers`; it replaces the handler values with adapted TanStack handlers.
+
+### CORS
+
+TanStack Start has generic request middleware and native `Request`/`Response` primitives, but it does not provide a dedicated CORS option or helper for Altstack to map. The adapter therefore rejects `server.cors` instead of synthesizing policy or preflight behavior. Configure CORS through Start's global `requestMiddleware`, route-level `server.middleware`, or a custom server entry.
 
 ### Dynamic path validation
 
@@ -5478,6 +5499,22 @@ Calling `next({ ctx: patch })` shallow-merges the patch and narrows the context 
 
 There is a current runtime limitation: when a core `Router` materializes a procedure, it does not preserve the flag that distinguishes Result-specific middleware. Adapters still recognize a top-level `err(...)` result, but the Result-shaped downstream `next()` contract of `createMiddlewareWithErrors()` is not reliable after router registration. Prefer the inline pattern above for server procedures. The standalone Nest `createNestMiddleware()` bridge does preserve the Result-specific flag.
 
+## Configure framework-owned CORS
+
+Altstack exposes `cors` only when an adapter can delegate to a framework-owned facility. Omit it or pass `false` to disable CORS, pass `true` for native defaults, or pass that adapter's native options unchanged.
+
+| Adapter | Mapping | Scope |
+| --- | --- | --- |
+| Hono | built-in `hono/cors` | returned Altstack Hono app |
+| Express | Express-maintained `cors` package | returned Altstack Express app |
+| NestJS | Express CORS through the mounted child app | only the Altstack mount |
+| Bun | unsupported; no native CORS facility | configure externally or with Bun APIs |
+| TanStack Start | unsupported; no dedicated CORS option | use Start request middleware or a custom server entry |
+
+Native option names intentionally differ. Hono uses `allowMethods`, `allowHeaders`, and `exposeHeaders`; Express and Nest use `methods`, `allowedHeaders`, and `exposedHeaders`. Altstack does not derive methods, generate preflight handlers, or normalize defaults.
+
+The dedicated Hono `cors` option does not reopen a generic framework-middleware boundary. Use `.procedure.use(...)`, `createMiddleware()`, or `createMiddlewareWithErrors()` for application policies.
+
 ## Compose routers by path
 
 The key in a router config is a path or prefix. Leading slashes are optional; stored procedure paths are normalized with a leading slash. Use OpenAPI braces for parameters.
@@ -5793,7 +5830,7 @@ By default raw `params`, `query`, and `body` are exposed on `ctx.input`, tagged 
 
 ## Adapter-specific routing notes
 
-- **Hono:** `createServer().middleware` can register native Hono handlers before Altstack routes. The special `"*"` path uses `app.use`; other entries use `app.on(methods, path, handler)`.
+- **Hono:** app construction rejects arbitrary native middleware; compose application policy through Altstack procedure middleware. The dedicated `cors` option maps only Hono's built-in CORS facility.
 - **Express:** mount the returned app on a parent for a real base path. `basePath` only changes telemetry labels.
 - **Bun:** `port` defaults to 3000 and `hostname` to `0.0.0.0`; unmatched routes return a JSON 404 envelope.
 - **NestJS:** only the Express platform is supported. `respectGlobalPrefix` defaults to true and avoids double-prefixing an already-prefixed `mountPath`.

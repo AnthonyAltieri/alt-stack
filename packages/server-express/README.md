@@ -32,6 +32,26 @@ app.listen(3000);
 
 See the full [server quickstart](../../apps/docs/docs/server/quickstart.md).
 
+## CORS
+
+Use the adapter's `cors` option to install the Express project's official `cors` middleware before body parsing and routes:
+
+```typescript
+const app = createServer(
+  { "/api": api },
+  {
+    cors: {
+      origin: "https://app.example.com",
+      allowedHeaders: ["Content-Type", "Authorization"],
+      methods: ["GET", "POST", "OPTIONS"],
+      credentials: true,
+    },
+  },
+);
+```
+
+Set `cors: true` for the middleware's native defaults or `cors: false` to disable it. Static native options and the native per-request options delegate are accepted unchanged.
+
 ## Common Patterns
 
 - Extend `ExpressBaseContext`, pass that type to `init()`, and return application fields from `createContext(req, res)`; the adapter supplies `ctx.express` and `ctx.span`.

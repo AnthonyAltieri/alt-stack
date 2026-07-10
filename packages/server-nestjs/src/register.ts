@@ -3,7 +3,10 @@ import type { z } from "zod";
 import type { ZodError } from "zod";
 import type { TelemetryOption, Router } from "@alt-stack/server-core";
 import { createDocsRouter, createServer } from "@alt-stack/server-express";
-import type { CreateDocsRouterOptions } from "@alt-stack/server-express";
+import type {
+  CreateDocsRouterOptions,
+  ExpressCorsOptions,
+} from "@alt-stack/server-express";
 import { createNestLocator } from "./nest-locator.js";
 import { readAltStackRequestContext } from "./request-context.js";
 import type { NestBaseContext } from "./types.js";
@@ -33,6 +36,8 @@ export type RegisterAltStackDocsOptions = CreateDocsRouterOptions & {
   path?: string;
 };
 
+export type NestCorsOptions = ExpressCorsOptions;
+
 export interface RegisterAltStackOptions<TCustomContext extends object> {
   /** Base path to mount Alt Stack onto the Nest HTTP server (default: `/`) */
   mountPath?: string;
@@ -42,6 +47,8 @@ export interface RegisterAltStackOptions<TCustomContext extends object> {
   defaultErrorHandlers?: DefaultErrorHandlers;
   /** Enable OpenTelemetry tracing */
   telemetry?: TelemetryOption;
+  /** Configure native Express CORS for this Alt Stack mount; `true` uses its defaults. */
+  cors?: boolean | NestCorsOptions;
   /**
    * If `true` (default), prepend Nest's global prefix to `mountPath`
    * while avoiding double-prefixing when `mountPath` already includes it.
@@ -145,6 +152,7 @@ export function registerAltStack<TCustomContext extends object = {}>(
     },
     defaultErrorHandlers: options?.defaultErrorHandlers,
     telemetry: options?.telemetry,
+    cors: options?.cors,
   });
 
   expressApp.use(mountPath, altApp);

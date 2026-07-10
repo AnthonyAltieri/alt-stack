@@ -37,6 +37,10 @@ Use uppercase method keys with pending `.handler()` procedures. `$id` is recorde
 
 See the full [server quickstart](../../apps/docs/docs/server/quickstart.md).
 
+## CORS
+
+This adapter has no `cors` option because TanStack Start exposes no dedicated native CORS facility. Configure CORS through Start request or route middleware, or a custom server entry; Alt Stack does not synthesize a CORS policy or preflight handler.
+
 ## Common Patterns
 
 - Put application context creation in `server.createContext({ request, params, context })`; the adapter supplies `ctx.tanstack`.

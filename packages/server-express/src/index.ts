@@ -166,6 +166,7 @@ export function combineRouters<
 
 // Export Express-specific functionality
 export { createServer } from "./server.js";
+export type { ExpressCorsOptions } from "./server.js";
 export { createDocsRouter } from "./docs.js";
 export type { CreateDocsRouterOptions } from "./docs.js";
 export type { ExpressBaseContext } from "./types.js";

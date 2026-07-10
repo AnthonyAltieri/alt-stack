@@ -1,4 +1,5 @@
 import express from "express";
+import expressCors from "cors";
 import type { Express, Request, Response, NextFunction } from "express";
 import type { z } from "zod";
 import type { ZodError } from "zod";
@@ -71,10 +72,16 @@ function serializeError(error: Error & { _tag: string }): object {
 
 import type { ExpressBaseContext } from "./types.js";
 
+export type ExpressCorsOptions = NonNullable<
+  Parameters<typeof expressCors>[0]
+>;
+
 export function createServer<TContext extends ExpressBaseContext = ExpressBaseContext>(
   config: Record<string, Router<TContext>>,
   options?: {
     basePath?: string;
+    /** Configure the official Express CORS middleware; `true` uses its defaults. */
+    cors?: boolean | ExpressCorsOptions;
     createContext?: (req: Request, res: Response) => Promise<Omit<TContext, "express" | "span">> | Omit<TContext, "express" | "span">;
     defaultErrorHandlers?: {
       default400Error: (
@@ -98,6 +105,12 @@ export function createServer<TContext extends ExpressBaseContext = ExpressBaseCo
   // Initialize telemetry if enabled
   if (telemetryConfig.enabled) {
     initTelemetry();
+  }
+
+  if (options?.cors === true) {
+    app.use(expressCors());
+  } else if (options?.cors) {
+    app.use(expressCors(options.cors));
   }
 
   // Parse JSON bodies

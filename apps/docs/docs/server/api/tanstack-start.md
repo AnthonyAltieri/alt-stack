@@ -50,6 +50,7 @@ This type preserves TanStack's open route/server option space while requiring:
 {
   server: {
     handlers: TanStackRouteMethods;
+    cors?: never;
     createContext?: CreateTanStackRouteHandlersOptions["createContext"];
     defaultErrorHandlers?: CreateTanStackRouteHandlersOptions["defaultErrorHandlers"];
     // other TanStack server options are allowed
@@ -59,6 +60,10 @@ This type preserves TanStack's open route/server option space while requiring:
 ```
 
 Top-level options and extra server options are forwarded to `createFileRoute()`. Altstack consumes `handlers`, `createContext`, and `defaultErrorHandlers`; it replaces the handler values with adapted TanStack handlers.
+
+### CORS
+
+TanStack Start has generic request middleware and native `Request`/`Response` primitives, but it does not provide a dedicated CORS option or helper for Altstack to map. The adapter therefore rejects `server.cors` instead of synthesizing policy or preflight behavior. Configure CORS through Start's global `requestMiddleware`, route-level `server.middleware`, or a custom server entry.
 
 ### Dynamic path validation
 

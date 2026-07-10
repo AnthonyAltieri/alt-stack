@@ -39,6 +39,7 @@ Call `app.setGlobalPrefix(...)` before `registerAltStack()` so the current prefi
 | `createContext` | omitted | `(req, res) => TCustomContext \| Promise<TCustomContext>`. Runs through the Express adapter. |
 | `defaultErrorHandlers` | omitted | Resolved 400/500 handlers, usually `factory.defaultErrorHandlers`. |
 | `telemetry` | disabled | `boolean \| TelemetryConfig`, forwarded to Express. |
+| `cors` | disabled | `boolean \| NestCorsOptions`, forwarded unchanged to the mounted Altstack Express child. |
 | `respectGlobalPrefix` | `true` | Prepends Nest's global prefix unless `mountPath` already equals or begins with it. |
 | `docs` | omitted | Mounts the Express docs router beneath the effective mount path. |
 
@@ -56,6 +57,8 @@ Request context is assembled in this order:
 3. adapter-owned `nest`, `express`, `input`, and `span` fields.
 
 The generated docs spec uses the prefixes in `config`, not the effective Nest/Express `mountPath`. A global prefix and `mountPath` therefore do not appear automatically in `spec.paths`, even though the docs router itself is mounted beneath them.
+
+`NestCorsOptions` aliases the Express adapter's native-derived CORS type. This option is mount-scoped: it applies to the Altstack child application, not unrelated Nest controllers. Use Nest's `app.enableCors()` when CORS should cover the entire Nest application.
 
 ### `RegisterAltStackDocsOptions`
 

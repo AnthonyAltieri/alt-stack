@@ -167,6 +167,7 @@ export function combineRouters<
 
 // Export Hono-specific functionality
 export { createServer } from "./server.js";
+export type { CreateServerOptions, HonoCorsOptions } from "./server.js";
 export { createDocsRouter } from "./docs.js";
 export type { CreateDocsRouterOptions } from "./docs.js";
 export type { HonoBaseContext } from "./types.js";

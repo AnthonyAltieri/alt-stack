@@ -16,18 +16,18 @@ The adapter supports Hono 4 and Zod 4. It returns a Hono app but does not choose
 ```typescript
 function createServer<TContext extends HonoBaseContext = HonoBaseContext>(
   config: Record<string, Router<TContext>>,
-  options?: HonoServerOptions<TContext>,
+  options?: CreateServerOptions<TContext>,
 ): Hono;
 ```
 
 Each prefix accepts one router. Call `combineRouters()` before mounting multiple independent routers at the same prefix.
 
-`HonoServerOptions` is an anonymous public parameter shape rather than a named export:
+`CreateServerOptions` is exported by `@alt-stack/server-hono`:
 
 | Property | Type / default | Runtime behavior |
 | --- | --- | --- |
 | `createContext` | `(c: Context) => Omit<TContext, "hono" \| "span"> \| Promise<...>` | Runs after input validation for every matched procedure. Its fields are spread before adapter-owned context. |
-| `middleware` | map of path to `{ methods: string[]; handler(c): Response \| Promise<Response> }` | Registers native Hono handlers before Altstack routes. `"*"` uses `app.use`; other paths use `app.on(methods, path, handler)`. |
+| `cors` | `boolean \| HonoCorsOptions`; default disabled | `true` installs Hono's native `hono/cors` middleware with its defaults. A native options object is passed through unchanged. |
 | `docs` | `{ path?: string; openapiPath?: string }` | **Currently unused.** It does not create or mount docs. Use `createDocsRouter()` explicitly. |
 | `defaultErrorHandlers` | resolved handlers from `init()` or the same shape | Customizes validation and uncaught-error payloads. Both callbacks are required when the object is supplied; schema properties are optional and ignored by the adapter. |
 | `telemetry` | `boolean \| TelemetryConfig`; default disabled | Creates OpenTelemetry server spans except ignored routes. |
@@ -56,16 +56,20 @@ Only GET, POST, PUT, PATCH, and DELETE procedures are registered. Unknown routes
 
 See [Error wire formats and OpenAPI](../common-patterns.md#error-wire-formats-and-openapi) for the schema mismatch.
 
-### Native Hono middleware
+### Middleware boundary
 
-The declared `middleware` handler accepts one `Context` argument. Runtime code special-cases a JavaScript function whose `.length` is 2 as Hono `(c, next)` middleware, but that two-argument form is not represented by the public TypeScript option. Prefer attaching fully typed Hono middleware to the returned app when you need Hono's native middleware signature:
+`createServer()` does not accept arbitrary Hono middleware. Define application policies with Altstack procedure middleware so context narrowing, typed errors, and handler composition remain inside the shared server contract:
 
 ```typescript
-const app = createServer({ "/api": api });
-app.use("*", logger());
+const protectedProcedure = t.procedure.use(async ({ ctx, next }) => {
+  const actor = await authenticate(ctx.hono.req);
+  return actor
+    ? next({ ctx: { actor } })
+    : err(new UnauthorizedError("Sign in required"));
+});
 ```
 
-Native handlers supplied through `options.middleware` are registered before Altstack routes and can short-circuit them.
+The dedicated `cors` option is the only adapter-owned native middleware hook. `HonoCorsOptions` is derived from `hono/cors`, and the adapter installs it before generated routes without reshaping its behavior.
 
 ## `createDocsRouter(config, options?)`
 

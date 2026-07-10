@@ -87,6 +87,90 @@ describe("createServer", () => {
     });
   });
 
+  describe("CORS", () => {
+    it("should apply Hono's default CORS policy when enabled", async () => {
+      const baseRouter = new Router();
+      const testRouter = router({
+        "/hello": baseRouter.procedure
+          .output(z.object({ message: z.string() }))
+          .get(() => ok({ message: "Hello, World!" })),
+      });
+      const app = createServer({ "/api": testRouter }, { cors: true });
+
+      const res = await app.fetch(
+        new Request("http://localhost/api/hello", {
+          method: "OPTIONS",
+          headers: {
+            Origin: "https://client.example",
+            "Access-Control-Request-Method": "GET",
+          },
+        }),
+      );
+
+      expect(res.status).toBe(204);
+      expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
+      expect(res.headers.get("Access-Control-Allow-Methods")).toContain("GET");
+    });
+
+    it("should apply native CORS options to Alt Stack middleware responses", async () => {
+      const allowedOrigin = "https://client.example";
+      let middlewareCalls = 0;
+      const baseRouter = new Router();
+      const testRouter = router({
+        "/hello": baseRouter.procedure
+          .use(async ({ next }) => {
+            middlewareCalls += 1;
+            return next();
+          })
+          .output(z.object({ message: z.string() }))
+          .get(() => ok({ message: "Hello, World!" })),
+      });
+      const app = createServer(
+        { "/api": testRouter },
+        {
+          cors: {
+            origin: allowedOrigin,
+            credentials: true,
+          },
+        },
+      );
+
+      const res = await app.fetch(
+        new Request("http://localhost/api/hello", {
+          headers: { Origin: allowedOrigin },
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toEqual({ message: "Hello, World!" });
+      expect(middlewareCalls).toBe(1);
+      expect(res.headers.get("Access-Control-Allow-Origin")).toBe(allowedOrigin);
+      expect(res.headers.get("Access-Control-Allow-Credentials")).toBe("true");
+    });
+
+    it.each([undefined, false] as const)(
+      "should omit CORS middleware when configured as %s",
+      async (cors) => {
+        const baseRouter = new Router();
+        const testRouter = router({
+          "/hello": baseRouter.procedure
+            .output(z.object({ message: z.string() }))
+            .get(() => ok({ message: "Hello, World!" })),
+        });
+        const app = createServer({ "/api": testRouter }, { cors });
+
+        const res = await app.fetch(
+          new Request("http://localhost/api/hello", {
+            headers: { Origin: "https://client.example" },
+          }),
+        );
+
+        expect(res.status).toBe(200);
+        expect(res.headers.has("Access-Control-Allow-Origin")).toBe(false);
+      },
+    );
+  });
+
   describe("custom context", () => {
     it("should provide custom context to handlers", async () => {
       interface AppContext extends HonoBaseContext {

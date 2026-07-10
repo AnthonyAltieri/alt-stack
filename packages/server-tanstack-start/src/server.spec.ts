@@ -388,6 +388,20 @@ describe("TanStack Start server adapter", () => {
     );
   });
 
+  it("does not expose a synthetic TanStack CORS option", () => {
+    const route = createAltStackFileRoute("/api/todos")({
+      server: {
+        // @ts-expect-error - TanStack Start has no native CORS option
+        cors: true,
+        handlers: {
+          GET: procedure.handler(() => ok({ todos: [] })),
+        },
+      },
+    });
+
+    expect(route.altStack.server.handlers.GET).toBeDefined();
+  });
+
   it("requires params schemas for TanStack dynamic route segments", () => {
     const _route = createAltStackFileRoute("/api/todos/$id")({
       server: {

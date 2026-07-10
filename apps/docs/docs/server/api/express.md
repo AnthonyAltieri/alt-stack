@@ -20,13 +20,14 @@ function createServer<TContext extends ExpressBaseContext = ExpressBaseContext>(
 ): Express;
 ```
 
-The function creates a new Express application, installs `express.json()`, registers Altstack routes, and returns the app. It does not listen on a port. Each prefix accepts one router; call `combineRouters()` before mounting multiple independent routers at the same prefix.
+The function creates a new Express application, optionally installs the Express-maintained `cors` middleware, installs `express.json()`, registers Altstack routes, and returns the app. It does not listen on a port. Each prefix accepts one router; call `combineRouters()` before mounting multiple independent routers at the same prefix.
 
 `ExpressServerOptions` is an anonymous public parameter shape:
 
 | Property | Type / default | Runtime behavior |
 | --- | --- | --- |
 | `basePath` | `string`; no routing default | Used only as a fallback prefix in telemetry's `http.route` when `req.baseUrl` is empty. It does **not** mount or prefix routes. |
+| `cors` | `boolean \| ExpressCorsOptions`; default disabled | `true` installs the official `cors` middleware with native defaults. A native options object or per-request delegate is passed through unchanged. |
 | `createContext` | `(req, res) => Omit<TContext, "express" \| "span"> \| Promise<...>` | Runs after input validation for each matched procedure. |
 | `defaultErrorHandlers` | resolved handlers from `init()` or the same shape | Customizes 400/500 payloads. Both callbacks are required when supplied; optional schema properties are ignored by the adapter. |
 | `telemetry` | `boolean \| TelemetryConfig`; default disabled | Creates OpenTelemetry server spans except ignored routes. |
@@ -41,6 +42,10 @@ const parent = express();
 parent.use("/v1", createServer({ "/api": api }));
 parent.listen(3000);
 ```
+
+### CORS
+
+`ExpressCorsOptions` is derived from the official `cors` middleware rather than an Altstack-owned policy shape. CORS runs before JSON parsing and generated routes, so the native middleware owns preflight status, headers, defaults, and dynamic option delegates.
 
 The adapter converts `{param}` to Express `:param`, reads `req.params`, `req.query`, and `req.body`, validates input asynchronously, and supplies:
 

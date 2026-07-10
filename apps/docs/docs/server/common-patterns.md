@@ -66,6 +66,22 @@ Calling `next({ ctx: patch })` shallow-merges the patch and narrows the context 
 
 There is a current runtime limitation: when a core `Router` materializes a procedure, it does not preserve the flag that distinguishes Result-specific middleware. Adapters still recognize a top-level `err(...)` result, but the Result-shaped downstream `next()` contract of `createMiddlewareWithErrors()` is not reliable after router registration. Prefer the inline pattern above for server procedures. The standalone Nest `createNestMiddleware()` bridge does preserve the Result-specific flag.
 
+## Configure framework-owned CORS
+
+Altstack exposes `cors` only when an adapter can delegate to a framework-owned facility. Omit it or pass `false` to disable CORS, pass `true` for native defaults, or pass that adapter's native options unchanged.
+
+| Adapter | Mapping | Scope |
+| --- | --- | --- |
+| Hono | built-in `hono/cors` | returned Altstack Hono app |
+| Express | Express-maintained `cors` package | returned Altstack Express app |
+| NestJS | Express CORS through the mounted child app | only the Altstack mount |
+| Bun | unsupported; no native CORS facility | configure externally or with Bun APIs |
+| TanStack Start | unsupported; no dedicated CORS option | use Start request middleware or a custom server entry |
+
+Native option names intentionally differ. Hono uses `allowMethods`, `allowHeaders`, and `exposeHeaders`; Express and Nest use `methods`, `allowedHeaders`, and `exposedHeaders`. Altstack does not derive methods, generate preflight handlers, or normalize defaults.
+
+The dedicated Hono `cors` option does not reopen a generic framework-middleware boundary. Use `.procedure.use(...)`, `createMiddleware()`, or `createMiddlewareWithErrors()` for application policies.
+
 ## Compose routers by path
 
 The key in a router config is a path or prefix. Leading slashes are optional; stored procedure paths are normalized with a leading slash. Use OpenAPI braces for parameters.
@@ -381,7 +397,7 @@ By default raw `params`, `query`, and `body` are exposed on `ctx.input`, tagged 
 
 ## Adapter-specific routing notes
 
-- **Hono:** `createServer().middleware` can register native Hono handlers before Altstack routes. The special `"*"` path uses `app.use`; other entries use `app.on(methods, path, handler)`.
+- **Hono:** app construction rejects arbitrary native middleware; compose application policy through Altstack procedure middleware. The dedicated `cors` option maps only Hono's built-in CORS facility.
 - **Express:** mount the returned app on a parent for a real base path. `basePath` only changes telemetry labels.
 - **Bun:** `port` defaults to 3000 and `hostname` to `0.0.0.0`; unmatched routes return a JSON 404 envelope.
 - **NestJS:** only the Express platform is supported. `respectGlobalPrefix` defaults to true and avoids double-prefixing an already-prefixed `mountPath`.
