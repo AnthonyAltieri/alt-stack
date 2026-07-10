@@ -7,13 +7,14 @@ const apiCategory = (items) => ({
   items,
 });
 
-const family = (label, root, apiItems) => ({
+const family = (label, root, apiItems, guideItems = []) => ({
   type: "category",
   label,
   collapsed: true,
   items: [
     doc(`${root}/quickstart`, "Quickstart"),
     doc(`${root}/common-patterns`, "Common Patterns"),
+    ...guideItems,
     apiCategory(apiItems),
   ],
 });
@@ -23,14 +24,19 @@ module.exports = {
     doc("intro", "Overview"),
     doc("start/package-map", "Choose Your Packages"),
     family("Result", "result", [doc("result/api", "Result API")]),
-    family("Servers", "server", [
-      doc("server/api/core", "Core"),
-      doc("server/api/hono", "Hono"),
-      doc("server/api/express", "Express"),
-      doc("server/api/bun", "Bun"),
-      doc("server/api/nestjs", "NestJS"),
-      doc("server/api/tanstack-start", "TanStack Start"),
-    ]),
+    family(
+      "Servers",
+      "server",
+      [
+        doc("server/api/core", "Core"),
+        doc("server/api/hono", "Hono"),
+        doc("server/api/express", "Express"),
+        doc("server/api/bun", "Bun"),
+        doc("server/api/nestjs", "NestJS"),
+        doc("server/api/tanstack-start", "TanStack Start"),
+      ],
+      [doc("server/combine-routers", "Combining Routers")],
+    ),
     family("HTTP Clients", "http-client", [
       doc("http-client/api/core", "Core"),
       doc("http-client/api/fetch", "Fetch"),

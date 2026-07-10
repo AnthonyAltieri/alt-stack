@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import request from "supertest";
 import { createServer } from "./server.js";
-import { Router, router, ok, type ExpressBaseContext } from "./index.js";
+import { Router, combineRouters, router, ok, type ExpressBaseContext } from "./index.js";
 
 describe("createServer", () => {
   describe("basic routing", () => {
@@ -324,7 +324,7 @@ describe("createServer", () => {
   });
 
   describe("multiple routers", () => {
-    it("should merge multiple routers under same prefix", async () => {
+    it("should combine multiple routers before mounting them under one prefix", async () => {
       const baseRouter = new Router();
       const usersRouter = router({
         "/users": baseRouter.procedure
@@ -339,7 +339,7 @@ describe("createServer", () => {
       });
 
       const app = createServer({
-        "/api": [usersRouter, postsRouter],
+        "/api": combineRouters(usersRouter, postsRouter),
       });
 
       const usersRes = await request(app).get("/api/users");

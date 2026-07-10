@@ -547,7 +547,7 @@ function convertProceduresToOpenAPIPaths<
 export function generateOpenAPISpec<
   TCustomContext extends object = Record<string, never>,
 >(
-  config: Record<string, Router<TCustomContext> | Router<TCustomContext>[]>,
+  config: Record<string, Router<TCustomContext>>,
   options: GenerateOpenAPISpecOptions = {},
 ): OpenAPISpec {
   // Collect all procedures from all routers
@@ -558,20 +558,12 @@ export function generateOpenAPISpec<
     TCustomContext
   >[] = [];
 
-  for (const [prefix, routerOrRouters] of Object.entries(config)) {
-    const routers = Array.isArray(routerOrRouters)
-      ? routerOrRouters
-      : [routerOrRouters];
-
-    for (const router of routers) {
-      const routerProcedures = router.getProcedures();
-
-      for (const procedure of routerProcedures) {
-        allProcedures.push({
-          ...procedure,
-          path: normalizePath(prefix, procedure.path),
-        });
-      }
+  for (const [prefix, router] of Object.entries(config)) {
+    for (const procedure of router.getProcedures()) {
+      allProcedures.push({
+        ...procedure,
+        path: normalizePath(prefix, procedure.path),
+      });
     }
   }
 
@@ -597,4 +589,3 @@ export function generateOpenAPISpec<
 
   return spec;
 }
-

@@ -3827,12 +3827,12 @@ This package is a Bun-native source package: its public export points at TypeScr
 
 ```typescript
 function createServer<TContext extends BunBaseContext = BunBaseContext>(
-  config: Record<string, Router<TContext> | Router<TContext>[]>,
+  config: Record<string, Router<TContext>>,
   options?: BunServerOptions<TContext>,
 ): BunServer;
 ```
 
-Unlike the Hono and Express adapters, this function starts a listener immediately.
+Unlike the Hono and Express adapters, this function starts a listener immediately. Each prefix accepts one router; call `combineRouters()` before mounting multiple independent routers at the same prefix.
 
 `BunServerOptions` is an anonymous public parameter shape:
 
@@ -3907,7 +3907,7 @@ interface BunBaseContext extends BaseContext {
 
 ```typescript
 function createDocsRouter<TCustomContext extends object = Record<string, never>>(
-  config: Record<string, CoreRouter<TCustomContext> | CoreRouter<TCustomContext>[]>,
+  config: Record<string, CoreRouter<TCustomContext>>,
   options?: CreateDocsRouterOptions,
 ): CoreRouter<TCustomContext>;
 ```
@@ -3939,7 +3939,7 @@ The UI derives its spec URL from the incoming request URL and returns a Web `Res
 
 ### `Router<TCustomContext>`
 
-A core `Router` subclass whose generic defaults to `BunBaseContext`. It adds no runtime members. See the [core Router reference](./core.md#routertcustomcontext).
+A core `Router` subclass whose context generic defaults to `BunBaseContext` and whose second generic carries tracked route signatures. It adds no runtime members. See the [core Router reference](./core.md#routertcustomcontext).
 
 ### `router(config)`
 
@@ -3947,11 +3947,11 @@ Runs the core declarative router builder and returns the Bun-typed subclass. Its
 
 ### `createRouter(config?)`
 
-Creates an empty Bun-typed router or combines routers under prefixes. The optional config contains only routers or router arrays.
+Creates an empty Bun-typed router or prefixes one router per config key. Its config accepts routers, not procedures or router arrays. Constructor-style routers are not tracked inputs for checked composition.
 
-### `mergeRouters(...routers)`
+### `combineRouters(...routers)`
 
-Appends procedures to a new Bun-typed router without adding prefixes or detecting duplicates.
+Combines one or more tracked declarative routers without prefixes. It rejects matching `METHOD + canonical path` signatures at compile time and repeats the check at runtime; the same path with different methods is valid. See [Combining routers](../combine-routers.md) for canonicalization, metadata requirements, migration, and troubleshooting.
 
 ## Core re-exports
 
@@ -3962,7 +3962,7 @@ All names below retain the behavior documented in [Server core API](./core.md).
 | Initialization | `init`, `publicProcedure`, `default400ErrorSchema`, `default500ErrorSchema`, `InitOptions`, `InitResult` |
 | Result values/types | `ok`, `err`, `isOk`, `isErr`, `map`, `flatMap`, `mapError`, `catchError`, `unwrap`, `unwrapOr`, `unwrapOrElse`, `match`, `fold`, `tryCatch`, `tryCatchAsync`, `isResultError`, `assertResultError`, `ResultAggregateError`, `TaggedError`, `Result`, `Ok`, `Err`, `ResultError`, `InferErrorTag`, `InferErrorTags`, `NarrowError` |
 | Middleware | `createMiddleware`, `createMiddlewareWithErrors`, `middlewareMarker`, `middlewareOk`, `MiddlewareFunction`, `MiddlewareBuilder`, `MiddlewareResult`, `MiddlewareResultSuccess`, `MiddlewareFunctionWithErrors`, `MiddlewareBuilderWithErrors`, `MiddlewareBuilderWithErrorsStaged`, `AnyMiddlewareBuilderWithErrors`, `AnyMiddlewareFunctionWithErrors`, `Overwrite` |
-| Procedures/context | `BaseProcedureBuilder`, `ProcedureBuilder`, `InputConfig`, `TypedContext`, `BaseContext`, `InferInput`, `Procedure`, `ReadyProcedure`, `PendingProcedure` |
+| Procedures/context | `BaseProcedureBuilder`, `ProcedureBuilder`, `InputConfig`, `TypedContext`, `BaseContext`, `InferInput`, `Procedure`, `ReadyProcedure`, `PendingProcedure`, `RouterContext`, `RouterRouteSignatures`, `RouteSignature`, `RouteSignaturesForConfig`, `ValidateRouterCombination`, `ValidateRouterConfig` |
 | OpenAPI | `generateOpenAPISpec`, `OpenAPISpec`, `GenerateOpenAPISpecOptions`, `OpenAPIPathItem`, `OpenAPIOperation`, `OpenAPIParameter`, `OpenAPIRequestBody`, `OpenAPIResponse` |
 | Validation | `validateInput`, `parseSchema`, `mergeInputs`, `ParseResult`, `StructuredInput` |
 | Telemetry | `resolveTelemetryConfig`, `shouldIgnoreRoute`, `initTelemetry`, `createRequestSpan`, `endSpanWithError`, `setSpanOk`, `TelemetryConfig`, `TelemetryOption`, `ResolvedTelemetryConfig`, `Span` |
@@ -4004,8 +4004,8 @@ Creates one typed factory. The return type is `InitResult`; the returned object 
 
 | Property | Description |
 | --- | --- |
-| `router(config)` | Builds a `Router<TCustomContext>` from path/procedure entries and performs the public path-param type checks. |
-| `mergeRouters(...routers)` | Appends all procedures to a new router. |
+| `router(config)` | Builds a declarative `Router<TCustomContext, TRouteSignatures>` from path/procedure entries, tracks its canonical route signatures, and performs the public path-param type checks. |
+| `combineRouters(...routers)` | Combines one or more tracked declarative routers after rejecting conflicting method/path signatures. |
 | `procedure` | A fresh `BaseProcedureBuilder` bound to `TCustomContext` and the configured default-error types. |
 | `defaultErrorHandlers` | The resolved 400/500 callbacks plus their schemas. It is typed as optional but is always present at runtime. |
 
@@ -4050,19 +4050,32 @@ Builds a router from a declarative config. Each key can contain:
 
 Paths are normalized to start with `/`. A `{param}` path requires `input.params` with that key at compile time. The check does not reject additional params keys, and a TypeScript limitation means not every invalid generic call produces an immediate call-site diagnostic.
 
+The returned router carries a type-only union of route signatures such as `"GET /users/{param}"`. `combineRouters()` uses that metadata to detect conflicts. Build routers that will be combined with this declarative helper, preferably through `init<TContext>().router()` when using custom context.
+
 ### `createRouter(config?)`
 
 ```typescript
 function createRouter<TCustomContext extends object = Record<string, never>>(
-  config?: Record<string, Router<TCustomContext> | Router<TCustomContext>[]>,
+  config?: Record<string, Router<TCustomContext>>,
 ): Router<TCustomContext>;
 ```
 
-Creates an empty router or merges nested routers under the supplied prefixes. This constructor-style helper does not accept procedure entries; use `router()` for a route config.
+Creates an empty router or prefixes one router per config key. This constructor-style helper does not accept procedure entries or router arrays; use `router()` for declarative route config and `combineRouters()` before mounting independent routers at one prefix. Routers created through `createRouter()` do not have precise route metadata for checked composition.
 
-### `mergeRouters(...routers)`
+### `combineRouters(...routers)`
 
-Returns a new router and appends every source procedure in argument order without adding a prefix or checking duplicates. Source routers are not mutated.
+Combines a non-empty tuple of routers into a new router without adding a prefix or mutating its inputs. Every argument must be a tracked declarative router created by `router()`; `new Router()`, `createRouter()`, and routers assembled through imperative registration do not carry the precise metadata required for the compile-time check.
+
+A conflict is the same uppercase HTTP method plus the same canonical path. Canonical paths have a leading slash, omit trailing slashes except for `/`, and normalize every OpenAPI parameter name to `{param}`. Therefore `GET users/{id}` conflicts with `GET /users/{userId}/`, while `GET /users/{id}` and `POST /users/{userId}` can coexist.
+
+TypeScript reports conflicting signatures at the call site. The runtime repeats the same check and throws `Route conflict: METHOD /canonical/path` as a backstop for JavaScript, casts, dynamically mutated routers, and other ways static metadata can be bypassed.
+
+```typescript
+const api = t.combineRouters(usersRouter, postsRouter);
+createServer({ "/api": api });
+```
+
+See [Combine routers with `combineRouters`](../combine-routers.md) for a complete working example, conflict cases, context compatibility, prefixing, migration, and troubleshooting.
 
 ### `Router<TCustomContext>`
 
@@ -4074,7 +4087,8 @@ The public members are:
 
 | Member | Behavior |
 | --- | --- |
-| `constructor(config?)` | Accepts the same prefix-to-router or prefix-to-router-array map as `createRouter()`. |
+| `_routeSignatures` | Type-only metadata containing the router's canonical `METHOD /path` signature union. It is declared for inference and has no runtime value. |
+| `constructor(config?)` | Accepts the same one-router-per-prefix map as `createRouter()`. Constructor-created routers are not tracked for `combineRouters()`. |
 | `registerProcedure(path, readyProcedure)` | Normalizes `path`, converts a ready procedure to a stored `Procedure`, appends it, and returns `this`. |
 | `registerPendingProcedure(path, method, pendingProcedure)` | Uppercases `method`, materializes the pending procedure, appends it, and returns `this`. |
 | `register(procedure)` | Appends an already materialized procedure and returns `this`. |
@@ -4087,6 +4101,21 @@ The public members are:
 ### `RouterConfigValue<TCustomContext>`
 
 A structural union of `ReadyProcedure`, a lowercase method map, or `Router<TCustomContext>`. It describes one router config value; it does not apply the path-param validation by itself.
+
+### Route metadata types
+
+These types support declarative route tracking and checked composition. Most applications rely on inference rather than naming them directly.
+
+| Type | Meaning |
+| --- | --- |
+| `HttpMethod` | Closed `"GET" | "POST" | "PUT" | "PATCH" | "DELETE"` union retained by ready procedures so route conflicts can distinguish methods. |
+| `RouteSignature` | Canonical `METHOD /path` string shape used as a route identity. |
+| `RouteSignaturesForConfig<TConfig>` | Extracts the canonical signature union from a declarative `router()` config, including prefixed nested routers. |
+| `RouterRouteSignatures<TRouter>` | Extracts the route-signature union carried by a router's second generic. |
+| `RouterContext<TRouter>` | Extracts a router's custom-context type. |
+| `AnyRouter` | Broad router type used by router-tuple helpers. |
+| `ValidateRouterCombination<TRouters>` | Resolves to an error shape when any router is untracked or when the tuple contains overlapping signatures. |
+| `ValidateRouterConfig<TConfig, TContext>` | Validates declarative config values, procedure context, and required path-parameter input at the type level. |
 
 ## Procedure builders
 
@@ -4254,7 +4283,7 @@ Iterates status entries in object order and returns the first status whose extra
 
 ```typescript
 function generateOpenAPISpec<TContext extends object>(
-  config: Record<string, Router<TContext> | Router<TContext>[]>,
+  config: Record<string, Router<TContext>>,
   options?: GenerateOpenAPISpecOptions,
 ): OpenAPISpec;
 ```
@@ -4280,7 +4309,7 @@ Current contract gaps:
 - automatic validation/uncaught errors are omitted;
 - declared error schemas are documented as flat bodies although adapters wrap them under `error`;
 - generated operations do not set `summary`, `description`, `tags`, security, headers, cookies, or servers;
-- duplicate method/path entries overwrite in collection order.
+- a router that was imperatively mutated to contain duplicate method/path entries still overwrites in collection order; use tracked declarative routers and `combineRouters()` so its runtime backstop rejects duplicates before generation.
 
 ### OpenAPI types
 
@@ -4386,12 +4415,12 @@ The adapter supports Express 4 or 5 and Zod 4.
 
 ```typescript
 function createServer<TContext extends ExpressBaseContext = ExpressBaseContext>(
-  config: Record<string, Router<TContext> | Router<TContext>[]>,
+  config: Record<string, Router<TContext>>,
   options?: ExpressServerOptions<TContext>,
 ): Express;
 ```
 
-The function creates a new Express application, installs `express.json()`, registers Altstack routes, and returns the app. It does not listen on a port.
+The function creates a new Express application, installs `express.json()`, registers Altstack routes, and returns the app. It does not listen on a port. Each prefix accepts one router; call `combineRouters()` before mounting multiple independent routers at the same prefix.
 
 `ExpressServerOptions` is an anonymous public parameter shape:
 
@@ -4441,7 +4470,7 @@ Without a custom 500 handler, the response includes the thrown stack in `error.d
 
 ```typescript
 function createDocsRouter<TCustomContext extends object = Record<string, never>>(
-  config: Record<string, CoreRouter<TCustomContext> | CoreRouter<TCustomContext>[]>,
+  config: Record<string, CoreRouter<TCustomContext>>,
   options?: CreateDocsRouterOptions,
 ): ExpressRouter;
 ```
@@ -4486,7 +4515,7 @@ interface ExpressBaseContext extends BaseContext {
 
 ### `Router<TCustomContext>`
 
-A core `Router` subclass whose generic defaults to `ExpressBaseContext`. It adds no runtime members. See the [core Router reference](./core.md#routertcustomcontext).
+A core `Router` subclass whose context generic defaults to `ExpressBaseContext` and whose second generic carries tracked route signatures. It adds no runtime members. See the [core Router reference](./core.md#routertcustomcontext).
 
 ### `router(config)`
 
@@ -4494,11 +4523,11 @@ Runs the core declarative router builder and returns the Express-typed subclass.
 
 ### `createRouter(config?)`
 
-Creates an empty Express-typed router or combines routers beneath prefixes. Its config accepts only routers or router arrays.
+Creates an empty Express-typed router or prefixes one router per config key. Its config accepts routers, not procedures or router arrays. Constructor-style routers are not tracked inputs for checked composition.
 
-### `mergeRouters(...routers)`
+### `combineRouters(...routers)`
 
-Appends procedures to a new Express-typed router without adding prefixes or checking duplicates.
+Combines one or more tracked declarative routers without prefixes. It rejects matching `METHOD + canonical path` signatures at compile time and repeats the check at runtime; the same path with different methods is valid. See [Combining routers](../combine-routers.md) for canonicalization, metadata requirements, migration, and troubleshooting.
 
 ## Core re-exports
 
@@ -4509,7 +4538,7 @@ All names below have the behavior documented in [Server core API](./core.md).
 | Initialization | `init`, `publicProcedure`, `default400ErrorSchema`, `default500ErrorSchema`, `InitOptions`, `InitResult` |
 | Result values/types | `ok`, `err`, `isOk`, `isErr`, `map`, `flatMap`, `mapError`, `catchError`, `unwrap`, `unwrapOr`, `unwrapOrElse`, `match`, `fold`, `tryCatch`, `tryCatchAsync`, `isResultError`, `assertResultError`, `ResultAggregateError`, `TaggedError`, `Result`, `Ok`, `Err`, `ResultError`, `InferErrorTag`, `InferErrorTags`, `NarrowError` |
 | Middleware | `createMiddleware`, `createMiddlewareWithErrors`, `middlewareMarker`, `middlewareOk`, `MiddlewareFunction`, `MiddlewareBuilder`, `MiddlewareResult`, `MiddlewareResultSuccess`, `MiddlewareFunctionWithErrors`, `MiddlewareBuilderWithErrors`, `MiddlewareBuilderWithErrorsStaged`, `AnyMiddlewareBuilderWithErrors`, `AnyMiddlewareFunctionWithErrors`, `Overwrite` |
-| Procedures/context | `BaseProcedureBuilder`, `ProcedureBuilder`, `InputConfig`, `TypedContext`, `BaseContext`, `InferInput`, `Procedure`, `ReadyProcedure`, `PendingProcedure` |
+| Procedures/context | `BaseProcedureBuilder`, `ProcedureBuilder`, `InputConfig`, `TypedContext`, `BaseContext`, `InferInput`, `Procedure`, `ReadyProcedure`, `PendingProcedure`, `RouterContext`, `RouterRouteSignatures`, `RouteSignature`, `RouteSignaturesForConfig`, `ValidateRouterCombination`, `ValidateRouterConfig` |
 | OpenAPI | `generateOpenAPISpec`, `OpenAPISpec`, `GenerateOpenAPISpecOptions`, `OpenAPIPathItem`, `OpenAPIOperation`, `OpenAPIParameter`, `OpenAPIRequestBody`, `OpenAPIResponse` |
 | Validation | `validateInput`, `parseSchema`, `mergeInputs`, `ParseResult`, `StructuredInput` |
 | Telemetry | `resolveTelemetryConfig`, `shouldIgnoreRoute`, `initTelemetry`, `createRequestSpan`, `endSpanWithError`, `setSpanOk`, `TelemetryConfig`, `TelemetryOption`, `ResolvedTelemetryConfig`, `Span` |
@@ -4539,10 +4568,12 @@ The adapter supports Hono 4 and Zod 4. It returns a Hono app but does not choose
 
 ```typescript
 function createServer<TContext extends HonoBaseContext = HonoBaseContext>(
-  config: Record<string, Router<TContext> | Router<TContext>[]>,
+  config: Record<string, Router<TContext>>,
   options?: HonoServerOptions<TContext>,
 ): Hono;
 ```
+
+Each prefix accepts one router. Call `combineRouters()` before mounting multiple independent routers at the same prefix.
 
 `HonoServerOptions` is an anonymous public parameter shape rather than a named export:
 
@@ -4593,7 +4624,7 @@ Native handlers supplied through `options.middleware` are registered before Alts
 
 ```typescript
 function createDocsRouter<TCustomContext extends object = Record<string, never>>(
-  config: Record<string, CoreRouter<TCustomContext> | CoreRouter<TCustomContext>[]>,
+  config: Record<string, CoreRouter<TCustomContext>>,
   options?: CreateDocsRouterOptions,
 ): CoreRouter<TCustomContext>;
 ```
@@ -4634,7 +4665,7 @@ Handlers can access the native request, response helpers, environment, and varia
 
 ### `Router<TCustomContext>`
 
-A subclass of the core `Router` whose generic defaults to `HonoBaseContext`. It adds no runtime members. All inherited public methods are documented in the [core Router reference](./core.md#routertcustomcontext).
+A subclass of the core `Router` whose context generic defaults to `HonoBaseContext` and whose second generic carries tracked route signatures. It adds no runtime members. All inherited public methods are documented in the [core Router reference](./core.md#routertcustomcontext).
 
 ### `router(config)`
 
@@ -4642,11 +4673,11 @@ Calls core `router()` and casts the result to the Hono-typed subclass. The gener
 
 ### `createRouter(config?)`
 
-Creates an empty Hono-typed router or combines routers under prefixes. Its config accepts only `Router` or `Router[]`, not procedures.
+Creates an empty Hono-typed router or prefixes one router per config key. Its config accepts routers, not procedures or router arrays. Constructor-style routers are not tracked inputs for checked composition.
 
-### `mergeRouters(...routers)`
+### `combineRouters(...routers)`
 
-Appends procedures into a new Hono-typed router without prefixes or duplicate detection.
+Combines one or more tracked declarative routers without prefixes. It rejects matching `METHOD + canonical path` signatures at compile time and repeats the check at runtime; the same path with different methods is valid. See [Combining routers](../combine-routers.md) for canonicalization, metadata requirements, migration, and troubleshooting.
 
 ## Core re-exports
 
@@ -4657,7 +4688,7 @@ The following exports keep their core behavior. Follow the links for signatures,
 | Initialization | `init`, `publicProcedure`, `default400ErrorSchema`, `default500ErrorSchema`, `InitOptions`, `InitResult` |
 | Result values/types | `ok`, `err`, `isOk`, `isErr`, `map`, `flatMap`, `mapError`, `catchError`, `unwrap`, `unwrapOr`, `unwrapOrElse`, `match`, `fold`, `tryCatch`, `tryCatchAsync`, `isResultError`, `assertResultError`, `ResultAggregateError`, `TaggedError`, `Result`, `Ok`, `Err`, `ResultError`, `InferErrorTag`, `InferErrorTags`, `NarrowError` |
 | Middleware | `createMiddleware`, `createMiddlewareWithErrors`, `middlewareMarker`, `middlewareOk`, `MiddlewareFunction`, `MiddlewareBuilder`, `MiddlewareResult`, `MiddlewareResultSuccess`, `MiddlewareFunctionWithErrors`, `MiddlewareBuilderWithErrors`, `MiddlewareBuilderWithErrorsStaged`, `AnyMiddlewareBuilderWithErrors`, `AnyMiddlewareFunctionWithErrors`, `Overwrite` |
-| Procedures/context | `BaseProcedureBuilder`, `ProcedureBuilder`, `InputConfig`, `TypedContext`, `BaseContext`, `InferInput`, `Procedure`, `ReadyProcedure`, `PendingProcedure`, `RouterConfigValue` |
+| Procedures/context | `BaseProcedureBuilder`, `ProcedureBuilder`, `InputConfig`, `TypedContext`, `BaseContext`, `InferInput`, `Procedure`, `ReadyProcedure`, `PendingProcedure`, `RouterConfigValue`, `RouterContext`, `RouterRouteSignatures`, `RouteSignature`, `RouteSignaturesForConfig`, `ValidateRouterCombination`, `ValidateRouterConfig` |
 | OpenAPI | `generateOpenAPISpec`, `OpenAPISpec`, `GenerateOpenAPISpecOptions`, `OpenAPIPathItem`, `OpenAPIOperation`, `OpenAPIParameter`, `OpenAPIRequestBody`, `OpenAPIResponse` |
 | Validation | `validateInput`, `parseSchema`, `mergeInputs`, `ParseResult`, `StructuredInput` |
 | Telemetry | `resolveTelemetryConfig`, `shouldIgnoreRoute`, `initTelemetry`, `createRequestSpan`, `endSpanWithError`, `setSpanOk`, `TelemetryConfig`, `TelemetryOption`, `ResolvedTelemetryConfig`, `Span` |
@@ -4688,11 +4719,7 @@ The adapter supports NestJS 9, 10, or 11 on `@nestjs/platform-express`, Express 
 ```typescript
 function registerAltStack<TCustomContext extends object = {}>(
   app: NestAppLike,
-  config: Record<
-    string,
-    | Router<NestBaseContext & TCustomContext>
-    | Router<NestBaseContext & TCustomContext>[]
-  >,
+  config: Record<string, Router<NestBaseContext & TCustomContext>>,
   options?: RegisterAltStackOptions<TCustomContext>,
 ): void;
 ```
@@ -4703,7 +4730,7 @@ Gets Nest's underlying Express application, creates an Altstack Express app, and
 @alt-stack/server-nestjs requires NestJS on the Express platform (@nestjs/platform-express).
 ```
 
-when the HTTP adapter does not expose an Express-style `use()` function.
+when the HTTP adapter does not expose an Express-style `use()` function. Each prefix accepts one router; call `combineRouters()` before mounting multiple independent routers at the same prefix.
 
 Call `app.setGlobalPrefix(...)` before `registerAltStack()` so the current prefix can be read.
 
@@ -4871,7 +4898,7 @@ If no schema directly maps the tag, status 500 is used. See [core tag matching](
 
 ### `Router<TCustomContext>`
 
-A core `Router` subclass whose generic defaults to `NestBaseContext`. It adds no runtime members.
+A core `Router` subclass whose context generic defaults to `NestBaseContext` and whose second generic carries tracked route signatures. It adds no runtime members.
 
 ### `router(config)`
 
@@ -4879,11 +4906,11 @@ Runs the core declarative router builder and returns the Nest-typed subclass. It
 
 ### `createRouter(config?)`
 
-Creates an empty Nest-typed router or combines routers under prefixes. The config contains only routers or router arrays.
+Creates an empty Nest-typed router or prefixes one router per config key. Its config accepts routers, not procedures or router arrays. Constructor-style routers are not tracked inputs for checked composition.
 
-### `mergeRouters(...routers)`
+### `combineRouters(...routers)`
 
-Appends procedures to a new Nest-typed router without adding prefixes or detecting duplicates.
+Combines one or more tracked declarative routers without prefixes. It rejects matching `METHOD + canonical path` signatures at compile time and repeats the check at runtime; the same path with different methods is valid. See [Combining routers](../combine-routers.md) for canonicalization, metadata requirements, migration, and troubleshooting.
 
 ## Route runtime behavior
 
@@ -5058,7 +5085,7 @@ function generateOpenAPISpecFromServerRoutes(
 ): OpenAPISpec;
 ```
 
-Accepts values returned by `defineServerRoute()` or full file routes returned by `createAltStackFileRoute()`. It collects each route's attached core router and delegates to core `generateOpenAPISpec()` under the root prefix.
+Accepts values returned by `defineServerRoute()` or full file routes returned by `createAltStackFileRoute()`. It combines each route's attached core router, then delegates to core `generateOpenAPISpec()` under the root prefix. An empty route list produces a spec with no paths. Duplicate canonical method/path pairs throw `Route conflict: METHOD /canonical/path` instead of silently overwriting an operation.
 
 ```typescript
 const spec = generateOpenAPISpecFromServerRoutes(
@@ -5130,6 +5157,259 @@ Notably, the public entrypoint does not re-export core `generateOpenAPISpec`, `w
 - [Server quickstart](../quickstart.md)
 - [Server common patterns](../common-patterns.md)
 - [Core API](./core.md)
+
+---
+
+// File: server/combine-routers
+
+# Combine routers with `combineRouters`
+
+Use `combineRouters(...routers)` when independently defined HTTP routers should share one mount point. It requires at least one router, returns a new router without mutating its inputs, and prevents two inputs from claiming the same HTTP method and canonical path.
+
+The safest pattern is to create every input from one context-bound factory:
+
+```typescript
+import {
+  combineRouters,
+  createServer,
+  init,
+  ok,
+  type HonoBaseContext,
+} from "@alt-stack/server-hono";
+import { z } from "zod";
+
+interface AppContext extends HonoBaseContext {
+  requestId: string;
+}
+
+const t = init<AppContext>();
+
+const usersRouter = t.router({
+  "/users": t.procedure.get(() => ok([])),
+});
+
+const postsRouter = t.router({
+  "/posts": t.procedure.get(() => ok([])),
+});
+
+const apiRouter = t.combineRouters(usersRouter, postsRouter);
+
+const app = createServer<AppContext>(
+  { "/api": apiRouter },
+  {
+    createContext: () => ({ requestId: crypto.randomUUID() }),
+  },
+);
+```
+
+`apiRouter` contains both procedures and carries the type-only route metadata `"GET /users" | "GET /posts"`. That metadata remains available if you combine `apiRouter` again later.
+
+## What counts as a conflict
+
+A route identity is its uppercase HTTP method plus its canonical path. Canonicalization applies the same rules in TypeScript and at runtime:
+
+- add a leading slash;
+- remove trailing slashes except for the root path;
+- normalize every OpenAPI path-parameter name to `{param}`.
+
+| First route | Second route | Result |
+| --- | --- | --- |
+| `GET users/{id}/` | `GET /users/{userId}` | Conflict: both become `GET /users/{param}`. |
+| `GET /items` | `POST /items` | Valid: the methods differ. |
+| `GET /users/me` | `GET /users/{id}` | Valid exact signatures; see the static/dynamic caveat below. |
+| `GET /health` | `GET /metrics` | Valid: the paths differ. |
+
+For example, these routers cannot be combined:
+
+```typescript
+const byId = t.router({
+  "users/{id}/": t.procedure
+    .input({ params: z.object({ id: z.string() }) })
+    .get(() => ok({ source: "id" })),
+});
+
+const byUserId = t.router({
+  "/users/{userId}": t.procedure
+    .input({ params: z.object({ userId: z.string() }) })
+    .get(() => ok({ source: "userId" })),
+});
+
+const api = t.combineRouters(byId, byUserId);
+// Type error includes:
+// "Conflicting route signatures": "GET /users/{param}"
+```
+
+## The same path can support multiple methods
+
+Method identity is part of the signature, so separate routers can own different methods at one path:
+
+```typescript
+const readItems = t.router({
+  "/items": t.procedure.get(() => ok([])),
+});
+
+const createItem = t.router({
+  "/items": t.procedure.post(() => ok({ id: "item_1" })),
+});
+
+const itemsRouter = t.combineRouters(readItems, createItem);
+// Carries "GET /items" | "POST /items".
+```
+
+You can also put both methods in one methods object when they belong to the same module. Use `combineRouters()` when separate modules need to remain independently owned.
+
+## Add prefixes before combining
+
+`combineRouters()` does not add a prefix. When two routers intentionally use the same method and path, wrap them in declarative routers with distinct prefixes first:
+
+```typescript
+const v1Router = t.router({
+  "/users": t.procedure.get(() => ok({ version: 1 })),
+});
+
+const v2Router = t.router({
+  "/users": t.procedure.get(() => ok({ version: 2 })),
+});
+
+const prefixedV1 = t.router({ "/v1": v1Router });
+const prefixedV2 = t.router({ "/v2": v2Router });
+
+const versionedApi = t.combineRouters(prefixedV1, prefixedV2);
+```
+
+The resulting signatures are `GET /v1/users` and `GET /v2/users`, so they do not conflict.
+
+## Use tracked declarative routers
+
+Compile-time conflict detection depends on exact route metadata. Preserve it by using the factory returned by `init<TContext>()`.
+
+| Router source | Accepted by `combineRouters()`? | Why |
+| --- | --- | --- |
+| `t.router({...})` | Yes | Carries exact declarative route signatures. |
+| A router nested inside `t.router({...})` | Yes | The prefix is included in its signatures. |
+| A previous `t.combineRouters(...)` result | Yes | Combined metadata is preserved. |
+| `new Router()` plus `register*()` | No | Imperative mutation cannot be represented reliably in its static type. |
+| `createRouter()` | No | Constructor-style routers use broad, untracked metadata. |
+| A value widened to `Router<AppContext>` | No | The annotation erases its exact signature union. |
+
+For a custom context, prefer this:
+
+```typescript
+const t = init<AppContext>();
+const users = t.router({
+  "/users": t.procedure.get(() => ok([])),
+});
+```
+
+Avoid explicitly calling the standalone helper as `router<AppContext>({...})` for routers you plan to combine. TypeScript fills the later config generic with its broad default when only the context generic is supplied, so the exact route metadata is not retained.
+
+An untracked input produces a diagnostic containing:
+
+```text
+combineRouters requires routers created by router()
+```
+
+## Keep router contexts compatible
+
+Create inputs from the same `init<AppContext>()` factory whenever possible. This gives every procedure the same request-context contract and avoids a `Router context mismatch` diagnostic.
+
+The output uses the first router's context. That context must satisfy the context required by every later router. A more specific first context can therefore combine with a router that only requires a subset of its fields, but reversing that order is rejected.
+
+```typescript
+interface RequestContext extends HonoBaseContext {
+  requestId: string;
+}
+
+interface UserContext extends RequestContext {
+  userId: string;
+}
+
+const requestApi = init<RequestContext>();
+const userApi = init<UserContext>();
+
+const requestContextRouter = requestApi.router({
+  "/request": requestApi.procedure.get(({ ctx }) => ok(ctx.requestId)),
+});
+
+const userContextRouter = userApi.router({
+  "/user": userApi.procedure.get(({ ctx }) => ok(ctx.userId)),
+});
+
+// Allowed: UserContext contains every RequestContext field.
+const app = combineRouters(userContextRouter, requestContextRouter);
+
+// Rejected: RequestContext cannot satisfy procedures requiring userId.
+const invalid = combineRouters(requestContextRouter, userContextRouter);
+```
+
+Most applications should use one shared context rather than rely on ordering.
+
+## Runtime checks remain active
+
+TypeScript cannot protect plain JavaScript, unsafe casts, dynamically widened values, or routers mutated after construction. `combineRouters()` scans the procedures again at runtime and throws before returning an ambiguous router.
+
+```text
+Route conflict: GET /users/{param}
+```
+
+Calling it without an input also throws at runtime:
+
+```text
+combineRouters requires at least one router
+```
+
+If a conditional composition can be empty, handle that branch explicitly or use `t.router({})` as a tracked empty router. Do not call `combineRouters()` with zero arguments.
+
+## Migrate from the removed HTTP composition API
+
+The old HTTP `mergeRouters` export has been removed. Replace flat composition with the factory method:
+
+```typescript
+// Before
+const apiRouter = mergeRouters(usersRouter, postsRouter);
+
+// After
+const apiRouter = t.combineRouters(usersRouter, postsRouter);
+```
+
+Router arrays are also no longer accepted by server mounting or OpenAPI inputs. Combine first, then mount or generate the spec from one router:
+
+```typescript
+// Before
+createServer({ "/api": [usersRouter, postsRouter] });
+generateOpenAPISpec({ "/api": [usersRouter, postsRouter] });
+
+// After
+const apiRouter = t.combineRouters(usersRouter, postsRouter);
+createServer({ "/api": apiRouter });
+generateOpenAPISpec({ "/api": apiRouter });
+```
+
+The Kafka and workers packages still expose their own `mergeRouters` functions. Those APIs compose topics and jobs rather than HTTP method/path signatures and are not affected by this migration.
+
+## Troubleshooting
+
+### `Conflicting route signatures`
+
+Two inputs claim the same canonical method/path pair. Change a method, add a declarative prefix before combining, or remove the duplicate route.
+
+### `combineRouters requires routers created by router()`
+
+At least one input has broad or erased route metadata. Rebuild it with the same context-bound `t.router()` factory as the other inputs and avoid widening the variable to `Router<Context>`.
+
+### `Router context mismatch`
+
+The first router's context cannot satisfy a later router's procedures. Prefer one shared `init<AppContext>()` factory, or put the router with the most specific compatible context first.
+
+### Static and dynamic routes still overlap at runtime
+
+`GET /users/me` and `GET /users/{id}` are not exact canonical duplicates, so `combineRouters()` permits them. Framework matching and registration order can still make that pair ambiguous. Avoid the overlap or confirm the selected adapter's ordering behavior with an integration test.
+
+## Related documentation
+
+- [Server quickstart](./quickstart.md)
+- [Server common patterns](./common-patterns.md#compose-routers-by-path)
+- [Core `combineRouters()` API](./api/core.md#combineroutersrouters)
 
 ---
 
@@ -5219,7 +5499,43 @@ const appRouter = t.router({
 });
 ```
 
-You can also pass an array of routers at one prefix to `createServer()` or `generateOpenAPISpec()`, or flatten independent routers with `mergeRouters(a, b)`. These operations append procedures; they do not detect duplicate method/path pairs. Framework registration order decides what happens when routes collide.
+Use `combineRouters()` when independent routers should share the same mount prefix:
+
+```typescript
+const metricsRouter = t.router({
+  "/metrics": t.procedure.get(() => ok({ healthy: true })),
+});
+
+const apiRouter = t.combineRouters(appRouter, metricsRouter);
+
+createServer({
+  "/api": apiRouter,
+});
+```
+
+`combineRouters()` requires at least one tracked declarative router. It rejects duplicate canonical method/path signatures at compile time and repeats the check at runtime. The same path with a different method is valid:
+
+```typescript
+const readItems = t.router({
+  "/items": t.procedure.get(() => ok([])),
+});
+const createItem = t.router({
+  "/items": t.procedure.post(() => ok({ id: "1" })),
+});
+
+// Valid: GET /items and POST /items are distinct route signatures.
+const items = t.combineRouters(readItems, createItem);
+```
+
+See [Combine routers with `combineRouters`](./combine-routers.md) for canonicalization rules, tracked versus untracked routers, context compatibility, runtime errors, migration from the removed HTTP composition API, and troubleshooting.
+
+When two routers intentionally reuse a method and path, give them distinct prefixes before combining:
+
+```typescript
+const v1 = t.router({ "/v1": v1Router });
+const v2 = t.router({ "/v2": v2Router });
+const versionedApi = t.combineRouters(v1, v2);
+```
 
 For multiple methods on one path, use a methods object and pending `.handler()` procedures:
 
@@ -5745,6 +6061,7 @@ This serves `/docs/openapi.json` and, by default, Swagger UI at `/docs`. Express
 
 ## Next steps
 
+- [Combine routers safely](./combine-routers.md) explains conflict-checked composition, prefixes, context compatibility, and migration.
 - [Server common patterns](./common-patterns.md) covers context, middleware, router composition, telemetry, errors, and adapter differences.
 - [Core API Documentation](./api/core.md) describes the shared public surface.
 - Adapter APIs: [Hono](./api/hono.md), [Express](./api/express.md), [Bun](./api/bun.md), [NestJS](./api/nestjs.md), and [TanStack Start](./api/tanstack-start.md).

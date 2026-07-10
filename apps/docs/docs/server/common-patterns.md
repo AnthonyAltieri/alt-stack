@@ -87,7 +87,43 @@ const appRouter = t.router({
 });
 ```
 
-You can also pass an array of routers at one prefix to `createServer()` or `generateOpenAPISpec()`, or flatten independent routers with `mergeRouters(a, b)`. These operations append procedures; they do not detect duplicate method/path pairs. Framework registration order decides what happens when routes collide.
+Use `combineRouters()` when independent routers should share the same mount prefix:
+
+```typescript
+const metricsRouter = t.router({
+  "/metrics": t.procedure.get(() => ok({ healthy: true })),
+});
+
+const apiRouter = t.combineRouters(appRouter, metricsRouter);
+
+createServer({
+  "/api": apiRouter,
+});
+```
+
+`combineRouters()` requires at least one tracked declarative router. It rejects duplicate canonical method/path signatures at compile time and repeats the check at runtime. The same path with a different method is valid:
+
+```typescript
+const readItems = t.router({
+  "/items": t.procedure.get(() => ok([])),
+});
+const createItem = t.router({
+  "/items": t.procedure.post(() => ok({ id: "1" })),
+});
+
+// Valid: GET /items and POST /items are distinct route signatures.
+const items = t.combineRouters(readItems, createItem);
+```
+
+See [Combine routers with `combineRouters`](./combine-routers.md) for canonicalization rules, tracked versus untracked routers, context compatibility, runtime errors, migration from the removed HTTP composition API, and troubleshooting.
+
+When two routers intentionally reuse a method and path, give them distinct prefixes before combining:
+
+```typescript
+const v1 = t.router({ "/v1": v1Router });
+const v2 = t.router({ "/v2": v2Router });
+const versionedApi = t.combineRouters(v1, v2);
+```
 
 For multiple methods on one path, use a methods object and pending `.handler()` procedures:
 

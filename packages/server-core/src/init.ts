@@ -1,4 +1,12 @@
-import { Router, mergeRouters, buildRouter, type RouterConfigValue, type ValidateRouterConfig } from "./router.js";
+import {
+  Router,
+  combineRouters,
+  buildRouter,
+  type RouteSignaturesForConfig,
+  type RouterRouteSignatures,
+  type ValidateRouterCombination,
+  type ValidateRouterConfig,
+} from "./router.js";
 import { BaseProcedureBuilder } from "./procedure-builder.js";
 import { z } from "zod";
 import type { ZodError } from "zod";
@@ -38,7 +46,7 @@ type DefaultErrorSchemas<TInitOptions extends InitOptions | undefined> = {
     : typeof default500ErrorSchema;
 };
 
-export interface InitOptions<TCustomContext extends object = Record<string, never>> {
+export interface InitOptions<_TCustomContext extends object = Record<string, never>> {
   default400Error?: (
     errors: Array<[error: ZodError, variant: "body" | "param" | "query", value: unknown]>,
   ) => [z.ZodObject<any>, z.infer<z.ZodObject<any>>];
@@ -51,8 +59,15 @@ export interface InitResult<
 > {
   router: <const TConfig extends Record<string, unknown>>(
     config: TConfig & ValidateRouterConfig<TConfig, TCustomContext>,
-  ) => Router<TCustomContext>;
-  mergeRouters: (...routers: Router<TCustomContext>[]) => Router<TCustomContext>;
+  ) => Router<TCustomContext, RouteSignaturesForConfig<TConfig>>;
+  combineRouters: <
+    const TRouters extends readonly [
+      Router<TCustomContext, string>,
+      ...Router<TCustomContext, string>[],
+    ],
+  >(
+    ...routers: TRouters & ValidateRouterCombination<TRouters>
+  ) => Router<TCustomContext, RouterRouteSignatures<TRouters[number]>>;
   procedure: BaseProcedureBuilder<
     { params?: never; query?: never; body?: never },
     undefined,
@@ -89,7 +104,7 @@ function createDefault400Error(
 ): z.infer<typeof default400ErrorSchema> {
   const allDetails: string[] = [];
 
-  for (const [zodError, variant, value] of errors) {
+  for (const [zodError, variant, _value] of errors) {
     const variantDetails = zodError.issues.map(
       (e) => `${variant}.${e.path.join(".")}: ${e.message}`,
     );
@@ -165,7 +180,10 @@ export function init<TCustomContext extends object = Record<string, never>>(
 
   return {
     router: buildRouter as InitResult<TCustomContext, typeof options>["router"],
-    mergeRouters: (...routers: Router<TCustomContext>[]) => mergeRouters(...routers),
+    combineRouters: combineRouters as unknown as InitResult<
+      TCustomContext,
+      typeof options
+    >["combineRouters"],
     procedure: new BaseProcedureBuilder<
       { params?: never; query?: never; body?: never },
       undefined,
@@ -182,4 +200,3 @@ export function init<TCustomContext extends object = Record<string, never>>(
     },
   };
 }
-

@@ -7,12 +7,21 @@ import type {
   PendingProcedure,
   TypedContext,
 } from "./types/index.js";
+import type { HttpMethod } from "./types/procedure.js";
 import { BaseProcedureBuilder } from "./procedure-builder.js";
 
+function trimTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === "/") {
+    end -= 1;
+  }
+  return value.slice(0, end);
+}
+
 function normalizePrefix(prefix: string): string {
-  // Remove trailing slash if present, ensure leading slash
+  // Remove trailing slashes, ensure leading slash
   const normalized = prefix.startsWith("/") ? prefix : `/${prefix}`;
-  return normalized.endsWith("/") ? normalized.slice(0, -1) : normalized;
+  return trimTrailingSlashes(normalized);
 }
 
 function normalizePath(path: string): string {
@@ -20,7 +29,24 @@ function normalizePath(path: string): string {
   return path.startsWith("/") ? path : `/${path}`;
 }
 
-export class Router<TCustomContext extends object = Record<string, never>> {
+function canonicalizePath(path: string): string {
+  const normalizedPath = normalizePath(path);
+  const withoutTrailingSlash =
+    normalizedPath === "/" ? normalizedPath : trimTrailingSlashes(normalizedPath);
+  return withoutTrailingSlash.replace(/\{[^}]+\}/g, "{param}");
+}
+
+function getRouteSignature(method: string, path: string): string {
+  return `${method.toUpperCase()} ${canonicalizePath(path)}`;
+}
+
+export class Router<
+  TCustomContext extends object = Record<string, never>,
+  TRouteSignatures extends string = string,
+> {
+  /** Type-only metadata used to detect conflicts when combining declarative routers. */
+  declare readonly _routeSignatures: TRouteSignatures;
+
   private procedures: Procedure<
     InputConfig,
     z.ZodTypeAny | undefined,
@@ -29,15 +55,12 @@ export class Router<TCustomContext extends object = Record<string, never>> {
   >[] = [];
 
   constructor(
-    config?: Record<string, Router<TCustomContext> | Router<TCustomContext>[]>,
+    config?: Record<string, Router<TCustomContext>>,
   ) {
     if (config) {
       for (const [key, value] of Object.entries(config)) {
         const prefix = normalizePrefix(key);
-        const routers = Array.isArray(value) ? value : [value];
-        for (const router of routers) {
-          this.merge(prefix, router);
-        }
+        this.merge(prefix, value);
       }
     }
   }
@@ -198,6 +221,142 @@ export class Router<TCustomContext extends object = Record<string, never>> {
 
 // Type helper for methods object keys - maps lowercase method names to HTTP methods
 type MethodKey = "get" | "post" | "put" | "patch" | "delete";
+
+export type RouteSignature = `${HttpMethod} ${string}`;
+
+type EnsureLeadingSlash<TPath extends string> = TPath extends `/${string}`
+  ? TPath
+  : `/${TPath}`;
+
+type TrimTrailingSlashes<TPath extends string> = TPath extends "/"
+  ? TPath
+  : TPath extends `${infer TWithoutSlash}/`
+    ? TrimTrailingSlashes<TWithoutSlash>
+    : TPath;
+
+type CanonicalizePathParams<TPath extends string> =
+  TPath extends `${infer TBefore}{${string}}${infer TRest}`
+    ? `${TBefore}{param}${CanonicalizePathParams<TRest>}`
+    : TPath;
+
+type CanonicalPath<TPath extends string> = string extends TPath
+  ? string
+  : CanonicalizePathParams<TrimTrailingSlashes<EnsureLeadingSlash<TPath>>>;
+
+type JoinPaths<TPrefix extends string, TPath extends string> =
+  CanonicalPath<TPrefix> extends infer TCanonicalPrefix extends string
+    ? CanonicalPath<TPath> extends infer TCanonicalPath extends string
+      ? string extends TCanonicalPrefix | TCanonicalPath
+        ? string
+        : TCanonicalPrefix extends "/"
+          ? TCanonicalPath
+          : TCanonicalPath extends "/"
+            ? TCanonicalPrefix
+            : `${TCanonicalPrefix}${TCanonicalPath}`
+      : never
+    : never;
+
+type PrefixRouteSignatures<
+  TRouteSignatures extends string,
+  TPrefix extends string,
+> = string extends TRouteSignatures
+  ? string
+  : TRouteSignatures extends `${infer TMethod extends HttpMethod} ${infer TPath}`
+    ? `${TMethod} ${JoinPaths<TPrefix, TPath>}`
+    : never;
+
+type RouteSignaturesForConfigValue<TPath extends string, TValue> =
+  TValue extends Router<any, infer TNestedRouteSignatures>
+    ? PrefixRouteSignatures<TNestedRouteSignatures, TPath>
+    : TValue extends ReadyProcedure<any, any, any, any, infer TMethod>
+      ? `${TMethod} ${CanonicalPath<TPath>}`
+      : TValue extends RouteMethods
+        ? {
+            [TMethod in keyof TValue & MethodKey]: `${Uppercase<TMethod> & HttpMethod} ${CanonicalPath<TPath>}`;
+          }[keyof TValue & MethodKey]
+        : never;
+
+export type RouteSignaturesForConfig<
+  TConfig extends Record<string, unknown>,
+> = string extends keyof TConfig
+  ? string
+  : {
+      [TPath in keyof TConfig & string]: RouteSignaturesForConfigValue<
+        TPath,
+        TConfig[TPath]
+      >;
+    }[keyof TConfig & string];
+
+export type AnyRouter = Router<any, any>;
+
+export type RouterContext<TRouter extends AnyRouter> =
+  TRouter extends Router<infer TCustomContext, any>
+    ? TCustomContext
+    : never;
+
+export type RouterRouteSignatures<TRouter extends AnyRouter> =
+  TRouter extends Router<any, infer TRouteSignatures>
+    ? TRouteSignatures
+    : never;
+
+type OverlappingRouteSignatures<
+  TLeft extends string,
+  TRight extends string,
+> = Extract<TLeft, TRight> | Extract<TRight, TLeft>;
+
+type ConflictingRouteSignatures<
+  TRouters extends readonly AnyRouter[],
+  TSeenRouteSignatures extends string = never,
+> = TRouters extends readonly [
+  infer THead extends AnyRouter,
+  ...infer TTail extends readonly AnyRouter[],
+]
+  ?
+      | OverlappingRouteSignatures<
+          RouterRouteSignatures<THead>,
+          TSeenRouteSignatures
+        >
+      | ConflictingRouteSignatures<
+          TTail,
+          TSeenRouteSignatures | RouterRouteSignatures<THead>
+        >
+  : never;
+
+type UntrackedRouterError = {
+  readonly "combineRouters requires routers created by router()": never;
+};
+
+type RouteConflictError<TRouteSignatures extends string> = {
+  readonly "Conflicting route signatures": TRouteSignatures;
+};
+
+type IncompatibleRouterContexts<
+  TFirstContext extends object,
+  TRouters extends readonly AnyRouter[],
+> = TRouters extends readonly [
+  infer THead extends AnyRouter,
+  ...infer TTail extends readonly AnyRouter[],
+]
+  ? TFirstContext extends RouterContext<THead>
+    ? IncompatibleRouterContexts<TFirstContext, TTail>
+    : RouterContext<THead> | IncompatibleRouterContexts<TFirstContext, TTail>
+  : never;
+
+type RouterContextMismatchError<TIncompatibleContexts extends object> = {
+  readonly "Router context mismatch": TIncompatibleContexts;
+};
+
+export type ValidateRouterCombination<
+  TRouters extends readonly [AnyRouter, ...AnyRouter[]],
+> = [IncompatibleRouterContexts<RouterContext<TRouters[0]>, TRouters>] extends [never]
+  ? string extends RouterRouteSignatures<TRouters[number]>
+    ? UntrackedRouterError
+    : [ConflictingRouteSignatures<TRouters>] extends [never]
+      ? unknown
+      : RouteConflictError<ConflictingRouteSignatures<TRouters>>
+  : RouterContextMismatchError<
+      IncompatibleRouterContexts<RouterContext<TRouters[0]>, TRouters>
+    >;
 
 /**
  * Helper function to define a route with compile-time validation.
@@ -391,27 +550,54 @@ export function router<
   const TConfig extends Record<string, unknown> = Record<string, unknown>,
 >(
   config: TConfig & ValidateRouterConfig<TConfig, TCustomContext>,
-): Router<TCustomContext> {
-  return buildRouter<TCustomContext>(config);
+): Router<TCustomContext, RouteSignaturesForConfig<TConfig>> {
+  return buildRouter<TCustomContext>(config) as Router<
+    TCustomContext,
+    RouteSignaturesForConfig<TConfig>
+  >;
 }
 
 export function createRouter<
   TCustomContext extends object = Record<string, never>,
 >(
-  config?: Record<string, Router<TCustomContext> | Router<TCustomContext>[]>,
+  config?: Record<string, Router<TCustomContext>>,
 ): Router<TCustomContext> {
   return new Router<TCustomContext>(config);
 }
 
-export function mergeRouters<
-  TCustomContext extends object = Record<string, never>,
->(...routers: Router<TCustomContext>[]): Router<TCustomContext> {
-  const mergedRouter = new Router<TCustomContext>();
+export function combineRouters<
+  const TRouters extends readonly [
+    AnyRouter,
+    ...AnyRouter[],
+  ],
+>(
+  ...routers: TRouters & ValidateRouterCombination<TRouters>
+): Router<
+  RouterContext<TRouters[0]>,
+  RouterRouteSignatures<TRouters[number]>
+> {
+  if (routers.length === 0) {
+    throw new Error("combineRouters requires at least one router");
+  }
+
+  const mergedRouter = new Router<RouterContext<TRouters[0]>>();
+  const seenRouteSignatures = new Set<string>();
+
   for (const router of routers) {
     const routerProcedures = router.getProcedures();
     for (const procedure of routerProcedures) {
+      const routeSignature = getRouteSignature(procedure.method, procedure.path);
+      if (seenRouteSignatures.has(routeSignature)) {
+        throw new Error(`Route conflict: ${routeSignature}`);
+      }
+
+      seenRouteSignatures.add(routeSignature);
       mergedRouter.register(procedure);
     }
   }
-  return mergedRouter;
+
+  return mergedRouter as Router<
+    RouterContext<TRouters[0]>,
+    RouterRouteSignatures<TRouters[number]>
+  >;
 }

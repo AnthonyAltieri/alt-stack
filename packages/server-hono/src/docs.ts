@@ -55,7 +55,7 @@ const SWAGGER_UI_HTML = `<!DOCTYPE html>
 export function createDocsRouter<
   TCustomContext extends object = Record<string, never>,
 >(
-  config: Record<string, Router<TCustomContext> | Router<TCustomContext>[]>,
+  config: Record<string, Router<TCustomContext>>,
   options: CreateDocsRouterOptions = {},
 ): Router<TCustomContext> {
   const spec = generateOpenAPISpec(config, options);
@@ -109,4 +109,3 @@ export function createDocsRouter<
 
   return router<TCustomContext>(docsRouterConfig);
 }
-

@@ -8,7 +8,8 @@ Every family is organized in this order:
 
 1. **Quickstart** — the smallest supported working flow.
 2. **Common Patterns** — recurring composition, lifecycle, error, and production concerns.
-3. **API Documentation** — public functions, classes, types, options, properties, results, and constraints.
+3. **Task guides** — optional focused workflows for larger features or migrations.
+4. **API Documentation** — public functions, classes, types, options, properties, results, and constraints.
 
 Claims should be derived from public entry points, manifests, implementations, tests, and examples. Existing prose is not a source of truth when it conflicts with code.
 

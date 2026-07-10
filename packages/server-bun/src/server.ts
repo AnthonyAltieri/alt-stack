@@ -19,7 +19,6 @@ import {
   setSpanOk,
   withActiveSpan,
   isErr,
-  ok as resultOk,
   err as resultErr,
   findHttpStatusForError,
 } from "@alt-stack/server-core";
@@ -82,7 +81,7 @@ function jsonResponse(data: unknown, status: number = 200): Response {
 export function createServer<
   TContext extends BunBaseContext = BunBaseContext,
 >(
-  config: Record<string, Router<TContext> | Router<TContext>[]>,
+  config: Record<string, Router<TContext>>,
   options?: {
     createContext?: (
       req: Request,
@@ -121,20 +120,12 @@ export function createServer<
     TContext
   >[] = [];
 
-  for (const [prefix, routerOrRouters] of Object.entries(config)) {
-    const routers = Array.isArray(routerOrRouters)
-      ? routerOrRouters
-      : [routerOrRouters];
-
-    for (const router of routers) {
-      const routerProcedures = router.getProcedures();
-
-      for (const procedure of routerProcedures) {
-        procedures.push({
-          ...procedure,
-          path: normalizePath(prefix, procedure.path),
-        });
-      }
+  for (const [prefix, router] of Object.entries(config)) {
+    for (const procedure of router.getProcedures()) {
+      procedures.push({
+        ...procedure,
+        path: normalizePath(prefix, procedure.path),
+      });
     }
   }
 

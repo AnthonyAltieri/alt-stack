@@ -3,7 +3,7 @@ import { Hono as HonoClass } from "hono";
 import type { z } from "zod";
 import type { ZodError } from "zod";
 import type { TypedContext, InputConfig, TelemetryOption } from "@alt-stack/server-core";
-import type { Procedure, ReadyProcedure } from "@alt-stack/server-core";
+import type { Procedure } from "@alt-stack/server-core";
 import type { Router } from "@alt-stack/server-core";
 import {
   validateInput,
@@ -16,11 +16,8 @@ import {
   endSpanWithError,
   setSpanOk,
   withActiveSpan,
-  isOk,
   isErr,
-  ok as resultOk,
   err as resultErr,
-  extractTagsFromSchema,
   findHttpStatusForError,
 } from "@alt-stack/server-core";
 import type { MiddlewareResult, MiddlewareResultSuccess } from "@alt-stack/server-core";
@@ -82,7 +79,7 @@ import type { HonoBaseContext } from "./types.js";
 export function createServer<
   TContext extends HonoBaseContext = HonoBaseContext,
 >(
-  config: Record<string, Router<TContext> | Router<TContext>[]>,
+  config: Record<string, Router<TContext>>,
   options?: {
     createContext?: (c: Context) => Promise<Omit<TContext, "hono" | "span">> | Omit<TContext, "hono" | "span">;
     middleware?: {
@@ -155,21 +152,13 @@ export function createServer<
     TContext
   >[] = [];
 
-  for (const [prefix, routerOrRouters] of Object.entries(config)) {
-    const routers = Array.isArray(routerOrRouters)
-      ? routerOrRouters
-      : [routerOrRouters];
-
-    for (const router of routers) {
-      const routerProcedures = router.getProcedures();
-
-      // Add procedures with prefixed paths
-      for (const procedure of routerProcedures) {
-        procedures.push({
-          ...procedure,
-          path: normalizePath(prefix, procedure.path),
-        });
-      }
+  for (const [prefix, router] of Object.entries(config)) {
+    // Add procedures with prefixed paths
+    for (const procedure of router.getProcedures()) {
+      procedures.push({
+        ...procedure,
+        path: normalizePath(prefix, procedure.path),
+      });
     }
   }
 
@@ -539,4 +528,3 @@ export function createServer<
 
   return app;
 }
-

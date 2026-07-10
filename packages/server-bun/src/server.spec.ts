@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from "bun:test";
 import { z } from "zod";
 import { createServer } from "./server.ts";
-import { Router, router, ok, type BunBaseContext } from "./index.ts";
+import { Router, combineRouters, router, ok, type BunBaseContext } from "./index.ts";
 
 describe("createServer", () => {
   let server: ReturnType<typeof createServer> | null = null;
@@ -394,7 +394,7 @@ describe("createServer", () => {
   });
 
   describe("multiple routers", () => {
-    it("should merge multiple routers under same prefix", async () => {
+    it("should combine multiple routers before mounting them under one prefix", async () => {
       const baseRouter = new Router();
       const usersRouter = router({
         "/users": baseRouter.procedure
@@ -410,7 +410,7 @@ describe("createServer", () => {
 
       server = createServer(
         {
-          "/api": [usersRouter, postsRouter],
+          "/api": combineRouters(usersRouter, postsRouter),
         },
         { port: 0 },
       );

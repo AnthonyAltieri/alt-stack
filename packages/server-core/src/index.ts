@@ -1,5 +1,18 @@
 // Main export file for server-core
-export { createRouter, mergeRouters, Router, router, type RouterConfigValue } from "./router.js";
+export {
+  createRouter,
+  combineRouters,
+  Router,
+  router,
+  type AnyRouter,
+  type RouteSignature,
+  type RouteSignaturesForConfig,
+  type RouterConfigValue,
+  type RouterContext,
+  type RouterRouteSignatures,
+  type ValidateRouterCombination,
+  type ValidateRouterConfig,
+} from "./router.js";
 export { init, publicProcedure, default400ErrorSchema, default500ErrorSchema } from "./init.js";
 
 // Re-export Result utilities from @alt-stack/result for convenience
@@ -69,4 +82,3 @@ export type {
   Span,
 } from "./telemetry.js";
 export { extractTagsFromSchema, findHttpStatusForError } from "./extract-tags.js";
-

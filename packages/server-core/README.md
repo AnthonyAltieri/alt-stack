@@ -27,8 +27,14 @@ const users = t.router({
     .get(({ input }) => ok({ id: input.params.id })),
 });
 
+const health = t.router({
+  "/health": t.procedure.get(() => ok({ ready: true })),
+});
+
+const api = t.combineRouters(users, health);
+
 const openapi = generateOpenAPISpec(
-  { "/api": users },
+  { "/api": api },
   { title: "Users API", version: "1.0.0" },
 );
 ```
@@ -50,7 +56,7 @@ See the [server quickstart](../../apps/docs/docs/server/quickstart.md).
 - Build procedures from `init<TContext>().procedure` and return `ok()` or `err()` from every handler.
 - Use OpenAPI `{param}` paths and string-compatible Zod input schemas for params/query values.
 - Declare tagged error schemas with a direct `_tag: z.literal("...")` field.
-- Compose nested routers by prefix; router merges append and do not detect duplicates.
+- Compose independent declarative routers with `combineRouters()`. It requires at least one tracked router and rejects matching HTTP method plus canonical path signatures at compile time, with the same check repeated at runtime.
 - Await `initTelemetry()` before serving when the first request must be traced.
 
 The current adapters wrap declared errors under `{ error: ... }`, while core OpenAPI emits the declared schema as the entire body. Automatic 400/500 responses are not added to OpenAPI. Read [Server common patterns](../../apps/docs/docs/server/common-patterns.md) before treating the generated spec as an exact wire contract.

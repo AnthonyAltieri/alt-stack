@@ -150,6 +150,37 @@ describe("TanStack Start server adapter", () => {
     ]);
   });
 
+  it("generates an empty OpenAPI document from no server routes", () => {
+    const spec = generateOpenAPISpecFromServerRoutes([], {
+      title: "Empty API",
+      version: "1.0.0",
+    });
+
+    expect(spec.info).toEqual({ title: "Empty API", version: "1.0.0" });
+    expect(spec.paths).toEqual({});
+  });
+
+  it("rejects conflicting attached routes while generating OpenAPI", () => {
+    const firstRoute = createAltStackFileRoute("/api/me")({
+      server: {
+        handlers: {
+          GET: procedure.handler(() => ok({ source: "first" })),
+        },
+      },
+    });
+    const secondRoute = createAltStackFileRoute("/api/me")({
+      server: {
+        handlers: {
+          GET: procedure.handler(() => ok({ source: "second" })),
+        },
+      },
+    });
+
+    expect(() =>
+      generateOpenAPISpecFromServerRoutes([firstRoute, secondRoute]),
+    ).toThrow("Route conflict: GET /api/me");
+  });
+
   it("validates JSON request bodies", async () => {
     const route = createAltStackFileRoute("/api/todos")({
       server: {

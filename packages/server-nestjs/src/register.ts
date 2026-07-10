@@ -118,10 +118,7 @@ function resolveMountPath(
 
 export function registerAltStack<TCustomContext extends object = {}>(
   app: NestAppLike,
-  config: Record<
-    string,
-    Router<NestBaseContext & TCustomContext> | Router<NestBaseContext & TCustomContext>[]
-  >,
+  config: Record<string, Router<NestBaseContext & TCustomContext>>,
   options?: RegisterAltStackOptions<TCustomContext>,
 ): void {
   const expressApp = getExpressInstance(app);
