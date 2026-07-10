@@ -95,13 +95,10 @@ TypeScript reports conflicting signatures at the call site. The runtime repeats 
 
 ```typescript
 const api = t.combineRouters(usersRouter, postsRouter);
-
-// Before this breaking change:
-// const api = mergeRouters(usersRouter, postsRouter);
-// createServer({ "/api": [usersRouter, postsRouter] });
-
 createServer({ "/api": api });
 ```
+
+See [Combine routers with `combineRouters`](../combine-routers.md) for a complete working example, conflict cases, context compatibility, prefixing, migration, and troubleshooting.
 
 ### `Router<TCustomContext>`
 

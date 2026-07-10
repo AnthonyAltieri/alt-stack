@@ -252,6 +252,7 @@ This serves `/docs/openapi.json` and, by default, Swagger UI at `/docs`. Express
 
 ## Next steps
 
+- [Combine routers safely](./combine-routers.md) explains conflict-checked composition, prefixes, context compatibility, and migration.
 - [Server common patterns](./common-patterns.md) covers context, middleware, router composition, telemetry, errors, and adapter differences.
 - [Core API Documentation](./api/core.md) describes the shared public surface.
 - Adapter APIs: [Hono](./api/hono.md), [Express](./api/express.md), [Bun](./api/bun.md), [NestJS](./api/nestjs.md), and [TanStack Start](./api/tanstack-start.md).

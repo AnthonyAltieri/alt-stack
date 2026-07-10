@@ -8,6 +8,7 @@
     "server": {
       "quickstart": "server/quickstart.md",
       "commonPatterns": "server/common-patterns.md",
+      "guides": ["server/combine-routers.md"],
       "api": [
         "server/api/core.md",
         "server/api/hono.md",

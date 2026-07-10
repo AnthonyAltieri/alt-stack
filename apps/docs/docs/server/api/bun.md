@@ -139,7 +139,7 @@ Creates an empty Bun-typed router or prefixes one router per config key. Its con
 
 ### `combineRouters(...routers)`
 
-Combines one or more tracked declarative routers without prefixes. It rejects matching `METHOD + canonical path` signatures at compile time and repeats the check at runtime; the same path with different methods is valid. See [core `combineRouters()`](./core.md#combineroutersrouters) for canonicalization, metadata requirements, and migration examples.
+Combines one or more tracked declarative routers without prefixes. It rejects matching `METHOD + canonical path` signatures at compile time and repeats the check at runtime; the same path with different methods is valid. See [Combining routers](../combine-routers.md) for canonicalization, metadata requirements, migration, and troubleshooting.
 
 ## Core re-exports
 

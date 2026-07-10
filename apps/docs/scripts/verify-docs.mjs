@@ -784,6 +784,14 @@ for (const [familyName, family] of Object.entries(coverage.families)) {
     problems.push(`${family.commonPatterns} must have a Common Patterns H1`);
   }
 
+  for (const guidePath of family.guides ?? []) {
+    const guideText = docText([guidePath]);
+    allowedDocs.add(guidePath);
+    if (!/^# /m.test(guideText)) {
+      problems.push(`${guidePath} must have an H1`);
+    }
+  }
+
   for (const apiPath of family.api) {
     const apiText = docText([apiPath]);
     allowedDocs.add(apiPath);
@@ -801,6 +809,18 @@ for (const markdownPath of walkMarkdown(docsRoot)) {
   const docsRelative = path.relative(docsRoot, markdownPath).split(path.sep).join("/");
   if (!allowedDocs.has(docsRelative)) {
     problems.push(`Untracked or legacy docs page: apps/docs/docs/${docsRelative}`);
+  }
+}
+
+for (const markdownPath of walkMarkdown(path.join(docsRoot, "server"))) {
+  const docsRelative = path.relative(docsRoot, markdownPath).split(path.sep).join("/");
+  if (
+    docsRelative !== "server/combine-routers.md" &&
+    readRequired(markdownPath).includes("mergeRouters")
+  ) {
+    problems.push(
+      `Removed HTTP mergeRouters API is documented outside its migration guide: apps/docs/docs/${docsRelative}`,
+    );
   }
 }
 

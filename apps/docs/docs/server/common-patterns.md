@@ -101,7 +101,7 @@ createServer({
 });
 ```
 
-`combineRouters()` requires at least one tracked declarative router. A route identity is its uppercase HTTP method plus its canonical path: leading slashes are added, trailing slashes are removed except for `/`, and parameter names are normalized to `{param}`. Thus `GET users/{id}` conflicts with `GET /users/{userId}/`. The same canonical path with a different method is valid.
+`combineRouters()` requires at least one tracked declarative router. It rejects duplicate canonical method/path signatures at compile time and repeats the check at runtime. The same path with a different method is valid:
 
 ```typescript
 const readItems = t.router({
@@ -115,19 +115,7 @@ const createItem = t.router({
 const items = t.combineRouters(readItems, createItem);
 ```
 
-Build inputs with `router()` so their route metadata remains available to TypeScript. Routers assembled with `new Router()`, `createRouter()`, or imperative `register*()` calls are not accepted as statically checked inputs. The runtime repeats conflict detection as a backstop for JavaScript, casts, and dynamically mutated routers.
-
-Migrate flat composition and router arrays before mounting:
-
-```typescript
-// Before:
-const api = mergeRouters(usersRouter, postsRouter);
-createServer({ "/api": [usersRouter, postsRouter] });
-
-// After:
-const api = combineRouters(usersRouter, postsRouter);
-createServer({ "/api": api });
-```
+See [Combine routers with `combineRouters`](./combine-routers.md) for canonicalization rules, tracked versus untracked routers, context compatibility, runtime errors, migration from the removed HTTP composition API, and troubleshooting.
 
 When two routers intentionally reuse a method and path, give them distinct prefixes before combining:
 
