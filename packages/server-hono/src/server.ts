@@ -24,6 +24,7 @@ import {
   findHttpStatusForError,
 } from "@alt-stack/server-core";
 import type { MiddlewareResult, MiddlewareResultSuccess } from "@alt-stack/server-core";
+import { registerStreamEndpoints } from "./stream-adapter.js";
 
 /**
  * Converts OpenAPI-style path params ({param}) to Hono-style (:param)
@@ -155,6 +156,8 @@ export function createServer<
     TContext
   >[] = [];
 
+  const mountedStreams: { path: string; endpoint: { _tag: "StreamEndpoint"; handle(req: unknown): Promise<unknown> } }[] = [];
+
   for (const [prefix, routerOrRouters] of Object.entries(config)) {
     const routers = Array.isArray(routerOrRouters)
       ? routerOrRouters
@@ -170,7 +173,19 @@ export function createServer<
           path: normalizePath(prefix, procedure.path),
         });
       }
+
+      // Collect stream endpoints with prefixed paths
+      for (const mounted of router.getStreamEndpoints()) {
+        mountedStreams.push({
+          path: normalizePath(prefix, mounted.path),
+          endpoint: mounted.endpoint,
+        });
+      }
     }
+  }
+
+  if (mountedStreams.length > 0) {
+    registerStreamEndpoints(app, mountedStreams);
   }
 
   for (const procedure of procedures) {

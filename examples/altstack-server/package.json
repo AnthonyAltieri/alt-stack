@@ -13,6 +13,7 @@
   "dependencies": {
     "@hono/node-server": "^1.0.0",
     "@alt-stack/server-hono": "workspace:*",
+    "@alt-stack/durable-streams-server": "workspace:*",
     "@alt-stack/http-client-fetch": "workspace:*",
     "@alt-stack/result": "workspace:*",
     "@t3-oss/env-core": "^0.9.0",

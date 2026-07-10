@@ -1,5 +1,13 @@
 // Main export file for server-core
-export { createRouter, mergeRouters, Router, router, type RouterConfigValue } from "./router.js";
+export {
+  createRouter,
+  mergeRouters,
+  Router,
+  router,
+  type RouterConfigValue,
+  type StreamEndpointLike,
+  type MountedStreamEndpoint,
+} from "./router.js";
 export { init, publicProcedure, default400ErrorSchema, default500ErrorSchema } from "./init.js";
 
 // Re-export Result utilities from @alt-stack/result for convenience

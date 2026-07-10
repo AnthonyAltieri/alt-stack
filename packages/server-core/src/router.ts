@@ -20,6 +20,31 @@ function normalizePath(path: string): string {
   return path.startsWith("/") ? path : `/${path}`;
 }
 
+/**
+ * Minimal structural shape of an alt-stack stream endpoint, as produced by
+ * `stream(...)` in `@alt-stack/durable-streams-server`. The router detects
+ * these by the `_tag` discriminant — no runtime dependency on the durable-
+ * streams package is required.
+ */
+export interface StreamEndpointLike {
+  readonly _tag: "StreamEndpoint";
+  handle(req: unknown): Promise<unknown>;
+}
+
+export interface MountedStreamEndpoint {
+  readonly path: string;
+  readonly endpoint: StreamEndpointLike;
+}
+
+function isStreamEndpoint(value: unknown): value is StreamEndpointLike {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { _tag?: unknown })._tag === "StreamEndpoint" &&
+    typeof (value as { handle?: unknown }).handle === "function"
+  );
+}
+
 export class Router<TCustomContext extends object = Record<string, never>> {
   private procedures: Procedure<
     InputConfig,
@@ -27,6 +52,8 @@ export class Router<TCustomContext extends object = Record<string, never>> {
     Record<number, z.ZodTypeAny> | undefined,
     TCustomContext
   >[] = [];
+
+  private streamEndpoints: MountedStreamEndpoint[] = [];
 
   constructor(
     config?: Record<string, Router<TCustomContext> | Router<TCustomContext>[]>,
@@ -160,6 +187,11 @@ export class Router<TCustomContext extends object = Record<string, never>> {
     return this;
   }
 
+  registerStreamEndpoint(path: string, endpoint: StreamEndpointLike): this {
+    this.streamEndpoints.push({ path: normalizePath(path), endpoint });
+    return this;
+  }
+
   merge(prefix: string, router: Router<TCustomContext>): this {
     const normalizedPrefix = normalizePrefix(prefix);
     const mergedProcedures = router.procedures.map((proc) => ({
@@ -167,6 +199,11 @@ export class Router<TCustomContext extends object = Record<string, never>> {
       path: `${normalizedPrefix}${proc.path}`,
     }));
     this.procedures.push(...mergedProcedures);
+    const mergedStreams = router.streamEndpoints.map((s) => ({
+      ...s,
+      path: `${normalizedPrefix}${s.path}`,
+    }));
+    this.streamEndpoints.push(...mergedStreams);
     return this;
   }
 
@@ -177,6 +214,11 @@ export class Router<TCustomContext extends object = Record<string, never>> {
     TCustomContext
   >[] {
     return this.procedures;
+  }
+
+  /** Returns stream endpoints registered on this router. Adapters consume this. */
+  getStreamEndpoints(): readonly MountedStreamEndpoint[] {
+    return this.streamEndpoints;
   }
 
   get procedure(): BaseProcedureBuilder<
@@ -275,7 +317,8 @@ export type RouteMethods = {
 export type RouterConfigValue<TCustomContext extends object> =
   | ReadyProcedure<any, any, any, any>
   | RouteMethods
-  | Router<TCustomContext>;
+  | Router<TCustomContext>
+  | StreamEndpointLike;
 
 /**
  * Validates each key-value pair in a router config object.
@@ -294,17 +337,19 @@ export type ValidateRouterConfig<T, TCustomContext extends object> = {
   [K in keyof T]: K extends string
     ? T[K] extends Router<TCustomContext>
       ? T[K]
-      : T[K] extends ReadyProcedure<infer TInput, any, any, infer TProcedureContext>
-        ? TProcedureContext extends TCustomContext
-          ? ExtractPathParams<K> extends never
-            ? T[K]  // No path params needed
-            : TInput extends { params: z.ZodTypeAny }
-              ? T[K]  // Has required params
-              : never  // Missing params - type error
-          : never
-        : T[K] extends RouteMethods
-          ? ValidateMethodsForPath<K, T[K], TCustomContext>
-          : T[K]
+      : T[K] extends StreamEndpointLike
+        ? T[K]
+        : T[K] extends ReadyProcedure<infer TInput, any, any, infer TProcedureContext>
+          ? TProcedureContext extends TCustomContext
+            ? ExtractPathParams<K> extends never
+              ? T[K]  // No path params needed
+              : TInput extends { params: z.ZodTypeAny }
+                ? T[K]  // Has required params
+                : never  // Missing params - type error
+            : never
+          : T[K] extends RouteMethods
+            ? ValidateMethodsForPath<K, T[K], TCustomContext>
+            : T[K]
     : T[K];
 };
 
@@ -352,6 +397,8 @@ export function buildRouter<TCustomContext extends object>(
     if (value instanceof Router) {
       // Nested router - merge it
       routerInstance.merge(normalizePrefix(key), value);
+    } else if (isStreamEndpoint(value)) {
+      routerInstance.registerStreamEndpoint(key, value);
     } else if (isMethodsObject(value)) {
       // Methods object - register each method with inferred HTTP method
       for (const [methodKey, pendingProcedure] of Object.entries(value)) {
