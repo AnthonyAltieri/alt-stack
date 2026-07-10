@@ -1,6 +1,6 @@
 {
   "name": "@alt-stack/server-tanstack-start",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "TanStack Start server route adapter for Alt Stack",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

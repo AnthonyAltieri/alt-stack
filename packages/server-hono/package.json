@@ -1,6 +1,6 @@
 {
   "name": "@alt-stack/server-hono",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Type-safe server framework built on Hono with Zod validation",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
