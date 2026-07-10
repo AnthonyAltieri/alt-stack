@@ -10,10 +10,18 @@ import type {
 import type { HttpMethod } from "./types/procedure.js";
 import { BaseProcedureBuilder } from "./procedure-builder.js";
 
+function trimTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === "/") {
+    end -= 1;
+  }
+  return value.slice(0, end);
+}
+
 function normalizePrefix(prefix: string): string {
   // Remove trailing slashes, ensure leading slash
   const normalized = prefix.startsWith("/") ? prefix : `/${prefix}`;
-  return normalized.replace(/\/+$/, "");
+  return trimTrailingSlashes(normalized);
 }
 
 function normalizePath(path: string): string {
@@ -24,7 +32,7 @@ function normalizePath(path: string): string {
 function canonicalizePath(path: string): string {
   const normalizedPath = normalizePath(path);
   const withoutTrailingSlash =
-    normalizedPath === "/" ? normalizedPath : normalizedPath.replace(/\/+$/, "");
+    normalizedPath === "/" ? normalizedPath : trimTrailingSlashes(normalizedPath);
   return withoutTrailingSlash.replace(/\{[^}]+\}/g, "{param}");
 }
 
