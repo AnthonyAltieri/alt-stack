@@ -364,7 +364,8 @@ export const openApiToZodTsCode = (
 
   // Type assertion helper for compile-time verification
   lines.push("// Type assertion helper - verifies interface matches schema at compile time");
-  lines.push("type _AssertEqual<T, U> = [T] extends [U] ? ([U] extends [T] ? true : never) : never;");
+  lines.push("type _AssertEqual<T, U> = [T] extends [U] ? ([U] extends [T] ? true : false) : false;");
+  lines.push("type _AssertTrue<T extends true> = T;");
   lines.push("");
 
   // Create registry for schema deduplication
@@ -392,7 +393,7 @@ export const openApiToZodTsCode = (
       schemaBlocks.push("");
 
       // Add type assertion to verify interface matches schema
-      typeAssertions.push(`type _Assert${typeName} = _AssertEqual<${typeName}, z.infer<typeof ${schemaName}>>;`);
+      typeAssertions.push(`type _Assert${typeName} = _AssertTrue<_AssertEqual<${typeName}, z.output<typeof ${schemaName}>>>;`);
 
       // Register component schemas so they can be referenced by route schemas
       const fingerprint = getSchemaFingerprint(schema);

@@ -175,7 +175,7 @@ describe("schemaToTypeString", () => {
         },
         required: ["id"],
       });
-      expect(result).toBe("{ id: string; name?: string }");
+      expect(result).toBe("{ id: string; name?: string | undefined }");
     });
 
     it("should convert object without required array", () => {
@@ -185,12 +185,21 @@ describe("schemaToTypeString", () => {
           id: { type: "string" },
         },
       });
-      expect(result).toBe("{ id?: string }");
+      expect(result).toBe("{ id?: string | undefined }");
     });
 
     it("should convert empty object", () => {
       const result = schemaToTypeString({ type: "object" });
       expect(result).toBe("Record<string, unknown>");
+    });
+
+    it("should convert empty strict object", () => {
+      const result = schemaToTypeString({
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      });
+      expect(result).toBe("Record<string, never>");
     });
 
     it("should handle additionalProperties true", () => {
@@ -381,7 +390,21 @@ describe("generateInterface", () => {
     });
     expect(result).toBe(`export interface User {
   id: string;
-  email?: string;
+  email?: string | undefined;
+}`);
+  });
+
+  it("should generate concrete index signatures for propertyless objects", () => {
+    expect(generateInterface("Strict", {
+      type: "object",
+      additionalProperties: false,
+    })).toBe(`export interface Strict {
+  [key: string]: never;
+}`);
+    expect(generateInterface("Freeform", {
+      type: "object",
+    })).toBe(`export interface Freeform {
+  [key: string]: unknown;
 }`);
   });
 
@@ -417,7 +440,8 @@ describe("openApiToZodTsCode - optimized .d.ts output", () => {
     };
 
     const code = openApiToZodTsCode(spec);
-    expect(code).toContain("type _AssertEqual<T, U> = [T] extends [U] ? ([U] extends [T] ? true : never) : never;");
+    expect(code).toContain("type _AssertEqual<T, U> = [T] extends [U] ? ([U] extends [T] ? true : false) : false;");
+    expect(code).toContain("type _AssertTrue<T extends true> = T;");
   });
 
   it("should generate interface instead of z.infer", () => {
@@ -511,7 +535,7 @@ describe("openApiToZodTsCode - optimized .d.ts output", () => {
     };
 
     const code = openApiToZodTsCode(spec);
-    expect(code).toContain("type _AssertUser = _AssertEqual<User, z.infer<typeof UserSchema>>;");
+    expect(code).toContain("type _AssertUser = _AssertTrue<_AssertEqual<User, z.output<typeof UserSchema>>>;");
   });
 
   it("should handle all OpenAPI types in interfaces", () => {
@@ -538,12 +562,12 @@ describe("openApiToZodTsCode - optimized .d.ts output", () => {
     const code = openApiToZodTsCode(spec);
     expect(code).toContain("export interface ComplexType {");
     expect(code).toContain("stringProp: string;");
-    expect(code).toContain("numberProp?: number;");
-    expect(code).toContain("integerProp?: number;");
-    expect(code).toContain("booleanProp?: boolean;");
-    expect(code).toContain('arrayProp?: Array<string>;');
-    expect(code).toContain('enumProp?: "A" | "B";');
-    expect(code).toContain("nullableProp?: (string | null);");
+    expect(code).toContain("numberProp?: number | undefined;");
+    expect(code).toContain("integerProp?: number | undefined;");
+    expect(code).toContain("booleanProp?: boolean | undefined;");
+    expect(code).toContain('arrayProp?: Array<string> | undefined;');
+    expect(code).toContain('enumProp?: "A" | "B" | undefined;');
+    expect(code).toContain("nullableProp?: (string | null) | undefined;");
   });
 
   it("should handle $ref in interfaces", () => {
@@ -616,8 +640,8 @@ describe(".d.ts output verification", () => {
 
     // 4. Should have type assertions
     expect(code).toContain("type _AssertEqual<T, U>");
-    expect(code).toContain("type _AssertUser = _AssertEqual<User, z.infer<typeof UserSchema>>");
-    expect(code).toContain("type _AssertProduct = _AssertEqual<Product, z.infer<typeof ProductSchema>>");
+    expect(code).toContain("type _AssertUser = _AssertTrue<_AssertEqual<User, z.output<typeof UserSchema>>>");
+    expect(code).toContain("type _AssertProduct = _AssertTrue<_AssertEqual<Product, z.output<typeof ProductSchema>>>");
   });
 
   it("should produce valid TypeScript syntax for all schema types", () => {

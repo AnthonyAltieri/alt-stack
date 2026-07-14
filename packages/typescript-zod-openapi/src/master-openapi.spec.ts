@@ -43,7 +43,8 @@ const EXPECTED_ZOD_TS = String.raw`
 import { z } from 'zod';
 
 // Type assertion helper - verifies interface matches schema at compile time
-type _AssertEqual<T, U> = [T] extends [U] ? ([U] extends [T] ? true : never) : never;
+type _AssertEqual<T, U> = [T] extends [U] ? ([U] extends [T] ? true : false) : false;
+type _AssertTrue<T extends true> = T;
 
 export type ScalarString = string;
 export const ScalarStringSchema = z.string();
@@ -92,16 +93,18 @@ export const ArrayOfUnionSchema = z.array(z.union([z.string(), z.number()]));
 
 export interface ObjectOptionalAndNullable {
   name: string;
-  nickname?: (string | null);
-  'x-rate-limit'?: number;
+  nickname?: (string | null) | undefined;
+  'x-rate-limit'?: number | undefined;
 }
 export const ObjectOptionalAndNullableSchema = z.object({ name: z.string().min(1), nickname: z.string().nullable().optional(), 'x-rate-limit': z.number().int().min(0).optional() });
 
 export interface EmptyObjectStrict {
+  [key: string]: never;
 }
 export const EmptyObjectStrictSchema = z.object({}).strict();
 
 export interface FreeformObject {
+  [key: string]: unknown;
 }
 export const FreeformObjectSchema = z.record(z.string(), z.unknown());
 
@@ -112,13 +115,13 @@ export const NamedSchema = z.object({ name: z.string().min(1) });
 
 export interface Timestamped {
   createdAt: string;
-  updatedAt?: (string | null);
+  updatedAt?: (string | null) | undefined;
 }
 export const TimestampedSchema = z.object({ createdAt: z.string().datetime().meta({"openapi":{"format":"date-time"}}), updatedAt: z.string().datetime().meta({"openapi":{"format":"date-time"}}).nullable().optional() });
 
 export interface Audited {
   createdBy: string;
-  updatedBy?: (string | null);
+  updatedBy?: (string | null) | undefined;
 }
 export const AuditedSchema = z.object({ createdBy: z.string().min(1), updatedBy: z.string().nullable().optional() });
 
@@ -146,14 +149,14 @@ export const NotFoundErrorSchema = z.object({ error: z.object({ code: z.enum(['N
 
 export interface ValidationError {
   error: { code: "VALIDATION_ERROR"; message: string };
-  details?: Array<string>;
+  details?: Array<string> | undefined;
 }
 export const ValidationErrorSchema = z.object({ error: z.object({ code: z.enum(['VALIDATION_ERROR']), message: z.string().min(1) }).strict(), details: z.array(z.string()).optional() }).strict();
 
 export interface Profile {
   bio: string;
-  website?: (StringUrl | null);
-  location?: (string | null);
+  website?: (StringUrl | null) | undefined;
+  location?: (string | null) | undefined;
 }
 export const ProfileSchema = z.object({ bio: z.string().max(160), website: StringUrlSchema.nullable().optional(), location: z.string().nullable().optional() }).strict();
 
@@ -167,7 +170,7 @@ export const ImplicitObjectSchema = z.object({ id: StringUuidSchema }).strict();
 
 export interface ObjectSimple {
   id: StringUuid;
-  count?: IntegerMinMax;
+  count?: IntegerMinMax | undefined;
 }
 export const ObjectSimpleSchema = z.object({ id: StringUuidSchema, count: IntegerMinMaxSchema.optional() });
 
@@ -183,7 +186,7 @@ export const PetSchema = z.union([CatSchema, DogSchema]);
 export interface CreateUser {
   name: string;
   email: StringEmail;
-  profile?: (Profile | null);
+  profile?: (Profile | null) | undefined;
 }
 export const CreateUserSchema = z.object({ name: z.string().min(1), email: StringEmailSchema, profile: ProfileSchema.nullable().optional() }).strict();
 
@@ -192,7 +195,7 @@ export interface User {
   name: string;
   email: StringEmail;
   roles: Array<StringEnum>;
-  profile?: (Profile | null);
+  profile?: (Profile | null) | undefined;
 }
 export const UserSchema = z.object({ id: StringUuidSchema, name: z.string().min(1), email: StringEmailSchema, roles: z.array(StringEnumSchema).min(1), profile: ProfileSchema.nullable().optional() }).strict();
 
@@ -215,45 +218,45 @@ export type Event = (UserCreatedEvent | PetAdoptedEvent);
 export const EventSchema = z.union([UserCreatedEventSchema, PetAdoptedEventSchema]);
 
 // Compile-time type assertions - ensure interfaces match schemas
-type _AssertScalarString = _AssertEqual<ScalarString, z.infer<typeof ScalarStringSchema>>;
-type _AssertStringEmail = _AssertEqual<StringEmail, z.infer<typeof StringEmailSchema>>;
-type _AssertStringUrl = _AssertEqual<StringUrl, z.infer<typeof StringUrlSchema>>;
-type _AssertStringUri = _AssertEqual<StringUri, z.infer<typeof StringUriSchema>>;
-type _AssertStringUuid = _AssertEqual<StringUuid, z.infer<typeof StringUuidSchema>>;
-type _AssertStringColorHex = _AssertEqual<StringColorHex, z.infer<typeof StringColorHexSchema>>;
-type _AssertStringPattern = _AssertEqual<StringPattern, z.infer<typeof StringPatternSchema>>;
-type _AssertStringMinMax = _AssertEqual<StringMinMax, z.infer<typeof StringMinMaxSchema>>;
-type _AssertStringAllConstraints = _AssertEqual<StringAllConstraints, z.infer<typeof StringAllConstraintsSchema>>;
-type _AssertStringEnum = _AssertEqual<StringEnum, z.infer<typeof StringEnumSchema>>;
-type _AssertNumberMinMax = _AssertEqual<NumberMinMax, z.infer<typeof NumberMinMaxSchema>>;
-type _AssertIntegerMinMax = _AssertEqual<IntegerMinMax, z.infer<typeof IntegerMinMaxSchema>>;
-type _AssertScalarBoolean = _AssertEqual<ScalarBoolean, z.infer<typeof ScalarBooleanSchema>>;
-type _AssertArrayOfStrings = _AssertEqual<ArrayOfStrings, z.infer<typeof ArrayOfStringsSchema>>;
-type _AssertArrayOfUnion = _AssertEqual<ArrayOfUnion, z.infer<typeof ArrayOfUnionSchema>>;
-type _AssertObjectOptionalAndNullable = _AssertEqual<ObjectOptionalAndNullable, z.infer<typeof ObjectOptionalAndNullableSchema>>;
-type _AssertEmptyObjectStrict = _AssertEqual<EmptyObjectStrict, z.infer<typeof EmptyObjectStrictSchema>>;
-type _AssertFreeformObject = _AssertEqual<FreeformObject, z.infer<typeof FreeformObjectSchema>>;
-type _AssertNamed = _AssertEqual<Named, z.infer<typeof NamedSchema>>;
-type _AssertTimestamped = _AssertEqual<Timestamped, z.infer<typeof TimestampedSchema>>;
-type _AssertAudited = _AssertEqual<Audited, z.infer<typeof AuditedSchema>>;
-type _AssertCat = _AssertEqual<Cat, z.infer<typeof CatSchema>>;
-type _AssertDog = _AssertEqual<Dog, z.infer<typeof DogSchema>>;
-type _AssertUnauthorizedError = _AssertEqual<UnauthorizedError, z.infer<typeof UnauthorizedErrorSchema>>;
-type _AssertNotFoundError = _AssertEqual<NotFoundError, z.infer<typeof NotFoundErrorSchema>>;
-type _AssertValidationError = _AssertEqual<ValidationError, z.infer<typeof ValidationErrorSchema>>;
-type _AssertProfile = _AssertEqual<Profile, z.infer<typeof ProfileSchema>>;
-type _AssertArrayOfUuids = _AssertEqual<ArrayOfUuids, z.infer<typeof ArrayOfUuidsSchema>>;
-type _AssertImplicitObject = _AssertEqual<ImplicitObject, z.infer<typeof ImplicitObjectSchema>>;
-type _AssertObjectSimple = _AssertEqual<ObjectSimple, z.infer<typeof ObjectSimpleSchema>>;
-type _AssertNamedTimestamped = _AssertEqual<NamedTimestamped, z.infer<typeof NamedTimestampedSchema>>;
-type _AssertFullAuditRecord = _AssertEqual<FullAuditRecord, z.infer<typeof FullAuditRecordSchema>>;
-type _AssertPet = _AssertEqual<Pet, z.infer<typeof PetSchema>>;
-type _AssertCreateUser = _AssertEqual<CreateUser, z.infer<typeof CreateUserSchema>>;
-type _AssertUser = _AssertEqual<User, z.infer<typeof UserSchema>>;
-type _AssertPetAdoptedEvent = _AssertEqual<PetAdoptedEvent, z.infer<typeof PetAdoptedEventSchema>>;
-type _AssertUserCreatedEvent = _AssertEqual<UserCreatedEvent, z.infer<typeof UserCreatedEventSchema>>;
-type _AssertNullableUser = _AssertEqual<NullableUser, z.infer<typeof NullableUserSchema>>;
-type _AssertEvent = _AssertEqual<Event, z.infer<typeof EventSchema>>;
+type _AssertScalarString = _AssertTrue<_AssertEqual<ScalarString, z.output<typeof ScalarStringSchema>>>;
+type _AssertStringEmail = _AssertTrue<_AssertEqual<StringEmail, z.output<typeof StringEmailSchema>>>;
+type _AssertStringUrl = _AssertTrue<_AssertEqual<StringUrl, z.output<typeof StringUrlSchema>>>;
+type _AssertStringUri = _AssertTrue<_AssertEqual<StringUri, z.output<typeof StringUriSchema>>>;
+type _AssertStringUuid = _AssertTrue<_AssertEqual<StringUuid, z.output<typeof StringUuidSchema>>>;
+type _AssertStringColorHex = _AssertTrue<_AssertEqual<StringColorHex, z.output<typeof StringColorHexSchema>>>;
+type _AssertStringPattern = _AssertTrue<_AssertEqual<StringPattern, z.output<typeof StringPatternSchema>>>;
+type _AssertStringMinMax = _AssertTrue<_AssertEqual<StringMinMax, z.output<typeof StringMinMaxSchema>>>;
+type _AssertStringAllConstraints = _AssertTrue<_AssertEqual<StringAllConstraints, z.output<typeof StringAllConstraintsSchema>>>;
+type _AssertStringEnum = _AssertTrue<_AssertEqual<StringEnum, z.output<typeof StringEnumSchema>>>;
+type _AssertNumberMinMax = _AssertTrue<_AssertEqual<NumberMinMax, z.output<typeof NumberMinMaxSchema>>>;
+type _AssertIntegerMinMax = _AssertTrue<_AssertEqual<IntegerMinMax, z.output<typeof IntegerMinMaxSchema>>>;
+type _AssertScalarBoolean = _AssertTrue<_AssertEqual<ScalarBoolean, z.output<typeof ScalarBooleanSchema>>>;
+type _AssertArrayOfStrings = _AssertTrue<_AssertEqual<ArrayOfStrings, z.output<typeof ArrayOfStringsSchema>>>;
+type _AssertArrayOfUnion = _AssertTrue<_AssertEqual<ArrayOfUnion, z.output<typeof ArrayOfUnionSchema>>>;
+type _AssertObjectOptionalAndNullable = _AssertTrue<_AssertEqual<ObjectOptionalAndNullable, z.output<typeof ObjectOptionalAndNullableSchema>>>;
+type _AssertEmptyObjectStrict = _AssertTrue<_AssertEqual<EmptyObjectStrict, z.output<typeof EmptyObjectStrictSchema>>>;
+type _AssertFreeformObject = _AssertTrue<_AssertEqual<FreeformObject, z.output<typeof FreeformObjectSchema>>>;
+type _AssertNamed = _AssertTrue<_AssertEqual<Named, z.output<typeof NamedSchema>>>;
+type _AssertTimestamped = _AssertTrue<_AssertEqual<Timestamped, z.output<typeof TimestampedSchema>>>;
+type _AssertAudited = _AssertTrue<_AssertEqual<Audited, z.output<typeof AuditedSchema>>>;
+type _AssertCat = _AssertTrue<_AssertEqual<Cat, z.output<typeof CatSchema>>>;
+type _AssertDog = _AssertTrue<_AssertEqual<Dog, z.output<typeof DogSchema>>>;
+type _AssertUnauthorizedError = _AssertTrue<_AssertEqual<UnauthorizedError, z.output<typeof UnauthorizedErrorSchema>>>;
+type _AssertNotFoundError = _AssertTrue<_AssertEqual<NotFoundError, z.output<typeof NotFoundErrorSchema>>>;
+type _AssertValidationError = _AssertTrue<_AssertEqual<ValidationError, z.output<typeof ValidationErrorSchema>>>;
+type _AssertProfile = _AssertTrue<_AssertEqual<Profile, z.output<typeof ProfileSchema>>>;
+type _AssertArrayOfUuids = _AssertTrue<_AssertEqual<ArrayOfUuids, z.output<typeof ArrayOfUuidsSchema>>>;
+type _AssertImplicitObject = _AssertTrue<_AssertEqual<ImplicitObject, z.output<typeof ImplicitObjectSchema>>>;
+type _AssertObjectSimple = _AssertTrue<_AssertEqual<ObjectSimple, z.output<typeof ObjectSimpleSchema>>>;
+type _AssertNamedTimestamped = _AssertTrue<_AssertEqual<NamedTimestamped, z.output<typeof NamedTimestampedSchema>>>;
+type _AssertFullAuditRecord = _AssertTrue<_AssertEqual<FullAuditRecord, z.output<typeof FullAuditRecordSchema>>>;
+type _AssertPet = _AssertTrue<_AssertEqual<Pet, z.output<typeof PetSchema>>>;
+type _AssertCreateUser = _AssertTrue<_AssertEqual<CreateUser, z.output<typeof CreateUserSchema>>>;
+type _AssertUser = _AssertTrue<_AssertEqual<User, z.output<typeof UserSchema>>>;
+type _AssertPetAdoptedEvent = _AssertTrue<_AssertEqual<PetAdoptedEvent, z.output<typeof PetAdoptedEventSchema>>>;
+type _AssertUserCreatedEvent = _AssertTrue<_AssertEqual<UserCreatedEvent, z.output<typeof UserCreatedEventSchema>>>;
+type _AssertNullableUser = _AssertTrue<_AssertEqual<NullableUser, z.output<typeof NullableUserSchema>>>;
+type _AssertEvent = _AssertTrue<_AssertEqual<Event, z.output<typeof EventSchema>>>;
 
 // Common Error Schemas (deduplicated)
 export const GetUsersId401ErrorResponse = UnauthorizedErrorSchema;

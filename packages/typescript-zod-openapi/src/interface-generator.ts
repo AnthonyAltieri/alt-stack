@@ -199,6 +199,15 @@ export function schemaToTypeString(
   return result;
 }
 
+function schemaToPropertyTypeString(
+  schema: AnySchema,
+  isRequired: boolean,
+  options?: SchemaToTypeOptions,
+): string {
+  const type = schemaToTypeString(schema, options);
+  return isRequired ? type : `${type} | undefined`;
+}
+
 /**
  * Converts an OpenAPI object schema to a TypeScript object type string.
  */
@@ -209,8 +218,13 @@ function objectSchemaToTypeString(
   const properties = schema["properties"] as Record<string, AnySchema> | undefined;
   const required = new Set((schema["required"] as string[]) ?? []);
   const additionalProperties = schema["additionalProperties"];
+  const hasProperties = Object.keys(properties ?? {}).length > 0;
 
-  if (!properties && !additionalProperties) {
+  if (!hasProperties && additionalProperties === false) {
+    return "Record<string, never>";
+  }
+
+  if (!hasProperties && additionalProperties === undefined) {
     return "Record<string, unknown>";
   }
 
@@ -219,10 +233,14 @@ function objectSchemaToTypeString(
   if (properties) {
     for (const [propName, propSchema] of Object.entries(properties)) {
       const isRequired = required.has(propName);
-      const propType = schemaToTypeString(propSchema, options);
+      const outputType = schemaToPropertyTypeString(
+        propSchema,
+        isRequired,
+        options,
+      );
       const quotedName = quotePropertyName(propName);
       propertyStrings.push(
-        `${quotedName}${isRequired ? "" : "?"}: ${propType}`,
+        `${quotedName}${isRequired ? "" : "?"}: ${outputType}`,
       );
     }
   }
@@ -255,6 +273,7 @@ export function generateInterface(
 ): string {
   const properties = schema["properties"] as Record<string, AnySchema> | undefined;
   const required = new Set((schema["required"] as string[]) ?? []);
+  const hasProperties = Object.keys(properties ?? {}).length > 0;
 
   // For non-object types, use type alias instead of interface
   if (schema["type"] !== "object" && !properties) {
@@ -267,15 +286,23 @@ export function generateInterface(
   if (properties) {
     for (const [propName, propSchema] of Object.entries(properties)) {
       const isRequired = required.has(propName);
-      const propType = schemaToTypeString(propSchema, options);
+      const outputType = schemaToPropertyTypeString(
+        propSchema,
+        isRequired,
+        options,
+      );
       const quotedName = quotePropertyName(propName);
-      lines.push(`  ${quotedName}${isRequired ? "" : "?"}: ${propType};`);
+      lines.push(`  ${quotedName}${isRequired ? "" : "?"}: ${outputType};`);
     }
   }
 
   // Handle additionalProperties
   const additionalProperties = schema["additionalProperties"];
-  if (additionalProperties === true) {
+  if (!hasProperties && additionalProperties === false) {
+    lines.push("  [key: string]: never;");
+  } else if (!hasProperties && additionalProperties === undefined) {
+    lines.push("  [key: string]: unknown;");
+  } else if (additionalProperties === true) {
     lines.push("  [key: string]: unknown;");
   } else if (
     typeof additionalProperties === "object" &&

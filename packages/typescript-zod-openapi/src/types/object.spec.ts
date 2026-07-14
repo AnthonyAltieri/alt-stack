@@ -31,6 +31,30 @@ describe("convertOpenAPIObjectToZod", () => {
       expect(result).toBe("z.object({}).strict()");
     });
 
+    it("should convert empty object with schema-valued additionalProperties", () => {
+      const valueSchema = {
+        oneOf: [
+          { type: "string" },
+          { type: "array", items: { type: "string" } },
+        ],
+      };
+      const result = convertOpenAPIObjectToZod(
+        {
+          type: "object",
+          properties: {},
+          additionalProperties: valueSchema,
+        },
+        (schema) => {
+          expect(schema).toBe(valueSchema);
+          return "z.union([z.string(), z.array(z.string())])";
+        },
+      );
+
+      expect(result).toBe(
+        "z.record(z.string(), z.union([z.string(), z.array(z.string())]))",
+      );
+    });
+
     it("should convert object without properties", () => {
       const result = convertOpenAPIObjectToZod(
         { type: "object" },
@@ -336,4 +360,3 @@ describe("convertOpenAPIObjectToZod", () => {
     });
   });
 });
-
