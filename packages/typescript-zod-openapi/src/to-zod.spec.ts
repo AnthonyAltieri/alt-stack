@@ -297,7 +297,7 @@ describe("openApiToZodTsCode", () => {
       expect(result).toContain("export interface User {");
       expect(result).toContain("export const UserSchema = z.object({ name: z.string() })");
       // Type assertion for compile-time verification
-      expect(result).toContain("type _AssertUser = _AssertEqual<User, z.infer<typeof UserSchema>>;");
+      expect(result).toContain("type _AssertUser = _AssertTrue<_AssertEqual<User, z.output<typeof UserSchema>>>;");
     });
 
     it("should convert OpenAPI document with multiple schemas", () => {
@@ -492,7 +492,7 @@ describe("openApiToZodTsCode", () => {
     // End-to-end: a property tagged with a registered custom format must
     // emit the registered Zod schema name in both the generated Zod
     // expression and the TS interface's output alias, so the codegen's
-    // own `_AssertEqual<Interface, z.infer<typeof Schema>>` line holds
+    // own `_AssertTrue<_AssertEqual<Interface, z.output<typeof Schema>>>` line holds
     // for branded entity-id types.
 
     it("references the registered schema for a custom string format", () => {

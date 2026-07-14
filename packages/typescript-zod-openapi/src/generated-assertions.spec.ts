@@ -84,12 +84,44 @@ const optionalPropertyFixture = {
   },
 };
 
+const typedRecordFixture = {
+  components: {
+    schemas: {
+      StringOrStringArrayRecord: {
+        type: "object",
+        properties: {},
+        additionalProperties: {
+          oneOf: [
+            { type: "string" },
+            { type: "array", items: { type: "string" } },
+          ],
+        },
+      },
+    },
+  },
+};
+
 describe("generated schema/type assertions", () => {
   it("compiles top-level and nested optional outputs with exact optional property types", () => {
     const code = openApiToZodTsCode(optionalPropertyFixture);
 
     expect(code).toContain("topLevel?: string | undefined;");
     expect(code).toContain("nested: { inner?: number | undefined };");
+    expect(formatDiagnostics(compileGeneratedCode(code))).toBe("");
+  });
+
+  it("compiles schema-valued propertyless records", () => {
+    const code = openApiToZodTsCode(typedRecordFixture);
+
+    expect(code).toContain(`export interface StringOrStringArrayRecord {
+  [key: string]: (string | Array<string>);
+}`);
+    expect(code).toContain(
+      "export const StringOrStringArrayRecordSchema = z.record(z.string(), z.union([z.string(), z.array(z.string())]));",
+    );
+    expect(code).toContain(
+      "type _AssertStringOrStringArrayRecord = _AssertTrue<_AssertEqual<StringOrStringArrayRecord, z.output<typeof StringOrStringArrayRecordSchema>>>;",
+    );
     expect(formatDiagnostics(compileGeneratedCode(code))).toBe("");
   });
 
