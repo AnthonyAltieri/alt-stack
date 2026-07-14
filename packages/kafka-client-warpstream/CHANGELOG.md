@@ -1,5 +1,11 @@
 # @alt-stack/kafka-client-warpstream
 
+## 1.5.1
+
+### Patch Changes
+
+- @alt-stack/kafka-client-core@1.5.1
+
 ## 1.5.0
 
 ### Patch Changes
