@@ -1,5 +1,11 @@
 # @alt-stack/workers-warpstream
 
+## 1.5.1
+
+### Patch Changes
+
+- @alt-stack/workers-core@1.5.1
+
 ## 1.5.0
 
 ### Patch Changes
