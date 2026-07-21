@@ -7,6 +7,7 @@ Altstack packages are deliberately separable. Start with the boundary you own, t
 | Family | Package | Use it for |
 | --- | --- | --- |
 | Result | `@alt-stack/result` | tagged success/failure values and composable error handling |
+| CLI | `@alt-stack/cli` | typed nested commands, Zod-validated tokens, context middleware, and explicit execution outcomes |
 | Servers | `@alt-stack/server-core` | framework-neutral routers, procedures, middleware, OpenAPI, and telemetry |
 | Servers | `@alt-stack/server-hono` | a Hono application and Hono request context |
 | Servers | `@alt-stack/server-express` | an Express router and Express request/response context |
@@ -40,7 +41,7 @@ The published `@alt-stack/example-altstack-server-sdk` and `@alt-stack/example-k
 
 | Packages | Required peers or runtime |
 | --- | --- |
-| `server-*`, all worker runtimes, `kafka-core`, TypeScript HTTP clients, generated TypeScript SDKs, utilities | Zod 4 (worker adapters depend on `workers-core`, whose peer is Zod 4) |
+| `@alt-stack/cli`, `server-*`, all worker runtimes, `kafka-core`, TypeScript HTTP clients, generated TypeScript SDKs, utilities | Zod 4 (`@alt-stack/cli` also depends on `@alt-stack/result`; worker adapters depend on `workers-core`) |
 | `@alt-stack/result` | no runtime dependency; Zod 4 is an optional peer in the package manifest |
 | `kafka-client-*`, `workers-client-*` | Zod 3.25 or Zod 4, as declared by the selected package |
 | `server-core`, `workers-core` | optional `@opentelemetry/api` 1.x peer when telemetry is enabled |
@@ -56,6 +57,10 @@ The published `@alt-stack/example-altstack-server-sdk` and `@alt-stack/example-k
 Package manifests are the authority for exact peer ranges. This table explains the boundaries; it is not a replacement for your package manager's peer-dependency output.
 
 ## Common combinations
+
+### TypeScript command-line application
+
+Install `@alt-stack/cli` with Zod 4. Define the hierarchy with `initCli().router`, create the application with `createCli`, and connect it to the host process with `runCli`. Add no parser or terminal dependency unless the application needs behavior beyond the package's explicit v1 grammar.
 
 ### TypeScript HTTP service
 

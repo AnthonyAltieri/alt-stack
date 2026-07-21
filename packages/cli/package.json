@@ -1,0 +1,42 @@
+{
+  "name": "@alt-stack/cli",
+  "version": "1.5.1",
+  "description": "Type-safe command-line applications with nested routing and Zod validation",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup && node scripts/verify-dual-format.mjs",
+    "test": "vitest",
+    "check-types": "tsc --noEmit"
+  },
+  "keywords": [
+    "cli",
+    "command-line",
+    "typescript",
+    "zod"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@alt-stack/result": "workspace:*"
+  },
+  "peerDependencies": {
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "oxlint": "^1.24.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.9.2",
+    "vitest": "^4.0.3",
+    "zod": "^4.0.0"
+  }
+}

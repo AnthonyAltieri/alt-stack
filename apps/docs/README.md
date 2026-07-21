@@ -1,6 +1,6 @@
 # Altstack documentation site
 
-This Docusaurus application is the canonical long-form documentation for the complete Altstack family: Result, HTTP servers and clients, Kafka, workers, schema/SDK generation, utilities, and the end-to-end Altstack Together path.
+This Docusaurus application is the canonical long-form documentation for the complete Altstack family: Result, typed CLIs, HTTP servers and clients, Kafka, workers, schema/SDK generation, utilities, and the end-to-end Altstack Together path.
 
 ## Content model
 

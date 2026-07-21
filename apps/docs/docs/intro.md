@@ -1,7 +1,7 @@
 ---
 slug: /
 title: Altstack
-description: Type-safe boundaries for HTTP APIs, events, background jobs, and generated SDKs.
+description: Type-safe boundaries for CLIs, HTTP APIs, events, background jobs, and generated SDKs.
 ---
 
 # Altstack
@@ -9,6 +9,7 @@ description: Type-safe boundaries for HTTP APIs, events, background jobs, and ge
 Altstack is a family of small libraries for defining typed boundaries with Zod and carrying those contracts across transports. Use only the pieces your system needs:
 
 - model expected failures with `@alt-stack/result`;
+- define nested command-line applications with validated arguments, options, middleware, and explicit outcomes;
 - define an HTTP API once and run it on Hono, Express, Bun, NestJS, or TanStack Start;
 - generate Zod, Pydantic, or Rust SDK types from OpenAPI and AsyncAPI documents;
 - call generated HTTP contracts through Fetch, Ky, or the Rust/Tokio client runtime;
@@ -32,6 +33,7 @@ You can stop after any step. For example, an HTTP service can use the server pac
 | You want to… | Start here |
 | --- | --- |
 | model typed success and failure | [Result quickstart](./result/quickstart.md) |
+| build a nested command-line application | [CLI quickstart](./cli/quickstart.md) |
 | expose an HTTP API | [Server quickstart](./server/quickstart.md) |
 | call an API from TypeScript or Rust | [HTTP client quickstart](./http-client/quickstart.md) |
 | publish or consume typed Kafka messages | [Kafka quickstart](./kafka/quickstart.md) |

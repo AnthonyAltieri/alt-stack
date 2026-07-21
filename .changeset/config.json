@@ -4,6 +4,7 @@
   "commit": false,
   "fixed": [
     [
+      "@alt-stack/cli",
       "@alt-stack/example-altstack-server-sdk",
       "@alt-stack/example-kafka-producer-sdk",
       "@alt-stack/http-client-core",

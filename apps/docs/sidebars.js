@@ -24,6 +24,7 @@ module.exports = {
     doc("intro", "Overview"),
     doc("start/package-map", "Choose Your Packages"),
     family("Result", "result", [doc("result/api", "Result API")]),
+    family("CLI", "cli", [doc("cli/api", "CLI API")]),
     family(
       "Servers",
       "server",
