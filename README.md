@@ -1,6 +1,6 @@
 # Altstack
 
-Altstack is a family of type-safe boundary libraries for HTTP APIs, generated SDKs, Kafka events, background jobs, and explicit error handling. Define contracts with Zod, validate data at the edge, and use only the adapters your application needs.
+Altstack is a family of type-safe boundary libraries for command-line applications, HTTP APIs, generated SDKs, Kafka events, background jobs, and explicit error handling. Define contracts with Zod, validate data at the edge, and use only the adapters your application needs.
 
 ## Quickstart: a Hono API
 
@@ -64,6 +64,7 @@ Run it with `pnpm exec tsx src/server.ts`, then open `http://localhost:3000/api/
 | Need | Packages |
 | --- | --- |
 | typed expected failures | `@alt-stack/result` |
+| typed nested command-line applications | `@alt-stack/cli` |
 | framework-neutral HTTP contracts | `@alt-stack/server-core` |
 | HTTP runtime adapters | `@alt-stack/server-hono`, `@alt-stack/server-express`, `@alt-stack/server-bun`, `@alt-stack/server-nestjs`, `@alt-stack/server-tanstack-start` |
 | generated-contract HTTP clients | `@alt-stack/http-client-core`, `@alt-stack/http-client-fetch`, `@alt-stack/http-client-ky`, and Rust crate `http-client-rust-tokio` |
@@ -91,6 +92,7 @@ The pieces remain independently useful: generators accept compatible documents f
 The canonical site is [altstack-docs.vercel.app](https://altstack-docs.vercel.app/).
 
 - [Result](https://altstack-docs.vercel.app/result/quickstart)
+- [CLI](https://altstack-docs.vercel.app/cli/quickstart)
 - [Servers](https://altstack-docs.vercel.app/server/quickstart)
 - [HTTP clients](https://altstack-docs.vercel.app/http-client/quickstart)
 - [Kafka](https://altstack-docs.vercel.app/kafka/quickstart)

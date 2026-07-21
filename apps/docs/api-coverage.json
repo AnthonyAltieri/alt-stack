@@ -5,6 +5,11 @@
       "commonPatterns": "result/common-patterns.md",
       "api": ["result/api.md"]
     },
+    "cli": {
+      "quickstart": "cli/quickstart.md",
+      "commonPatterns": "cli/common-patterns.md",
+      "api": ["cli/api.md"]
+    },
     "server": {
       "quickstart": "server/quickstart.md",
       "commonPatterns": "server/common-patterns.md",
@@ -74,6 +79,11 @@
     }
   },
   "typescriptPackages": {
+    "@alt-stack/cli": {
+      "entrypoint": "packages/cli/src/index.ts",
+      "docs": ["cli/api.md"],
+      "inherits": ["@alt-stack/result"]
+    },
     "@alt-stack/result": {
       "entrypoint": "packages/result/src/index.ts",
       "docs": ["result/api.md"]
