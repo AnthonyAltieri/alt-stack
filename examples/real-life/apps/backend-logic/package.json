@@ -14,7 +14,7 @@
     "@alt-stack/workers-client-warpstream": "^1.4.0",
     "@t3-oss/env-core": "^0.13.11",
     "@real-life/workers-sdk": "workspace:*",
-    "hono": "^4.0.0",
+    "hono": "^4.12.27",
     "ky": "^1.0.0",
     "zod": "^4.0.0"
   },
