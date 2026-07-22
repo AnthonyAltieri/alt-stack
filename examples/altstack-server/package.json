@@ -11,7 +11,7 @@
     "test": "pnpm test:e2e"
   },
   "dependencies": {
-    "@hono/node-server": "^1.0.0",
+    "@hono/node-server": "^2.0.10",
     "@alt-stack/server-hono": "workspace:*",
     "@alt-stack/http-client-fetch": "workspace:*",
     "@alt-stack/result": "workspace:*",
