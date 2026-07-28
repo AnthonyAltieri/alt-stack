@@ -12,7 +12,7 @@
     "@hono/node-server": "^1.0.0",
     "@alt-stack/server-hono": "^1.4.0",
     "@t3-oss/env-core": "^0.13.11",
-    "hono": "^4.0.0",
+    "hono": "^4.12.27",
     "zod": "^4.0.0"
   },
   "devDependencies": {
