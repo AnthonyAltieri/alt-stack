@@ -320,7 +320,7 @@ importers:
         specifier: ^4.0.3
         version: 4.0.3(@types/debug@4.1.12)(@types/node@22.19.1)(jiti@1.21.7)(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1)
       zod:
-        specifier: ^4.0.0
+        specifier: ^4.1.0
         version: 4.1.12
 
   packages/http-client-fetch:
@@ -342,7 +342,7 @@ importers:
         specifier: ^4.0.3
         version: 4.0.3(@types/debug@4.1.12)(@types/node@22.19.1)(jiti@1.21.7)(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1)
       zod:
-        specifier: ^4.0.0
+        specifier: ^4.1.0
         version: 4.1.12
 
   packages/http-client-ky:
@@ -367,7 +367,7 @@ importers:
         specifier: ^4.0.3
         version: 4.0.3(@types/debug@4.1.12)(@types/node@22.19.1)(jiti@1.21.7)(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1)
       zod:
-        specifier: ^4.0.0
+        specifier: ^4.1.0
         version: 4.1.12
 
   packages/kafka-client-core:

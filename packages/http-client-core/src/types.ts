@@ -82,7 +82,7 @@ export type ExtractRequestParams<
   TMethod extends keyof TRequest[TEndpoint],
 > = TRequest[TEndpoint][TMethod] extends { params: infer P }
   ? P extends z.ZodTypeAny
-    ? z.infer<P>
+    ? z.input<P>
     : never
   : ExtractPathParams<TEndpoint & string> extends never
     ? never
@@ -97,7 +97,7 @@ export type ExtractRequestQuery<
   TMethod extends keyof TRequest[TEndpoint],
 > = TRequest[TEndpoint][TMethod] extends { query: infer Q }
   ? Q extends z.ZodTypeAny
-    ? z.infer<Q>
+    ? z.input<Q>
     : never
   : never;
 
@@ -110,7 +110,7 @@ export type ExtractRequestBody<
   TMethod extends keyof TRequest[TEndpoint],
 > = TRequest[TEndpoint][TMethod] extends { body: infer B }
   ? B extends z.ZodTypeAny
-    ? z.infer<B>
+    ? z.input<B>
     : never
   : never;
 
