@@ -1,5 +1,11 @@
 # @alt-stack/cli
 
+## 1.6.1
+
+### Patch Changes
+
+- @alt-stack/result@1.6.1
+
 ## 1.6.0
 
 ### Minor Changes
