@@ -123,9 +123,10 @@ The generated OpenAPI map can contain a `headers` schema, but the current `Reque
 - Path values replace the matching `{name}` with `String(value)`; they are not URL-encoded.
 - Query values become `String(value)` and `URLSearchParams` encodes the result. `undefined` and `null` are omitted. Arrays and nested objects are not expanded; they stringify as a single value.
 - Only `POST`, `PUT`, and `PATCH` bodies are JSON-stringified and forwarded. `GET` and `DELETE` bodies are not sent.
-- Request schemas may transform values, but body validation currently checks the transformed result without replacing the original body. Params and query do use parsed/transformed values.
+- Callers provide each request schema's `z.input` type. Params, query, and body are parsed to `z.output`, then encoded through the same schema before transport, so defaults, stripping, codecs, and other encodable transforms affect wire values consistently.
 
 Pre-encode path values and flatten complex query objects at your application boundary when those defaults are not the API's wire format.
+Use `z.codec` for bidirectional domain transformations. Zod's `z.transform` is one-way and cannot be used by `z.encode`.
 
 ## Retry deliberately
 

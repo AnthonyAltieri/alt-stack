@@ -65,6 +65,11 @@ export type ApiClientValidationErrorHandler<TRawResponse = unknown> = (
   context: ApiClientValidationErrorContext<TRawResponse>,
 ) => void;
 
+type ValidationContext<TRawResponse> = Omit<
+  ApiClientValidationErrorContext<TRawResponse>,
+  "data" | "issues" | "zodError" | "message"
+>;
+
 // ============================================================================
 // Helper Functions
 // ============================================================================
@@ -174,20 +179,26 @@ export class ApiClient<
     schema: TSchema,
     data: unknown,
     message: string,
-    context: Omit<
-      ApiClientValidationErrorContext<TRawResponse>,
-      "data" | "issues" | "zodError" | "message"
-    >,
-  ): z.infer<TSchema> {
+    context: ValidationContext<TRawResponse>,
+  ): z.output<TSchema> {
     const parsed = schema.safeParse(data);
     if (parsed.success) return parsed.data;
 
+    return this.throwValidationError(parsed.error, data, message, context);
+  }
+
+  private throwValidationError(
+    error: z.ZodError,
+    data: unknown,
+    message: string,
+    context: ValidationContext<TRawResponse>,
+  ): never {
     this.safeInvokeOnValidationError({
       ...context,
       message,
       data,
-      issues: parsed.error.issues,
-      zodError: parsed.error,
+      issues: error.issues,
+      zodError: error,
     });
 
     this.log("error", "HTTP validation failed", {
@@ -200,7 +211,24 @@ export class ApiClient<
       message,
     });
 
-    throw new ValidationError(message, parsed.error.issues, context.endpoint, context.method);
+    throw new ValidationError(message, error.issues, context.endpoint, context.method);
+  }
+
+  private validateAndEncodeSchema<TSchema extends z.ZodTypeAny>(
+    schema: TSchema,
+    data: unknown,
+    message: string,
+    context: ValidationContext<TRawResponse>,
+  ): z.input<TSchema> {
+    const parsed = this.validateSchema(schema, data, message, context);
+    try {
+      return z.encode(schema, parsed);
+    } catch (error: unknown) {
+      if (error instanceof z.ZodError) {
+        return this.throwValidationError(error, data, message, context);
+      }
+      throw error;
+    }
   }
 
   /**
@@ -283,19 +311,17 @@ export class ApiClient<
     } = options;
 
     // Validate and interpolate path
-    const pathParams = this.validatePathParams(endpoint, params, method);
-    const interpolatedPath = interpolatePath(endpoint, pathParams);
+    const wirePathParams = this.validatePathParams(endpoint, params, method);
+    const interpolatedPath = interpolatePath(endpoint, wirePathParams);
 
     // Validate query if schema exists
-    const queryParams = this.validateQuery(endpoint, method, query);
+    const wireQuery = this.validateQuery(endpoint, method, query);
 
     // Validate body if schema exists
-    if (body !== undefined) {
-      this.validateBody(endpoint, method, body);
-    }
+    const wireBody = body === undefined ? undefined : this.validateBody(endpoint, method, body);
 
     // Build URL
-    const queryString = buildQueryString(queryParams);
+    const queryString = buildQueryString(wireQuery);
     const url = `${this.options.baseUrl}${interpolatedPath}${queryString}`;
 
     // Merge headers
@@ -312,8 +338,8 @@ export class ApiClient<
           method,
           url,
           headers,
-          body: body !== undefined && (method === "POST" || method === "PUT" || method === "PATCH")
-            ? JSON.stringify(body)
+          body: wireBody !== undefined && (method === "POST" || method === "PUT" || method === "PATCH")
+            ? JSON.stringify(wireBody)
             : undefined,
           timeout,
         });
@@ -473,12 +499,17 @@ export class ApiClient<
 
     const paramsSchema = (requestDef as { params?: z.ZodTypeAny }).params;
     if (paramsSchema) {
-      return this.validateSchema(paramsSchema, params, "Path parameters validation failed", {
-        kind: "request",
-        location: "params",
-        endpoint,
-        method,
-      }) as Record<string, unknown>;
+      return this.validateAndEncodeSchema(
+        paramsSchema,
+        params,
+        "Path parameters validation failed",
+        {
+          kind: "request",
+          location: "params",
+          endpoint,
+          method,
+        },
+      ) as Record<string, unknown>;
     }
 
     // Check if endpoint requires params but none provided
@@ -518,12 +549,17 @@ export class ApiClient<
 
     const querySchema = (requestDef as { query?: z.ZodTypeAny }).query;
     if (querySchema) {
-      return this.validateSchema(querySchema, query, "Query parameters validation failed", {
-        kind: "request",
-        location: "query",
-        endpoint,
-        method,
-      }) as Record<string, unknown>;
+      return this.validateAndEncodeSchema(
+        querySchema,
+        query,
+        "Query parameters validation failed",
+        {
+          kind: "request",
+          location: "query",
+          endpoint,
+          method,
+        },
+      ) as Record<string, unknown>;
     }
 
     return query;
@@ -535,21 +571,23 @@ export class ApiClient<
   private validateBody<
     TEndpoint extends keyof TRequest & string,
     TMethod extends keyof TRequest[TEndpoint] & string,
-  >(endpoint: TEndpoint, method: TMethod, body: unknown): void {
+  >(endpoint: TEndpoint, method: TMethod, body: unknown): unknown {
     const requestDef = this.options.Request[endpoint]?.[method];
     if (!requestDef || typeof requestDef !== "object") {
-      return;
+      return body;
     }
 
     const bodySchema = (requestDef as { body?: z.ZodTypeAny }).body;
     if (bodySchema) {
-      this.validateSchema(bodySchema, body, "Request body validation failed", {
+      return this.validateAndEncodeSchema(bodySchema, body, "Request body validation failed", {
         kind: "request",
         location: "body",
         endpoint,
         method,
       });
     }
+
+    return body;
   }
 
   /**
