@@ -1,5 +1,13 @@
 # @alt-stack/server-nestjs
 
+## 1.6.2
+
+### Patch Changes
+
+- Updated dependencies [50c04a7]
+  - @alt-stack/server-core@1.6.2
+  - @alt-stack/server-express@1.6.2
+
 ## 1.6.1
 
 ### Patch Changes

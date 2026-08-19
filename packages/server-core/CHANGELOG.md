@@ -1,5 +1,12 @@
 # @alt-stack/server-core
 
+## 1.6.2
+
+### Patch Changes
+
+- 50c04a7: Propagate accumulated route input types to inline and reusable middleware registered after `.input()`.
+  - @alt-stack/result@1.6.2
+
 ## 1.6.1
 
 ### Patch Changes
