@@ -1,5 +1,7 @@
 # @alt-stack/zod-asyncapi
 
+## 1.6.2
+
 ## 1.6.1
 
 ## 1.6.0

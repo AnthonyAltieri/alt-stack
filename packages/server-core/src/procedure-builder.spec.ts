@@ -1,8 +1,18 @@
 import { describe, it, expectTypeOf, vi } from "vitest";
 import { z } from "zod";
 import { BaseProcedureBuilder } from "./procedure-builder.js";
+import {
+  createMiddleware,
+  createMiddlewareWithErrors,
+  type MiddlewareBuilder,
+  type MiddlewareBuilderWithErrors,
+} from "./middleware.js";
 import { TaggedError, err, ok } from "@alt-stack/result";
-import type { HasTagLiteral, ValidateErrorConfig } from "./types/index.js";
+import type {
+  HasTagLiteral,
+  TypedContext,
+  ValidateErrorConfig,
+} from "./types/index.js";
 
 class DeclaredProcedureError extends TaggedError {
   readonly _tag = "DeclaredProcedureError" as const;
@@ -22,6 +32,144 @@ class UndeclaredProcedureError extends TaggedError {
 
 describe("ProcedureBuilder", () => {
   describe("BaseProcedureBuilder.use", () => {
+    const routeInput = {
+      body: z.object({
+        sessionId: z.string(),
+        operation: z.enum(["append", "retry"]),
+      }),
+      params: z.object({ agentId: z.string() }),
+      query: z.object({ limit: z.coerce.number() }),
+    };
+
+    interface RouteContext {
+      requestId: string;
+    }
+
+    type ProtectedRouteContext = RouteContext & { actorId: string };
+    type InputContext = TypedContext<typeof routeInput, {}, ProtectedRouteContext>;
+    type BuilderState<T> =
+      T extends BaseProcedureBuilder<
+        infer _I,
+        infer _O,
+        infer _E,
+        infer C,
+        infer _R,
+        infer _DE,
+        infer ME
+      >
+        ? { context: C; middlewareErrors: ME }
+        : never;
+    type MiddlewareContext<T> =
+      T extends MiddlewareBuilder<infer C, infer _O> ? C : never;
+    type MiddlewareWithErrorsContext<T> =
+      T extends MiddlewareBuilderWithErrors<infer C, infer _O, infer _E>
+        ? C
+        : never;
+
+    const procedure = () =>
+      new BaseProcedureBuilder<{}, undefined, undefined, RouteContext>();
+    const protectedProcedure = () =>
+      procedure().use(async ({ ctx, next }) =>
+        next({ ctx: { actorId: ctx.requestId } }),
+      );
+    const expectRouteInput = (ctx: InputContext) => {
+      expectTypeOf(ctx.input.body).toEqualTypeOf<{
+        sessionId: string;
+        operation: "append" | "retry";
+      }>();
+      expectTypeOf(ctx.input.params).toEqualTypeOf<{ agentId: string }>();
+      expectTypeOf(ctx.input.query).toEqualTypeOf<{ limit: number }>();
+      expectTypeOf(ctx.actorId).toEqualTypeOf<string>();
+    };
+
+    it("should provide accumulated route input to inline middleware", () => {
+      const withTarget = protectedProcedure()
+        .input(routeInput)
+        .use(async ({ ctx, next }) => {
+          expectRouteInput(ctx);
+          return next({ ctx: { target: ctx.input.body.sessionId } });
+        });
+
+      expectTypeOf<BuilderState<typeof withTarget>["context"]>().toMatchTypeOf<
+        ProtectedRouteContext & { target: string }
+      >();
+    });
+
+    it("should accept an input-aware MiddlewareBuilder", () => {
+      const inputBuilder = protectedProcedure().input(routeInput);
+      const middleware = createMiddleware<InputContext>()(async ({ ctx, next }) => {
+        expectRouteInput(ctx);
+        return next({ ctx: { target: ctx.input.params.agentId } });
+      });
+
+      type UseArgument = Parameters<typeof inputBuilder.use>[0];
+      expectTypeOf<MiddlewareContext<UseArgument>>().toMatchTypeOf<InputContext>();
+
+      const withTarget = inputBuilder.use(middleware);
+
+      expectTypeOf<BuilderState<typeof withTarget>["context"]>().toMatchTypeOf<
+        ProtectedRouteContext & { target: string }
+      >();
+    });
+
+    it("should accept an input-aware MiddlewareBuilderWithErrors", () => {
+      const inputBuilder = protectedProcedure().input(routeInput);
+      const forbidden = z.object({
+        _tag: z.literal("ForbiddenError"),
+        message: z.string(),
+      });
+      const middleware = createMiddlewareWithErrors<InputContext>()
+        .errors({ 403: forbidden })
+        .fn(async ({ ctx, next }) => {
+          expectRouteInput(ctx);
+          return next({ ctx: { permission: "session-write" as const } });
+        });
+
+      type UseArgument = Parameters<typeof inputBuilder.use>[0];
+      expectTypeOf<MiddlewareWithErrorsContext<UseArgument>>().toMatchTypeOf<InputContext>();
+
+      const protectedBuilder = inputBuilder.use(middleware);
+
+      type State = BuilderState<typeof protectedBuilder>;
+      expectTypeOf<State["context"]>().toMatchTypeOf<
+        ProtectedRouteContext & { permission: "session-write" }
+      >();
+      expectTypeOf<State["middlewareErrors"][403]>().toEqualTypeOf<typeof forbidden>();
+    });
+
+    it("should keep middleware before input on the pre-input context", () => {
+      procedure()
+        .use(async ({ ctx, next }) => {
+          expectTypeOf(ctx.input.body).toEqualTypeOf<undefined>();
+          expectTypeOf(ctx.input.params).toEqualTypeOf<undefined>();
+          expectTypeOf(ctx.input.query).toEqualTypeOf<undefined>();
+
+          // @ts-expect-error - schema-derived input is unavailable before .input()
+          expectTypeOf(ctx.input.body.sessionId).toEqualTypeOf<string>();
+          return next();
+        })
+        .input(routeInput);
+    });
+
+    it("should preserve context-only middleware builder compatibility after input", () => {
+      const middleware = createMiddleware<RouteContext>()(async ({ ctx, next }) =>
+        next({ ctx: { requestId: ctx.requestId } }),
+      );
+      const middlewareWithErrors = createMiddlewareWithErrors<RouteContext>()
+        .errors({
+          401: z.object({
+            _tag: z.literal("UnauthorizedError"),
+            message: z.string(),
+          }),
+        })
+        .fn(async ({ ctx, next }) => next({ ctx: { requestId: ctx.requestId } }));
+
+      procedure()
+        .input(routeInput)
+        .use(middleware)
+        .use(middlewareWithErrors);
+    });
+
     it("should infer context override from middleware implementation", () => {
       interface AppContext {
         user: { id: string; email: string } | null;

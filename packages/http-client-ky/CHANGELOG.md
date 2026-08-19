@@ -1,5 +1,11 @@
 # @alt-stack/http-client-ky
 
+## 1.6.2
+
+### Patch Changes
+
+- @alt-stack/http-client-core@1.6.2
+
 ## 1.6.1
 
 ### Patch Changes

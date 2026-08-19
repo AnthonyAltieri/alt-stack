@@ -170,7 +170,7 @@ export class BaseProcedureBuilder<
     middlewareOrBuilder:
       | MiddlewareFunction<
           TypedContext<
-            InputConfig,
+            TBaseInput,
             MergeErrors<TDefaultErrors, MergeErrors<TBaseErrors, TMiddlewareErrors>>,
             TCustomContext
           >,
@@ -179,7 +179,7 @@ export class BaseProcedureBuilder<
         >
       | MiddlewareBuilder<
           TypedContext<
-            InputConfig,
+            TBaseInput,
             MergeErrors<TDefaultErrors, MergeErrors<TBaseErrors, TMiddlewareErrors>>,
             TCustomContext
           >,
@@ -187,7 +187,7 @@ export class BaseProcedureBuilder<
         >
       | MiddlewareBuilderWithErrors<
           TypedContext<
-            InputConfig,
+            TBaseInput,
             MergeErrors<TDefaultErrors, MergeErrors<TBaseErrors, TMiddlewareErrors>>,
             TCustomContext
           >,
