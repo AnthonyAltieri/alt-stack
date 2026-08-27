@@ -16,7 +16,7 @@
     "@alt-stack/http-client-fetch": "workspace:*",
     "@alt-stack/result": "workspace:*",
     "@t3-oss/env-core": "^0.9.0",
-    "hono": "^4.0.0",
+    "hono": "^4.12.34",
     "zod": "^4.0.0"
   },
   "devDependencies": {
