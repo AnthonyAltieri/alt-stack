@@ -105,9 +105,16 @@ def _build_module_preamble(custom_import_lines: list[str] | None) -> list[str]:
         "from datetime import date, datetime",
         "from uuid import UUID",
         "",
-        "from pydantic import BaseModel, ConfigDict, Field, RootModel",
+        "from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, RootModel",
         "from pydantic import AnyUrl, EmailStr",
         "from python_pydantic_openapi.all_of import all_of",
+        "",
+        "def _reject_explicit_none(value: Any) -> Any:",
+        "    if value is None:",
+        '        raise ValueError("Field may be omitted but may not be null")',
+        "    return value",
+        "",
+        "_omit_not_null = BeforeValidator(_reject_explicit_none)",
         "",
     ]
     if custom_import_lines:
@@ -117,9 +124,23 @@ def _build_module_preamble(custom_import_lines: list[str] | None) -> list[str]:
 
 
 def _emit_named_schema(name: str, schema: AnySchema, state: EmissionState) -> list[str]:
-    if is_object_model_schema(schema):
+    if is_object_model_schema(schema) and not _has_root_model_allof_base(schema, state):
         return _emit_object_model(name, schema, state)
     return _emit_root_model(name, schema, state)
+
+
+def _has_root_model_allof_base(schema: AnySchema, state: EmissionState) -> bool:
+    if not isinstance(schema, dict):
+        return False
+    all_of = schema.get("allOf")
+    if not isinstance(all_of, list):
+        return False
+    return any(
+        isinstance(part, dict)
+        and isinstance(part.get("$ref"), str)
+        and decode_component_ref(part["$ref"]) in state.render_context.root_model_names
+        for part in all_of
+    )
 
 
 def _emit_object_model(name: str, schema: AnySchema, state: EmissionState) -> list[str]:
@@ -215,6 +236,8 @@ def _build_model_lines(
             if is_required:
                 default_expr = f" = Field(alias={alias!r})" if alias else ""
             else:
+                if not isinstance(prop_schema, dict) or prop_schema.get("nullable") is not True:
+                    type_expr = f"Annotated[Optional[{type_expr}], _omit_not_null]"
                 default_expr = (
                     f" = Field(default=None, alias={alias!r})" if alias else " = None"
                 )

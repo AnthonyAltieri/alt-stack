@@ -12,7 +12,7 @@ from typing import Annotated, Any, Literal, Union, cast, get_args, get_origin
 from uuid import UUID
 
 import pytest
-from pydantic import AnyUrl, BaseModel, EmailStr, RootModel, ValidationError
+from pydantic import AnyUrl, BaseModel, BeforeValidator, EmailStr, RootModel, ValidationError
 from pydantic.fields import FieldInfo
 
 from python_pydantic_openapi.registry import clear_pydantic_schema_registry
@@ -182,6 +182,13 @@ def _to_openapi_schema(
                     type_to_name,
                     schema_fingerprint_to_name=schema_fingerprint_to_name,
                 )
+                rejects_explicit_none = any(
+                    isinstance(metadata, BeforeValidator)
+                    and getattr(metadata.func, "__name__", None) == "_reject_explicit_none"
+                    for metadata in field.metadata
+                )
+                if rejects_explicit_none:
+                    field_schema.pop("nullable", None)
                 if "$ref" not in field_schema:
                     extra = field.json_schema_extra or {}
                     openapi_meta = extra.get("openapi")

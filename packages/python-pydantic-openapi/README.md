@@ -27,8 +27,9 @@ The CLI enables route generation and emits `Request`/`Response` dictionaries who
 ## Development
 
 ```bash
-uv run --project packages/python-pydantic-openapi pytest packages/python-pydantic-openapi/tests
-uv run --project packages/python-pydantic-openapi ruff check packages/python-pydantic-openapi
+uv run --project packages/python-pydantic-openapi --extra dev pytest packages/python-pydantic-openapi/tests
+uv run --project packages/python-pydantic-openapi --extra dev ruff check packages/python-pydantic-openapi
+uv run --project packages/python-pydantic-openapi --extra dev ty check packages/python-pydantic-openapi
 ```
 
 ## Documentation

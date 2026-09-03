@@ -15,9 +15,16 @@ PREAMBLE = dedent(
     from datetime import date, datetime
     from uuid import UUID
 
-    from pydantic import BaseModel, ConfigDict, Field, RootModel
+    from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, RootModel
     from pydantic import AnyUrl, EmailStr
     from python_pydantic_openapi.all_of import all_of
+
+    def _reject_explicit_none(value: Any) -> Any:
+        if value is None:
+            raise ValueError("Field may be omitted but may not be null")
+        return value
+
+    _omit_not_null = BeforeValidator(_reject_explicit_none)
     """
 ).strip()
 
