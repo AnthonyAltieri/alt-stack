@@ -144,8 +144,8 @@ def test_route_with_query_params() -> None:
         # Route Schemas
         class GetUsersQuery(BaseModel):
             model_config = ConfigDict(extra='forbid')
-            limit: Annotated[float, Field(strict=True)] = None
-            offset: Annotated[float, Field(strict=True)] = None
+            limit: Annotated[Optional[Annotated[float, Field(strict=True)]], _omit_not_null] = None
+            offset: Annotated[Optional[Annotated[float, Field(strict=True)]], _omit_not_null] = None
 
         class GetUsers200Response(RootModel[dict[str, Any]]):
             pass
@@ -173,6 +173,73 @@ def test_route_with_query_params() -> None:
         """,
         options={"include_routes": True},
     )
+
+
+def test_optional_non_nullable_fields_reject_explicit_none() -> None:
+    openapi = {
+        "components": {
+            "schemas": {
+                "Item": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "x-rate-limit": {"type": "integer"},
+                        "description": {"type": "string", "nullable": True},
+                    },
+                }
+            }
+        }
+    }
+
+    module = _load_module(openapi_to_pydantic_code(openapi))
+    item = module.Item.model_validate({})
+
+    assert item.name is None
+    assert item.x_rate_limit is None
+    assert item.description is None
+    with pytest.raises(ValidationError):
+        module.Item.model_validate({"name": None})
+    with pytest.raises(ValidationError):
+        module.Item.model_validate({"x-rate-limit": None})
+    module.Item.model_validate({"description": None})
+
+
+def test_allof_wrapper_around_root_model_imports() -> None:
+    openapi = {
+        "components": {
+            "schemas": {
+                "Freeform": {
+                    "type": "object",
+                    "properties": {},
+                }
+            }
+        },
+        "paths": {
+            "/items": {
+                "get": {
+                    "parameters": [
+                        {
+                            "name": "filter",
+                            "in": "query",
+                            "required": False,
+                            "schema": {
+                                "allOf": [{"$ref": "#/components/schemas/Freeform"}]
+                            },
+                        }
+                    ]
+                }
+            }
+        },
+    }
+
+    code = openapi_to_pydantic_code(openapi, options={"include_routes": True})
+    assert "class GetItemsQueryFilter(RootModel[Freeform]):" in code
+
+    module = _load_module(code)
+    query_model = module.Request["/items"]["GET"]["query"]
+    query = query_model.model_validate({"filter": {"status": "active"}})
+
+    assert query.filter.root.root == {"status": "active"}
 
 
 def test_no_routes_when_disabled() -> None:
@@ -513,7 +580,7 @@ def test_array_of_object_items_preserves_item_shape() -> None:
         class UsersItem(BaseModel):
             model_config = ConfigDict(extra='allow')
             id: Annotated[str, Field(strict=True)]
-            name: Annotated[str, Field(strict=True)] = None
+            name: Annotated[Optional[Annotated[str, Field(strict=True)]], _omit_not_null] = None
 
         class Users(RootModel[list[UsersItem]]):
             pass
