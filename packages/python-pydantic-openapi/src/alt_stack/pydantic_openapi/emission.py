@@ -90,9 +90,36 @@ def openapi_to_pydantic_code(
             if route_lines:
                 lines.append("")
             lines.extend(_generate_request_response_objects(routes, schema_name_to_canonical))
-            return "\n".join(lines)
+            return _finalize_module(lines)
 
     lines.extend(_emit_model_rebuilds(state.rebuild_names))
+    return _finalize_module(lines)
+
+
+_ALL_OF_HELPER = [
+    "def all_of(*types: Any) -> Any:",
+    "    adapters = [TypeAdapter(t) for t in types]",
+    "",
+    "    def validate(value: Any) -> Any:",
+    "        for adapter in adapters:",
+    "            adapter.validate_python(value)",
+    "        return value",
+    "",
+    "    return Annotated[Any, BeforeValidator(validate)]",
+    "",
+]
+
+
+def _finalize_module(lines: list[str]) -> str:
+    """Inline the ``all_of`` intersection helper when the module uses it.
+
+    Generated modules depend only on pydantic and ``alt_stack.http_client`` at runtime,
+    not on the generator package.
+    """
+    anchor = "_omit_not_null = BeforeValidator(_reject_explicit_none)"
+    if any("all_of(" in line for line in lines) and anchor in lines:
+        index = lines.index(anchor) + 1
+        lines[index:index] = ["", *_ALL_OF_HELPER[:-1]]
     return "\n".join(lines)
 
 
@@ -104,14 +131,13 @@ def _build_module_preamble(custom_import_lines: list[str] | None) -> list[str]:
         "",
         "from typing import Any, Annotated, Final, Literal, Optional, TypedDict, Union",
         "from typing import cast, overload",
-        "from collections.abc import Mapping",
         "from datetime import date, datetime",
         "from uuid import UUID",
         "",
         "from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, RootModel",
+        "from pydantic import TypeAdapter",
         "from pydantic import AnyUrl, EmailStr",
-        "from python_pydantic_openapi.all_of import all_of",
-        "import python_pydantic_openapi.client as _client",
+        "import alt_stack.http_client as _client",
         "",
         "def _reject_explicit_none(value: Any) -> Any:",
         "    if value is None:",

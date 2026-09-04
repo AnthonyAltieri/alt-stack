@@ -70,7 +70,7 @@ Run it with `pnpm exec tsx src/server.ts`, then open `http://localhost:3000/api/
 | generated-contract HTTP clients | `@alt-stack/http-client-core`, `@alt-stack/http-client-fetch`, `@alt-stack/http-client-ky`, and Rust crate `http-client-rust-tokio` |
 | typed Kafka procedures and clients | `@alt-stack/kafka-core`, `@alt-stack/kafka-client-core`, `@alt-stack/kafka-client-kafkajs`, `@alt-stack/kafka-client-warpstream` |
 | typed background jobs and clients | `@alt-stack/workers-core`, `@alt-stack/workers-trigger`, `@alt-stack/workers-warpstream`, `@alt-stack/workers-client-core`, `@alt-stack/workers-client-trigger`, `@alt-stack/workers-client-warpstream` |
-| OpenAPI SDK generation | `@alt-stack/zod-openapi`, Python package `python-pydantic-openapi`, and Rust crates `rust-openapi` and `rust-openapi-crate-gen` |
+| OpenAPI SDK generation | `@alt-stack/zod-openapi`, Python packages `alt-stack-pydantic-openapi` and `alt-stack-http-client-httpx`, and Rust crates `rust-openapi` and `rust-openapi-crate-gen` |
 | AsyncAPI SDK generation | `@alt-stack/zod-asyncapi` |
 | structured Zod failures | `@alt-stack/zod-error` |
 

@@ -15,9 +15,9 @@ import pytest
 from pydantic import AnyUrl, BaseModel, BeforeValidator, EmailStr, RootModel, ValidationError
 from pydantic.fields import FieldInfo
 
-from python_pydantic_openapi.registry import clear_pydantic_schema_registry
-from python_pydantic_openapi.schema_dedup import get_schema_fingerprint
-from python_pydantic_openapi.to_python import openapi_to_pydantic_code
+from alt_stack.pydantic_openapi.registry import clear_pydantic_schema_registry
+from alt_stack.pydantic_openapi.schema_dedup import get_schema_fingerprint
+from alt_stack.pydantic_openapi.to_python import openapi_to_pydantic_code
 
 
 def _load_fixture() -> dict[str, Any]:

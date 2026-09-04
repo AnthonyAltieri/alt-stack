@@ -1,6 +1,7 @@
 """Asyncio HTTP client for generated ``Request`` / ``Response`` route maps.
 
-This is the Python counterpart of ``@alt-stack/http-client-core``. ``BaseApiClient``
+This is the Python counterpart of ``@alt-stack/http-client-core`` and
+``@alt-stack/http-client-fetch``, published as ``alt-stack-http-client-httpx``. ``BaseApiClient``
 validates and encodes request inputs with the Pydantic models found in the generated
 ``Request`` map, sends the request through a pluggable asyncio ``Transport``, and
 validates the response body with the model found in the generated ``Response`` map.
@@ -21,6 +22,7 @@ from dataclasses import dataclass, field
 from typing import Any, Generic, Literal, Protocol, TypeVar
 from urllib.parse import quote, urlencode
 
+import httpx
 from pydantic import BaseModel
 from pydantic import ValidationError as PydanticValidationError
 from pydantic_core import ErrorDetails
@@ -646,30 +648,22 @@ def _to_wire_string(value: Any) -> str:
 
 
 # ============================================================================
-# httpx transport (optional extra: python-pydantic-openapi[httpx])
+# httpx transport
 # ============================================================================
 
 
 class HttpxTransport:
     """``Transport`` backed by ``httpx.AsyncClient``.
 
-    Requires the ``httpx`` extra. Pass an existing ``httpx.AsyncClient`` to share
-    connection pools or configure defaults; otherwise one is created and owned here.
+    Pass an existing ``httpx.AsyncClient`` to share connection pools or configure
+    defaults; otherwise one is created and owned here.
     """
 
-    def __init__(self, client: Any = None) -> None:
-        try:
-            import httpx
-        except ImportError as error:  # pragma: no cover - exercised only without the extra
-            raise ImportError(
-                "HttpxTransport requires httpx; install python-pydantic-openapi[httpx]"
-            ) from error
-        self._httpx = httpx
+    def __init__(self, client: httpx.AsyncClient | None = None) -> None:
         self._owns_client = client is None
         self._client = client if client is not None else httpx.AsyncClient()
 
     async def send(self, request: HttpRequest) -> HttpResponse:
-        httpx = self._httpx
         timeout = request.timeout if request.timeout is not None else httpx.USE_CLIENT_DEFAULT
         try:
             response = await self._client.request(
@@ -708,7 +702,7 @@ class HttpxTransport:
 
 
 class HttpxApiClient(BaseApiClient):
-    """``BaseApiClient`` over ``httpx``; the primary client when the ``httpx`` extra is installed.
+    """``BaseApiClient`` over ``httpx``; the primary client for generated SDKs.
 
     Owns an ``HttpxTransport``. Pass ``httpx_client`` to share connection pools or configure
     ``httpx.AsyncClient`` defaults; otherwise one is created and closed by ``aclose``.
@@ -723,7 +717,7 @@ class HttpxApiClient(BaseApiClient):
         headers: Mapping[str, Any] | None = None,
         on_validation_error: ValidationErrorHandler | None = None,
         backoff: Backoff = exponential_backoff,
-        httpx_client: Any = None,
+        httpx_client: httpx.AsyncClient | None = None,
     ) -> None:
         self._httpx_transport = HttpxTransport(httpx_client)
         super().__init__(
@@ -746,7 +740,7 @@ class HttpxApiClient(BaseApiClient):
         await self.aclose()
 
 
-def _parse_response_data(response: Any) -> Any:
+def _parse_response_data(response: httpx.Response) -> Any:
     if response.headers.get("content-length", "").strip() == "0":
         return None
     content_type = response.headers.get("content-type", "")

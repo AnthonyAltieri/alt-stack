@@ -7,7 +7,7 @@ Choose the target you need:
 | Input | Output | Generator |
 | --- | --- | --- |
 | OpenAPI | TypeScript interfaces, Zod schemas, `Request`/`Response` maps | `@alt-stack/zod-openapi` |
-| OpenAPI | Python Pydantic models and `Request`/`Response` maps | `python-pydantic-openapi` |
+| OpenAPI | Python Pydantic models, `Request`/`Response` maps, and an asyncio client | `alt-stack-pydantic-openapi` (runtime: `alt-stack-http-client-httpx`) |
 | OpenAPI | Rust Serde models and route modules | `rust-openapi` |
 | OpenAPI | complete Rust crate scaffold | `rust-openapi-crate-gen` |
 | AsyncAPI | TypeScript Zod schemas and a `Topics` map | `@alt-stack/zod-asyncapi` |
@@ -86,8 +86,8 @@ The final request assumes the example API is running on port 3000. See the [HTTP
 Python generation requires Python 3.11 or newer and Pydantic 2.7 or newer.
 
 ```bash
-python -m pip install python-pydantic-openapi
-python-pydantic-openapi openapi.json --output generated_types.py
+python -m pip install alt-stack-pydantic-openapi
+alt-stack-pydantic-openapi openapi.json --output generated_types.py
 ```
 
 Validate with the generated model:
@@ -109,12 +109,12 @@ user_class = Response["/users/{id}"]["GET"]["200"]  # type[User]
 Response["/users/{id}"]["GET"]["999"]  # type checker error: unknown status
 ```
 
-The module also emits an asyncio `HttpxApiClient` with one typed method per route. Install the `httpx` extra (`python-pydantic-openapi[httpx]`), or use `ApiClient(base_url, transport=..., request_map=..., response_map=...)` with your own `Transport` implementation:
+The module also emits an asyncio `HttpxApiClient` with one typed method per route. SDK consumers install the runtime package (`python -m pip install alt-stack-http-client-httpx`), or use `ApiClient(base_url, transport=..., request_map=..., response_map=...)` with their own `Transport` implementation:
 
 ```python
 import asyncio
 
-from python_pydantic_openapi.client import ApiSuccess
+from alt_stack.http_client import ApiSuccess
 
 from generated_types import GetUsersIdParams, HttpxApiClient, Request, Response
 

@@ -14,7 +14,7 @@ Run the language-specific conformance suites after changing the fixture:
 
 ```bash
 pnpm --filter @alt-stack/zod-openapi test --run
-uv run --project packages/python-pydantic-openapi pytest packages/python-pydantic-openapi/tests/test_master_openapi.py
+uv run --project packages/python-pydantic-openapi --extra dev pytest packages/python-pydantic-openapi/tests/test_master_openapi.py
 cargo test -p rust-openapi --test master_openapi
 ```
 

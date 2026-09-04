@@ -3,6 +3,54 @@ revision = 3
 requires-python = ">=3.11"
 
 [[package]]
+name = "alt-stack-http-client-httpx"
+version = "1.6.2"
+source = { directory = "../python-http-client-httpx" }
+dependencies = [
+    { name = "httpx" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.27.0" },
+    { name = "pydantic", specifier = ">=2.7.0" },
+    { name = "pyrefly", marker = "extra == 'dev'", specifier = ">=1.0.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6.0" },
+    { name = "ty", marker = "extra == 'dev'", specifier = ">=0.0.78" },
+]
+provides-extras = ["dev"]
+
+[[package]]
+name = "alt-stack-pydantic-openapi"
+version = "1.6.2"
+source = { editable = "." }
+dependencies = [
+    { name = "pydantic", extra = ["email"] },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "alt-stack-http-client-httpx" },
+    { name = "pyrefly" },
+    { name = "pytest" },
+    { name = "ruff" },
+    { name = "ty" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "alt-stack-http-client-httpx", marker = "extra == 'dev'", directory = "../python-http-client-httpx" },
+    { name = "pydantic", extras = ["email"], specifier = ">=2.7.0" },
+    { name = "pyrefly", marker = "extra == 'dev'", specifier = ">=1.0.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6.0" },
+    { name = "ty", marker = "extra == 'dev'", specifier = ">=0.0.78" },
+]
+provides-extras = ["dev"]
+
+[[package]]
 name = "annotated-types"
 version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
@@ -297,38 +345,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/d1/db/7ef3487e0fb0049dd
 wheels = [
     { url = "https://files.pythonhosted.org/packages/3b/ab/b3226f0bd7cdcf710fbede2b3548584366da3b19b5021e74f5bde2a8fa3f/pytest-9.0.2-py3-none-any.whl", hash = "sha256:711ffd45bf766d5264d487b917733b453d917afd2b0ad65223959f59089f875b", size = 374801, upload-time = "2025-12-06T21:30:49.154Z" },
 ]
-
-[[package]]
-name = "python-pydantic-openapi"
-version = "1.6.2"
-source = { editable = "." }
-dependencies = [
-    { name = "pydantic", extra = ["email"] },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "httpx" },
-    { name = "pyrefly" },
-    { name = "pytest" },
-    { name = "ruff" },
-    { name = "ty" },
-]
-httpx = [
-    { name = "httpx" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27.0" },
-    { name = "httpx", marker = "extra == 'httpx'", specifier = ">=0.27.0" },
-    { name = "pydantic", extras = ["email"], specifier = ">=2.7.0" },
-    { name = "pyrefly", marker = "extra == 'dev'", specifier = ">=1.0.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6.0" },
-    { name = "ty", marker = "extra == 'dev'", specifier = ">=0.0.78" },
-]
-provides-extras = ["httpx", "dev"]
 
 [[package]]
 name = "ruff"

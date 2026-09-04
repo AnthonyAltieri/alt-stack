@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from python_pydantic_openapi.types.number import convert_openapi_number_to_pydantic
+from alt_stack.pydantic_openapi.types.number import convert_openapi_number_to_pydantic
 
 
 def test_basic_number() -> None:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from python_pydantic_openapi.dependencies import (
+from alt_stack.pydantic_openapi.dependencies import (
     extract_schema_dependencies,
     topological_sort_schemas,
 )

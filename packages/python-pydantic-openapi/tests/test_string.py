@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from python_pydantic_openapi.registry import (
+from alt_stack.pydantic_openapi.registry import (
     clear_pydantic_schema_registry,
     register_pydantic_type_to_openapi_schema,
 )
-from python_pydantic_openapi.types.string import convert_openapi_string_to_pydantic
+from alt_stack.pydantic_openapi.types.string import convert_openapi_string_to_pydantic
 
 
 def setup_function() -> None:

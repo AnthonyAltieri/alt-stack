@@ -1,17 +1,23 @@
-# `python-pydantic-openapi`
+# `alt-stack-pydantic-openapi`
 
-Generate Python 3.11+ Pydantic 2 models and route lookup dictionaries from OpenAPI JSON.
+Generate Python 3.11+ Pydantic 2 models, statically typed `Request`/`Response` route maps, and an asyncio `HttpxApiClient` from OpenAPI JSON. This is the Python counterpart of `@alt-stack/zod-openapi`; the generated client runs on `alt-stack-http-client-httpx`.
 
 ## Install
 
 ```bash
-python -m pip install python-pydantic-openapi
+python -m pip install alt-stack-pydantic-openapi
+```
+
+Consumers of a generated SDK install the runtime package instead:
+
+```bash
+python -m pip install alt-stack-http-client-httpx
 ```
 
 ## Generate
 
 ```bash
-python-pydantic-openapi ./openapi.json --output ./generated_types.py
+alt-stack-pydantic-openapi ./openapi.json --output ./generated_types.py
 ```
 
 `input` may be a local JSON path or HTTP(S) URL. Use `--registry` to execute custom type mappings and `--include` to insert imports/definitions into output.
@@ -32,14 +38,10 @@ Response["/users/{id}"]["GET"]["200"]      # type[User]
 Response["/users/{id}"]["GET"]["999"]      # static error: unknown status
 ```
 
-Generated modules also include an asyncio `HttpxApiClient` with one typed method per route, built on `python_pydantic_openapi.client`. Install the `httpx` extra:
-
-```bash
-python -m pip install "python-pydantic-openapi[httpx]"
-```
+Generated modules also include an asyncio `HttpxApiClient` with one typed method per route, built on `alt_stack.http_client`:
 
 ```python
-from python_pydantic_openapi.client import ApiSuccess
+from alt_stack.http_client import ApiSuccess
 
 from generated_types import GetUsersIdParams, HttpxApiClient, Request, Response
 
@@ -52,7 +54,7 @@ if isinstance(result, ApiSuccess):
     result.body  # User; unknown paths, missing params, and wrong models are static errors
 ```
 
-Generated modules that use intersections import the installed package's `all_of` helper.
+Generated modules that use non-object intersections inline a small `all_of` validator, so they depend only on `pydantic` and `alt-stack-http-client-httpx` at runtime.
 
 ## Development
 
