@@ -158,11 +158,100 @@ Response["/users/{id}"]["GET"]["999"]  # error: undocumented status code
 
 The generated `TypedDict` names are private (`_PostUsersRequest`, `_UsersRequestMethods`, `_RequestMap`, and so on) and are an implementation detail; index `Request` and `Response` directly.
 
+## Generated `ApiClient`
+
+When routes are enabled, the module also emits two asyncio client classes and one `{Method}{Path}Result` union per route. `HttpxApiClient(base_url, request_map=Request, response_map=Response)` is the primary client and owns its `httpx` transport; `ApiClient(base_url, transport=..., request_map=Request, response_map=Response)` accepts any `Transport` implementation. Both carry the same typed route methods. Python cannot derive a call signature from the `TypedDict` maps the way TypeScript maps over `typeof Request`, so each route gets an explicit `Literal` path overload carrying its exact request models and result type. A verb with a single route is emitted as a plain typed method.
+
+```python
+GetUsersIdResult = Union[
+    _client.ApiSuccess[Literal['200'], User],
+    _client.ApiFailure[Literal['404'], NotFoundError],
+    _client.ApiUnexpectedError,
+]
+
+class ApiClient(_client.BaseApiClient):
+    async def get(
+        self,
+        path: Literal['/users/{id}'],
+        *,
+        params: GetUsersIdParams,
+        query: GetUsersIdQuery | None = None,
+        options: _client.RequestOptions | None = None,
+    ) -> GetUsersIdResult: ...
+
+class HttpxApiClient(ApiClient, _client.HttpxApiClient):
+    pass
+```
+
+Route inputs are keyword arguments typed with the generated models: `params` is required when the path has parameters, `body` is required when the operation has a JSON request body, and `query` is optional. Transport concerns (`headers`, `timeout`, `retries`, `should_retry`) travel in `RequestOptions`.
+
+```python
+import asyncio
+
+from python_pydantic_openapi.client import ApiFailure, ApiSuccess, RequestOptions
+
+from generated_types import GetUsersIdParams, HttpxApiClient, Request, Response
+
+
+async def main() -> None:
+    async with HttpxApiClient(
+        "https://api.example.com", request_map=Request, response_map=Response
+    ) as client:
+        result = await client.get(
+            "/users/{id}",
+            params=GetUsersIdParams(id="u_1"),
+            options=RequestOptions(timeout=5.0, retries=2),
+        )
+
+    if isinstance(result, ApiSuccess):
+        result.code  # Literal['200']
+        result.body  # User
+    elif isinstance(result, ApiFailure):
+        result.code   # Literal['404']
+        result.error  # NotFoundError
+    else:
+        result.code   # int, undocumented status or failed response validation
+        result.error  # UnexpectedApiClientError
+
+    await client.get("/users/{id}")            # error: params is required
+    await client.get("/users")                 # error: no GET route for this path
+    await client.post("/users", body=User())   # error: body must be CreateUserBody
+
+
+asyncio.run(main())
+```
+
+Passing the maps mirrors `createApiClient({ baseUrl, Request, Response })` in TypeScript. Importing `HttpxApiClient` from the generated module gives the typed route methods; importing it from `python_pydantic_openapi.client` accepts the same arguments and gives runtime validation with the untyped `request()` API. Use `ApiClient(base_url, transport=..., request_map=..., response_map=...)` to plug in a different asyncio HTTP library.
+
+Narrow results with `isinstance` or `match`; the `success` attribute is present for parity with the TypeScript client but not every checker narrows on it. Only documented statuses appear in the union; a route without a documented 2xx body (for example `204`) includes `ApiSuccess[str, Any]` so its success is representable.
+
+## `python_pydantic_openapi.client`
+
+The runtime half of the client lives in the installed package, not in generated code, and is transport-agnostic.
+
+| Export | Purpose |
+| --- | --- |
+| `BaseApiClient` | Validates and encodes inputs with the `Request` map, sends through a `Transport`, validates responses with the `Response` map. `request(method, path, *, params, query, body, options)` returns an untyped `ApiResult`. |
+| `Transport` | Protocol with `async def send(request: HttpRequest) -> HttpResponse`. Implement it to use any asyncio HTTP library. |
+| `HttpxApiClient` | `BaseApiClient` that owns an `HttpxTransport`; constructed with `base_url`, `request_map`, `response_map`, optional `headers`, `on_validation_error`, `backoff`, and `httpx_client`. Supports `async with` and `aclose()`. Requires the `httpx` extra. |
+| `HttpxTransport` | `Transport` over `httpx.AsyncClient`; requires the `httpx` extra. Parses JSON by content type, returns `None` for `content-length: 0`, maps `httpx.TimeoutException` to `ApiTimeoutError` and other `httpx.HTTPError`s to `UnexpectedApiClientError`. Supports `async with`. |
+| `HttpRequest` / `HttpResponse` | Wire-level dataclasses exchanged with a transport. `HttpRequest.timeout` is in seconds. |
+| `ApiSuccess` / `ApiFailure` / `ApiUnexpectedError` | Result dataclasses with `code`, `body` or `error`, `raw`, `headers`, and `success`. |
+| `RequestOptions` | Per-call `headers`, `timeout`, `retries`, and `should_retry(RetryContext) -> bool`. |
+| `ApiValidationError` | Raised before any I/O when `params`, `query`, or `body` fail the route's model. Never retried. |
+| `ApiClientError`, `UnexpectedApiClientError`, `ApiTimeoutError` | Error hierarchy for transport and status failures. |
+| `ValidationErrorContext` | Passed to the optional `on_validation_error` hook for request and response validation failures; handler exceptions are swallowed. |
+| `exponential_backoff` | Default retry delay, `min(2 ** attempt, 30)` seconds; override with the `backoff` constructor argument. |
+
+Request encoding follows the TypeScript client: inputs may be model instances or plain mappings, are validated with the route's model, and are serialized with `model_dump(mode="json", by_alias=True, exclude_unset=True)`. Path parameters are percent-encoded, `None` query values are dropped, lists repeat the key, and booleans become `true`/`false`. Bodies are sent only for `POST`, `PUT`, and `PATCH`. Header schemas from the `Request` map are not validated; pass header values through `RequestOptions.headers`.
+
+Response handling: a documented status validates the body into its model and returns `ApiSuccess` for 2xx or `ApiFailure` otherwise. An undocumented 2xx returns `ApiSuccess` with the raw decoded body; an undocumented error status or a body that fails validation returns `ApiUnexpectedError` with an `UnexpectedApiClientError` carrying the status and raw data. Retries default to zero; with `retries > 0`, transport errors are retried with backoff except `UnexpectedApiClientError`s carrying a 4xx code, and `should_retry` can override the decision for both errors and responses.
+
 ## `all_of`
 
 Generated non-object intersections import `python_pydantic_openapi.all_of`. The helper builds a `TypeAdapter` for every supplied type and returns `Annotated[Any, BeforeValidator(...)]`; validation succeeds only when every adapter accepts the same input, while the original input value is returned.
 
-`all_of` is available from its submodule, not from the package-root `__all__`.
+`all_of` and the client are available from their submodules, not from the package-root `__all__`.
 
 ## Root export checklist
 

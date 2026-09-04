@@ -144,7 +144,7 @@ This shape plugs into the TypeScript HTTP clients. The client currently does not
 
 ### Python OpenAPI
 
-With `include_routes`, the generator emits route Pydantic classes and `Request`/`Response` dictionaries containing those classes. Each dictionary is declared with generated `TypedDict` types and `Final`, the Python equivalent of `as const`, so `Request[path][METHOD][part]` and `Response[path][METHOD][status]` resolve to the exact model class under a type checker and unknown paths, methods, parts, and statuses are static errors. A method with no request parts is present as `{}` in `Request`, as in TypeScript.
+With `include_routes`, the generator emits route Pydantic classes and `Request`/`Response` dictionaries containing those classes. Each dictionary is declared with generated `TypedDict` types and `Final`, the Python equivalent of `as const`, so `Request[path][METHOD][part]` and `Response[path][METHOD][status]` resolve to the exact model class under a type checker and unknown paths, methods, parts, and statuses are static errors. A method with no request parts is present as `{}` in `Request`, as in TypeScript. The module also emits asyncio `HttpxApiClient` and `ApiClient` classes, constructed with `request_map=Request, response_map=Response` like the TypeScript `createApiClient`, whose `Literal` path overloads give each route the exact request models and a `{Method}{Path}Result` union. The runtime lives in `python_pydantic_openapi.client`.
 
 ### Rust OpenAPI
 
