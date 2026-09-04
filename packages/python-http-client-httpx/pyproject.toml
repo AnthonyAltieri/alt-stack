@@ -1,7 +1,7 @@
 [project]
-name = "alt-stack-pydantic-openapi"
+name = "alt-stack-http-client-httpx"
 version = "1.6.2"
-description = "Generate Pydantic models, typed route maps, and an asyncio client from OpenAPI"
+description = "Asyncio HTTP client for alt-stack generated Pydantic SDKs, backed by httpx"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
@@ -12,7 +12,7 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Typing :: Typed",
 ]
-dependencies = ["pydantic[email]>=2.7.0"]
+dependencies = ["pydantic>=2.7.0", "httpx>=0.27.0"]
 
 [project.urls]
 Homepage = "https://github.com/anthonyaltieri/alt-stack"
@@ -21,15 +21,11 @@ Issues = "https://github.com/anthonyaltieri/alt-stack/issues"
 
 [project.optional-dependencies]
 dev = [
-  "alt-stack-http-client-httpx",
   "pyrefly>=1.0.0",
   "pytest>=8.0.0",
   "ruff>=0.6.0",
   "ty>=0.0.78",
 ]
-
-[project.scripts]
-alt-stack-pydantic-openapi = "alt_stack_pydantic_openapi.cli:main"
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]
@@ -41,13 +37,10 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["alt_stack_pydantic_openapi*"]
+include = ["alt_stack_http_client_httpx*"]
 
 [tool.setuptools.package-data]
-"alt_stack_pydantic_openapi" = ["py.typed"]
-
-[tool.uv.sources]
-alt-stack-http-client-httpx = { path = "../python-http-client-httpx" }
+"alt_stack_http_client_httpx" = ["py.typed"]
 
 [tool.ruff]
 line-length = 100

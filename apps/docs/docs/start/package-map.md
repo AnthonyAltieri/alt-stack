@@ -29,7 +29,8 @@ Altstack packages are deliberately separable. Start with the boundary you own, t
 | Worker clients | `@alt-stack/workers-client-trigger` | enqueue jobs with Trigger.dev |
 | Worker clients | `@alt-stack/workers-client-warpstream` | enqueue jobs through WarpStream/Kafka |
 | OpenAPI generation | `@alt-stack/zod-openapi` | generate TypeScript Zod schemas and request/response maps |
-| OpenAPI generation | `python-pydantic-openapi` | generate Python Pydantic models |
+| OpenAPI generation | `alt-stack-pydantic-openapi` | generate Python Pydantic models, typed route maps, and an asyncio client |
+| HTTP clients | `alt-stack-http-client-httpx` | asyncio runtime for generated Python SDKs, backed by httpx |
 | OpenAPI generation | `rust-openapi` | generate Rust models and route modules |
 | OpenAPI generation | `rust-openapi-crate-gen` | scaffold a consumable Rust SDK crate |
 | AsyncAPI generation | `@alt-stack/zod-asyncapi` | generate TypeScript Zod schemas and topic maps |

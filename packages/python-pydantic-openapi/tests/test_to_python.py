@@ -9,11 +9,11 @@ from uuid import UUID
 import pytest
 from pydantic import ValidationError
 
-from python_pydantic_openapi.registry import (
+from alt_stack_pydantic_openapi.registry import (
     clear_pydantic_schema_registry,
     register_pydantic_type_to_openapi_schema,
 )
-from python_pydantic_openapi.to_python import openapi_to_pydantic_code
+from alt_stack_pydantic_openapi.to_python import openapi_to_pydantic_code
 from tests.codegen_assertions import assert_generated_code
 
 
@@ -983,3 +983,26 @@ def test_generated_custom_registry_type_validates() -> None:
 
     with pytest.raises(ValidationError):
         module.User.model_validate({"id": "not-a-uuid"})
+
+
+def test_intersection_helper_is_inlined_only_when_used() -> None:
+    openapi = {
+        "components": {
+            "schemas": {
+                "Code": {"allOf": [{"type": "string", "minLength": 2}, {"type": "string"}]},
+            }
+        },
+        "paths": {},
+    }
+
+    code = openapi_to_pydantic_code(openapi, options={"include_routes": True})
+    assert "def all_of(*types: Any) -> Any:" in code
+    assert "import alt_stack_pydantic_openapi" not in code
+
+    module = _load_module(code)
+    assert module.Code.model_validate("ok").root == "ok"
+    with pytest.raises(ValidationError):
+        module.Code.model_validate("x")
+
+    plain = openapi_to_pydantic_code({"components": {"schemas": {}}, "paths": {}})
+    assert "def all_of" not in plain

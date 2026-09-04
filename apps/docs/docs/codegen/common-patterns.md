@@ -76,7 +76,7 @@ The exported variable name must exactly match the identifier present in generate
 ```python
 from typing import Annotated
 from pydantic import Field
-from python_pydantic_openapi import register_pydantic_type_to_openapi_schema
+from alt_stack_pydantic_openapi import register_pydantic_type_to_openapi_schema
 
 ObjectId = Annotated[str, Field(pattern=r"^[a-f0-9]{24}$")]
 
@@ -98,7 +98,7 @@ from registry import ObjectId
 ```
 
 ```bash
-python-pydantic-openapi openapi.json -r registry.py -i include.py -o generated_types.py
+alt-stack-pydantic-openapi openapi.json -r registry.py -i include.py -o generated_types.py
 ```
 
 Python accepts only the string formats in `SUPPORTED_STRING_FORMATS`; an unknown format registration raises `ValueError`. It also supports one custom type per `number`, `integer`, or `boolean` primitive.
@@ -144,7 +144,7 @@ This shape plugs into the TypeScript HTTP clients. The client currently does not
 
 ### Python OpenAPI
 
-With `include_routes`, the generator emits route Pydantic classes and `Request`/`Response` dictionaries containing those classes. Each dictionary is declared with generated `TypedDict` types and `Final`, the Python equivalent of `as const`, so `Request[path][METHOD][part]` and `Response[path][METHOD][status]` resolve to the exact model class under a type checker and unknown paths, methods, parts, and statuses are static errors. A method with no request parts is present as `{}` in `Request`, as in TypeScript. The module also emits asyncio `HttpxApiClient` and `ApiClient` classes, constructed with `request_map=Request, response_map=Response` like the TypeScript `createApiClient`, whose `Literal` path overloads give each route the exact request models and a `{Method}{Path}Result` union. The runtime lives in `python_pydantic_openapi.client`.
+With `include_routes`, the generator emits route Pydantic classes and `Request`/`Response` dictionaries containing those classes. Each dictionary is declared with generated `TypedDict` types and `Final`, the Python equivalent of `as const`, so `Request[path][METHOD][part]` and `Response[path][METHOD][status]` resolve to the exact model class under a type checker and unknown paths, methods, parts, and statuses are static errors. A method with no request parts is present as `{}` in `Request`, as in TypeScript. The module also emits asyncio `HttpxApiClient` and `ApiClient` classes, constructed with `request_map=Request, response_map=Response` like the TypeScript `createApiClient`, whose `Literal` path overloads give each route the exact request models and a `{Method}{Path}Result` union. The runtime lives in the separate `alt-stack-http-client-httpx` distribution, imported as `alt_stack_http_client_httpx`.
 
 ### Rust OpenAPI
 

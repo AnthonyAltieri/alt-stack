@@ -1,4 +1,4 @@
-name: Publish Python Package
+name: Publish Python Packages
 
 on:
   push:
@@ -13,21 +13,30 @@ on:
         default: false
         type: boolean
 
-env:
-  PACKAGE_DIR: packages/python-pydantic-openapi
-  DIST_DIR: dist/python-pydantic-openapi
-
 permissions:
   contents: read
 
 jobs:
-  detect-unpublished:
+  release:
+    name: ${{ matrix.package.name }}
     runs-on: ubuntu-latest
-    outputs:
-      dry_run: ${{ steps.detect.outputs.dry_run }}
-      package_name: ${{ steps.detect.outputs.package_name }}
-      package_version: ${{ steps.detect.outputs.package_version }}
-      should_publish: ${{ steps.detect.outputs.should_publish }}
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - name: alt-stack-pydantic-openapi
+            dir: packages/python-pydantic-openapi
+          - name: alt-stack-http-client-httpx
+            dir: packages/python-http-client-httpx
+    environment:
+      name: pypi
+      url: https://pypi.org/project/${{ matrix.package.name }}/
+    permissions:
+      contents: write
+      id-token: write
+    env:
+      PACKAGE_DIR: ${{ matrix.package.dir }}
+      DIST_DIR: dist/${{ matrix.package.name }}
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
@@ -37,6 +46,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Setup Python
@@ -50,6 +60,7 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           INPUT_DRY_RUN: ${{ inputs.dry_run }}
+          EXPECTED_NAME: ${{ matrix.package.name }}
         run: |
           if [[ "$EVENT_NAME" == "workflow_dispatch" && "$INPUT_DRY_RUN" == "true" ]]; then
             echo "dry_run=true" >> "$GITHUB_OUTPUT"
@@ -60,6 +71,7 @@ jobs:
           python <<'PY'
           import json
           import os
+          import sys
           import tomllib
           import urllib.error
           import urllib.request
@@ -71,7 +83,11 @@ jobs:
           package_name = project["name"]
           package_version = project["version"]
 
-          version_exists = False
+          expected_name = os.environ["EXPECTED_NAME"]
+          if package_name != expected_name:
+              print(f"pyproject name {package_name!r} does not match matrix entry {expected_name!r}")
+              sys.exit(1)
+
           try:
               with urllib.request.urlopen(f"https://pypi.org/pypi/{package_name}/json") as response:
                   payload = json.load(response)
@@ -103,8 +119,7 @@ jobs:
           SHOULD_PUBLISH: ${{ steps.detect.outputs.should_publish }}
         run: |
           {
-            echo "### Python package release detection"
-            echo "- Package: \`${PACKAGE_NAME}\`"
+            echo "### ${PACKAGE_NAME} release detection"
             echo "- Version: \`${PACKAGE_VERSION}\`"
             if [[ "$SHOULD_PUBLISH" == "true" ]]; then
               echo "- Result: version is unpublished and eligible for release"
@@ -113,126 +128,78 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-  build:
-    needs: detect-unpublished
-    if: needs.detect-unpublished.outputs.should_publish == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
-        with:
-          egress-policy: audit
-
-      - name: Checkout code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          persist-credentials: false
-
-      - name: Setup Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.11"
-
       - name: Setup uv
+        if: steps.detect.outputs.should_publish == 'true'
         uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
-          enable-cache: true
-          cache-dependency-glob: ${{ env.PACKAGE_DIR }}/uv.lock
+          enable-cache: false
 
       - name: Build distribution artifacts
+        if: steps.detect.outputs.should_publish == 'true'
         shell: bash
         run: |
-          rm -rf "${{ env.DIST_DIR }}"
-          uv build "${{ env.PACKAGE_DIR }}" --out-dir "${{ env.DIST_DIR }}"
+          rm -rf "$DIST_DIR"
+          uv build "$PACKAGE_DIR" --out-dir "$DIST_DIR"
 
       - name: Check distribution metadata
+        if: steps.detect.outputs.should_publish == 'true'
         shell: bash
-        run: uvx twine check "${{ env.DIST_DIR }}"/*
+        run: uvx twine check "$DIST_DIR"/*
 
       - name: List built artifacts
+        if: steps.detect.outputs.should_publish == 'true'
         shell: bash
-        run: ls -lh "${{ env.DIST_DIR }}"
-
-      - name: Upload distribution artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: python-pydantic-openapi-dist
-          path: ${{ env.DIST_DIR }}/*
-          retention-days: 1
+        run: ls -lh "$DIST_DIR"
 
       - name: Dry-run summary
-        if: needs.detect-unpublished.outputs.dry_run == 'true'
+        if: steps.detect.outputs.should_publish == 'true' && steps.detect.outputs.dry_run == 'true'
         shell: bash
         env:
-          PACKAGE_NAME: ${{ needs.detect-unpublished.outputs.package_name }}
-          PACKAGE_VERSION: ${{ needs.detect-unpublished.outputs.package_version }}
+          PACKAGE_NAME: ${{ steps.detect.outputs.package_name }}
+          PACKAGE_VERSION: ${{ steps.detect.outputs.package_version }}
         run: |
           {
-            echo "### Python package dry run"
+            echo "### ${PACKAGE_NAME} dry run"
             echo "- Built artifacts for \`${PACKAGE_NAME}@${PACKAGE_VERSION}\`"
             echo "- Publishing and git tagging were skipped because \`dry_run=true\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  publish:
-    needs: [detect-unpublished, build]
-    if: needs.detect-unpublished.outputs.should_publish == 'true' && needs.detect-unpublished.outputs.dry_run != 'true'
-    runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/project/${{ needs.detect-unpublished.outputs.package_name }}/
-    permissions:
-      id-token: write
-    steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
-        with:
-          egress-policy: audit
-
-      - name: Download distribution artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: python-pydantic-openapi-dist
-          path: ${{ env.DIST_DIR }}
-
       - name: Publish package to PyPI
+        if: steps.detect.outputs.should_publish == 'true' && steps.detect.outputs.dry_run != 'true'
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
         with:
           packages-dir: ${{ env.DIST_DIR }}
           print-hash: true
 
-  tag-release:
-    needs: [detect-unpublished, publish]
-    if: needs.detect-unpublished.outputs.should_publish == 'true' && needs.detect-unpublished.outputs.dry_run != 'true' && needs.publish.result == 'success'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
-        with:
-          egress-policy: audit
-
-      - name: Checkout code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-          persist-credentials: false
-
       - name: Configure git
+        if: steps.detect.outputs.should_publish == 'true' && steps.detect.outputs.dry_run != 'true'
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Create and push git tag
+        if: steps.detect.outputs.should_publish == 'true' && steps.detect.outputs.dry_run != 'true'
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PACKAGE_NAME: ${{ needs.detect-unpublished.outputs.package_name }}
-          PACKAGE_VERSION: ${{ needs.detect-unpublished.outputs.package_version }}
+          PACKAGE_NAME: ${{ steps.detect.outputs.package_name }}
+          PACKAGE_VERSION: ${{ steps.detect.outputs.package_version }}
         run: |
           TAG_NAME="${PACKAGE_NAME}@${PACKAGE_VERSION}"
           git tag -a "$TAG_NAME" -m "Release $TAG_NAME" 2>/dev/null || echo "Tag $TAG_NAME already exists"
           AUTH_HEADER="$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 | tr -d '\n')"
           git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${AUTH_HEADER}" push origin "$TAG_NAME" || echo "Tag $TAG_NAME already exists on origin"
+
+      - name: Release summary
+        if: steps.detect.outputs.should_publish == 'true' && steps.detect.outputs.dry_run != 'true'
+        shell: bash
+        env:
+          PACKAGE_NAME: ${{ steps.detect.outputs.package_name }}
+          PACKAGE_VERSION: ${{ steps.detect.outputs.package_version }}
+        run: |
+          {
+            echo "### ${PACKAGE_NAME} release"
+            echo "- Published \`${PACKAGE_NAME}@${PACKAGE_VERSION}\` to PyPI"
+            echo "- Tagged \`${PACKAGE_NAME}@${PACKAGE_VERSION}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

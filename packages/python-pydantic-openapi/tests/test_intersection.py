@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from python_pydantic_openapi.types.intersection import convert_openapi_intersection_to_pydantic
+from alt_stack_pydantic_openapi.types.intersection import convert_openapi_intersection_to_pydantic
 
 
 def test_intersection_basic() -> None:

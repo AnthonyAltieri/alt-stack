@@ -1,17 +1,17 @@
 # Python/Pydantic OpenAPI API Documentation
 
-`python-pydantic-openapi` converts OpenAPI JSON into Python 3.11+ source using Pydantic 2.7+.
+`alt-stack-pydantic-openapi` converts OpenAPI JSON into Python 3.11+ source using Pydantic 2.7+.
 
 ```bash
-python -m pip install python-pydantic-openapi
+python -m pip install alt-stack-pydantic-openapi
 ```
 
-The installed distribution includes a `py.typed` marker. Every generated module imports `python_pydantic_openapi.all_of` in its fixed preamble, so the generator package remains a runtime dependency of generated code even when the input has no `allOf` expression.
+The installed distribution includes a `py.typed` marker and imports as `alt_stack_pydantic_openapi`. Generated modules do not depend on the generator at runtime: they import `alt_stack_http_client_httpx` from `alt-stack-http-client-httpx` for the client and inline the `all_of` validator when an input uses a non-object `allOf`.
 
-## CLI: `python-pydantic-openapi`
+## CLI: `alt-stack-pydantic-openapi`
 
 ```text
-python-pydantic-openapi <input> [options]
+alt-stack-pydantic-openapi <input> [options]
 ```
 
 | Argument/flag | Meaning |
@@ -188,7 +188,7 @@ Route inputs are keyword arguments typed with the generated models: `params` is 
 ```python
 import asyncio
 
-from python_pydantic_openapi.client import ApiFailure, ApiSuccess, RequestOptions
+from alt_stack_http_client_httpx import ApiFailure, ApiSuccess, RequestOptions
 
 from generated_types import GetUsersIdParams, HttpxApiClient, Request, Response
 
@@ -221,20 +221,20 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-Passing the maps mirrors `createApiClient({ baseUrl, Request, Response })` in TypeScript. Importing `HttpxApiClient` from the generated module gives the typed route methods; importing it from `python_pydantic_openapi.client` accepts the same arguments and gives runtime validation with the untyped `request()` API. Use `ApiClient(base_url, transport=..., request_map=..., response_map=...)` to plug in a different asyncio HTTP library.
+Passing the maps mirrors `createApiClient({ baseUrl, Request, Response })` in TypeScript. Importing `HttpxApiClient` from the generated module gives the typed route methods; importing it from `alt_stack_http_client_httpx` accepts the same arguments and gives runtime validation with the untyped `request()` API. Use `ApiClient(base_url, transport=..., request_map=..., response_map=...)` to plug in a different asyncio HTTP library.
 
 Narrow results with `isinstance` or `match`; the `success` attribute is present for parity with the TypeScript client but not every checker narrows on it. Only documented statuses appear in the union; a route without a documented 2xx body (for example `204`) includes `ApiSuccess[str, Any]` so its success is representable.
 
-## `python_pydantic_openapi.client`
+## `alt-stack-http-client-httpx`
 
-The runtime half of the client lives in the installed package, not in generated code, and is transport-agnostic.
+The runtime half of the client is its own distribution, `alt-stack-http-client-httpx`, imported as `alt_stack_http_client_httpx`. It is the Python counterpart of `@alt-stack/http-client-core` plus `@alt-stack/http-client-fetch`, depends on `pydantic` and `httpx`, and is the only runtime dependency of generated SDK modules besides `pydantic`. `BaseApiClient` is transport-agnostic; `HttpxApiClient` binds it to `httpx`.
 
 | Export | Purpose |
 | --- | --- |
 | `BaseApiClient` | Validates and encodes inputs with the `Request` map, sends through a `Transport`, validates responses with the `Response` map. `request(method, path, *, params, query, body, options)` returns an untyped `ApiResult`. |
 | `Transport` | Protocol with `async def send(request: HttpRequest) -> HttpResponse`. Implement it to use any asyncio HTTP library. |
-| `HttpxApiClient` | `BaseApiClient` that owns an `HttpxTransport`; constructed with `base_url`, `request_map`, `response_map`, optional `headers`, `on_validation_error`, `backoff`, and `httpx_client`. Supports `async with` and `aclose()`. Requires the `httpx` extra. |
-| `HttpxTransport` | `Transport` over `httpx.AsyncClient`; requires the `httpx` extra. Parses JSON by content type, returns `None` for `content-length: 0`, maps `httpx.TimeoutException` to `ApiTimeoutError` and other `httpx.HTTPError`s to `UnexpectedApiClientError`. Supports `async with`. |
+| `HttpxApiClient` | `BaseApiClient` that owns an `HttpxTransport`; constructed with `base_url`, `request_map`, `response_map`, optional `headers`, `on_validation_error`, `backoff`, and `httpx_client`. Supports `async with` and `aclose()`. |
+| `HttpxTransport` | `Transport` over `httpx.AsyncClient`. Parses JSON by content type, returns `None` for `content-length: 0`, maps `httpx.TimeoutException` to `ApiTimeoutError` and other `httpx.HTTPError`s to `UnexpectedApiClientError`. Supports `async with`. |
 | `HttpRequest` / `HttpResponse` | Wire-level dataclasses exchanged with a transport. `HttpRequest.timeout` is in seconds. |
 | `ApiSuccess` / `ApiFailure` / `ApiUnexpectedError` | Result dataclasses with `code`, `body` or `error`, `raw`, `headers`, and `success`. |
 | `RequestOptions` | Per-call `headers`, `timeout`, `retries`, and `should_retry(RetryContext) -> bool`. |
@@ -242,6 +242,10 @@ The runtime half of the client lives in the installed package, not in generated 
 | `ApiClientError`, `UnexpectedApiClientError`, `ApiTimeoutError` | Error hierarchy for transport and status failures. |
 | `ValidationErrorContext` | Passed to the optional `on_validation_error` hook for request and response validation failures; handler exceptions are swallowed. |
 | `exponential_backoff` | Default retry delay, `min(2 ** attempt, 30)` seconds; override with the `backoff` constructor argument. |
+| `RetryContext` / `ShouldRetry` / `Backoff` | Types for the retry hooks: the context passed to `should_retry`, the callback signature, and the backoff function signature. |
+| `ValidationErrorHandler` | Signature of the `on_validation_error` hook. |
+| `ApiResult` | Union returned by `BaseApiClient.request`: `ApiSuccess[str, Any] | ApiFailure[str, Any] | ApiUnexpectedError`. |
+| `RouteMap` / `HttpMethod` | Type aliases for the `Request` / `Response` map arguments and the supported verb literals. |
 
 Request encoding follows the TypeScript client: inputs may be model instances or plain mappings, are validated with the route's model, and are serialized with `model_dump(mode="json", by_alias=True, exclude_unset=True)`. Path parameters are percent-encoded, `None` query values are dropped, lists repeat the key, and booleans become `true`/`false`. Bodies are sent only for `POST`, `PUT`, and `PATCH`. Header schemas from the `Request` map are not validated; pass header values through `RequestOptions.headers`.
 
@@ -249,10 +253,8 @@ Response handling: a documented status validates the body into its model and ret
 
 ## `all_of`
 
-Generated non-object intersections import `python_pydantic_openapi.all_of`. The helper builds a `TypeAdapter` for every supplied type and returns `Annotated[Any, BeforeValidator(...)]`; validation succeeds only when every adapter accepts the same input, while the original input value is returned.
-
-`all_of` and the client are available from their submodules, not from the package-root `__all__`.
+Generated non-object intersections use an `all_of` helper that the generator inlines into the module when needed. The helper builds a `TypeAdapter` for every supplied type and returns `Annotated[Any, BeforeValidator(...)]`; validation succeeds only when every adapter accepts the same input, while the original input value is returned. It is not part of the generator's public API.
 
 ## Root export checklist
 
-`python_pydantic_openapi.__all__` contains exactly `SUPPORTED_STRING_FORMATS`, `clear_pydantic_schema_registry`, `get_schema_exported_variable_name_for_primitive_type`, `get_schema_exported_variable_name_for_string_format`, `openapi_to_pydantic_code`, `register_pydantic_type_to_openapi_schema`, and `schema_registry`.
+`alt_stack_pydantic_openapi.__all__` contains exactly `SUPPORTED_STRING_FORMATS`, `clear_pydantic_schema_registry`, `get_schema_exported_variable_name_for_primitive_type`, `get_schema_exported_variable_name_for_string_format`, `openapi_to_pydantic_code`, `register_pydantic_type_to_openapi_schema`, and `schema_registry`.
