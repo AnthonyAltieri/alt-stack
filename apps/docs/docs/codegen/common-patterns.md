@@ -76,7 +76,7 @@ The exported variable name must exactly match the identifier present in generate
 ```python
 from typing import Annotated
 from pydantic import Field
-from alt_stack_pydantic_openapi import register_pydantic_type_to_openapi_schema
+from alt_stack_openapi_pydantic import register_pydantic_type_to_openapi_schema
 
 ObjectId = Annotated[str, Field(pattern=r"^[a-f0-9]{24}$")]
 
@@ -98,7 +98,7 @@ from registry import ObjectId
 ```
 
 ```bash
-alt-stack-pydantic-openapi openapi.json -r registry.py -i include.py -o generated_types.py
+alt-stack-openapi-pydantic openapi.json -r registry.py -i include.py -o generated_types.py
 ```
 
 Python accepts only the string formats in `SUPPORTED_STRING_FORMATS`; an unknown format registration raises `ValueError`. It also supports one custom type per `number`, `integer`, or `boolean` primitive.

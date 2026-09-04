@@ -1,5 +1,5 @@
 [project]
-name = "alt-stack-pydantic-openapi"
+name = "alt-stack-openapi-pydantic"
 version = "1.6.2"
 description = "Generate Pydantic models, typed route maps, and an asyncio client from OpenAPI"
 readme = "README.md"
@@ -29,7 +29,7 @@ dev = [
 ]
 
 [project.scripts]
-alt-stack-pydantic-openapi = "alt_stack_pydantic_openapi.cli:main"
+alt-stack-openapi-pydantic = "alt_stack_openapi_pydantic.cli:main"
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]
@@ -41,10 +41,10 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["alt_stack_pydantic_openapi*"]
+include = ["alt_stack_openapi_pydantic*"]
 
 [tool.setuptools.package-data]
-"alt_stack_pydantic_openapi" = ["py.typed"]
+"alt_stack_openapi_pydantic" = ["py.typed"]
 
 [tool.uv.sources]
 alt-stack-http-client-httpx = { path = "../python-http-client-httpx" }
