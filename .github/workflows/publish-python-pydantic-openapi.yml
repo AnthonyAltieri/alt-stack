@@ -178,7 +178,7 @@ jobs:
     if: needs.detect-unpublished.outputs.should_publish == 'true' && needs.detect-unpublished.outputs.dry_run != 'true'
     runs-on: ubuntu-latest
     environment:
-      name: pypi
+      name: pypi-python-pydantic-openapi
       url: https://pypi.org/project/${{ needs.detect-unpublished.outputs.package_name }}/
     permissions:
       id-token: write
