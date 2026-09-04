@@ -49,7 +49,7 @@ Object behavior:
 - absent or `true` additional properties use `extra='allow'`;
 - a schema-valued `additionalProperties` adds a typed `__pydantic_extra__` field.
 
-When routes are enabled, the output contains route model classes plus `Request` and `Response` dictionaries. Bare request methods with no params/query/headers/body are not entered in `Request`. JSON response schemas are keyed by their string status.
+When routes are enabled, the output contains route model classes plus `Request` and `Response` dictionaries, each declared with a closed `TypedDict` shape so literal indexing resolves to the exact model class. Bare request methods with no params/query/headers/body appear as `{}` in `Request`, matching the TypeScript generator. JSON response schemas are keyed by their string status.
 
 ## Schema conversion
 
@@ -134,6 +134,29 @@ user = body_class.model_validate({"id": "u_1", "name": "Ada"})
 ```
 
 Path parameters are forced required when route models are built. Query and header required flags follow the document. Response and structurally identical route models are deduplicated to a canonical class.
+
+### Route-level type inference
+
+`Request` and `Response` are plain dictionaries at runtime, but they are annotated with generated `TypedDict` declarations (one per path, method, and leaf) and marked `Final`. This is the Python counterpart of the TypeScript generator's `as const` maps: a type checker such as `ty`, Pyrefly, mypy, or Pyright resolves every literal lookup to the exact model class and rejects keys that are absent from the OpenAPI document.
+
+```python
+from typing import assert_type
+
+from generated_types import CreateUserBody, Request, Response, User
+
+assert_type(Request["/users"]["POST"]["body"], type[CreateUserBody])
+assert_type(Response["/users/{id}"]["GET"]["200"], type[User])
+
+user = Response["/users/{id}"]["GET"]["200"].model_validate(raw)
+user.name  # inferred: str
+
+Request["/not-a-route"]                # error: unknown path
+Request["/users"]["GET"]               # error: method has no request entry
+Request["/users"]["POST"]["query"]     # error: route has no query parameters
+Response["/users/{id}"]["GET"]["999"]  # error: undocumented status code
+```
+
+The generated `TypedDict` names are private (`_PostUsersRequest`, `_UsersRequestMethods`, `_RequestMap`, and so on) and are an implementation detail; index `Request` and `Response` directly.
 
 ## `all_of`
 

@@ -15,6 +15,7 @@ from .rendering import (
 )
 from .routes import (
     RouteInfo,
+    build_route_path_name,
     build_route_schema_name,
     generate_route_schema_names,
     parse_openapi_paths,
@@ -101,7 +102,7 @@ def _build_module_preamble(custom_import_lines: list[str] | None) -> list[str]:
         "# Do not manually edit this file",
         "from __future__ import annotations",
         "",
-        "from typing import Any, Annotated, Literal, Optional, Union",
+        "from typing import Any, Annotated, Final, Literal, Optional, TypedDict, Union",
         "from datetime import date, datetime",
         "from uuid import UUID",
         "",
@@ -238,9 +239,7 @@ def _build_model_lines(
             else:
                 if not isinstance(prop_schema, dict) or prop_schema.get("nullable") is not True:
                     type_expr = f"Annotated[Optional[{type_expr}], _omit_not_null]"
-                default_expr = (
-                    f" = Field(default=None, alias={alias!r})" if alias else " = None"
-                )
+                default_expr = f" = Field(default=None, alias={alias!r})" if alias else " = None"
 
             field_lines.append(f"    {attr_name}: {type_expr}{default_expr}")
 
@@ -388,13 +387,16 @@ def _collect_route_schemas(routes: list[RouteInfo]) -> list[DedupNamedSchema]:
     return collected
 
 
+RouteMap = dict[str, dict[str, dict[str, str]]]
+"""path -> METHOD -> request part or status code -> model class name."""
+
+
 def _generate_request_response_objects(
     routes: list[RouteInfo],
     schema_name_to_canonical: dict[str, str],
 ) -> list[str]:
-    lines: list[str] = []
-    request_paths: dict[str, dict[str, list[tuple[str, str]]]] = {}
-    response_paths: dict[str, dict[str, dict[str, str]]] = {}
+    request_paths: RouteMap = {}
+    response_paths: RouteMap = {}
 
     def resolve_schema_name(name: str, schema: AnySchema) -> str:
         ref_target = _route_schema_ref_target(schema)
@@ -408,20 +410,19 @@ def _generate_request_response_objects(
         query_params = [p for p in route.parameters if p.location == "query"]
         header_params = [p for p in route.parameters if p.location == "header"]
 
-        request_paths.setdefault(route.path, {})
-        request_parts: list[tuple[str, str]] = []
+        request_parts: dict[str, str] = {}
 
         if names.params_schema_name and path_params:
             schema = _build_openapi_object_schema(
                 [{"name": p.name, "schema": p.schema, "required": True} for p in path_params]
             )
-            request_parts.append(("params", resolve_schema_name(names.params_schema_name, schema)))
+            request_parts["params"] = resolve_schema_name(names.params_schema_name, schema)
 
         if names.query_schema_name and query_params:
             schema = _build_openapi_object_schema(
                 [{"name": p.name, "schema": p.schema, "required": p.required} for p in query_params]
             )
-            request_parts.append(("query", resolve_schema_name(names.query_schema_name, schema)))
+            request_parts["query"] = resolve_schema_name(names.query_schema_name, schema)
 
         if names.headers_schema_name and header_params:
             schema = _build_openapi_object_schema(
@@ -430,23 +431,16 @@ def _generate_request_response_objects(
                     for p in header_params
                 ]
             )
-            request_parts.append(
-                (
-                    "headers",
-                    resolve_schema_name(names.headers_schema_name, schema),
-                )
-            )
+            request_parts["headers"] = resolve_schema_name(names.headers_schema_name, schema)
 
         if names.body_schema_name and route.request_body is not None:
-            request_parts.append(
-                ("body", resolve_schema_name(names.body_schema_name, route.request_body))
-            )
+            request_parts["body"] = resolve_schema_name(names.body_schema_name, route.request_body)
 
-        if request_parts:
-            request_paths[route.path][route.method] = request_parts
+        # Bare methods keep an empty entry so `Request[path][METHOD]` is a closed,
+        # statically known shape, matching the TypeScript `as const` maps.
+        request_paths.setdefault(route.path, {})[route.method] = request_parts
 
-        response_paths.setdefault(route.path, {})
-        response_paths[route.path].setdefault(route.method, {})
+        response_statuses: dict[str, str] = {}
         for status_code, response_schema in route.responses.items():
             if not response_schema:
                 continue
@@ -456,33 +450,74 @@ def _generate_request_response_objects(
                 route.method,
                 f"{status_code}{suffix}",
             )
-            response_paths[route.path][route.method][status_code] = resolve_schema_name(
-                schema_name,
-                response_schema,
+            response_statuses[status_code] = resolve_schema_name(schema_name, response_schema)
+        response_paths.setdefault(route.path, {})[route.method] = response_statuses
+
+    used_type_names: set[str] = set()
+    lines = _emit_route_map("Request", request_paths, used_type_names)
+    lines.append("")
+    lines.extend(_emit_route_map("Response", response_paths, used_type_names))
+    return lines
+
+
+def _emit_route_map(name: str, paths: RouteMap, used_type_names: set[str]) -> list[str]:
+    """Emit a closed ``TypedDict`` shape for a route map plus its runtime dictionary.
+
+    Every level of the map gets its own ``TypedDict`` so a type checker resolves
+    ``Map[path][METHOD][key]`` to the exact ``type[Model]`` and rejects keys that are
+    not in the OpenAPI document. The runtime value stays a plain nested ``dict``.
+    """
+    lines: list[str] = []
+    path_type_names: dict[str, str] = {}
+
+    for path, methods in paths.items():
+        method_type_names: dict[str, str] = {}
+        for method, leaves in methods.items():
+            leaf_type_name = _dedupe_name(
+                f"_{build_route_schema_name(path, method, name)}", used_type_names
+            )
+            method_type_names[method] = leaf_type_name
+            lines.extend(
+                _emit_typed_dict(
+                    leaf_type_name,
+                    {key: f"type[{model_name}]" for key, model_name in leaves.items()},
+                )
             )
 
-    lines.append("Request = {")
-    for path, methods in request_paths.items():
+        path_type_name = _dedupe_name(
+            f"_{build_route_path_name(path)}{name}Methods", used_type_names
+        )
+        path_type_names[path] = path_type_name
+        lines.extend(_emit_typed_dict(path_type_name, method_type_names))
+
+    map_type_name = _dedupe_name(f"_{name}Map", used_type_names)
+    lines.extend(_emit_typed_dict(map_type_name, path_type_names))
+    lines.append("")
+
+    lines.append(f"{name}: Final[{map_type_name}] = {{")
+    for path, methods in paths.items():
         lines.append(f"    {path!r}: {{")
-        for method, parts in methods.items():
+        for method, leaves in methods.items():
+            if not leaves:
+                lines.append(f"        {method!r}: {{}},")
+                continue
             lines.append(f"        {method!r}: {{")
-            for key, model_name in parts:
+            for key, model_name in leaves.items():
                 lines.append(f"            {key!r}: {model_name},")
             lines.append("        },")
         lines.append("    },")
     lines.append("}")
-    lines.append("")
-    lines.append("Response = {")
-    for path, methods in response_paths.items():
-        lines.append(f"    {path!r}: {{")
-        for method, status_codes in methods.items():
-            lines.append(f"        {method!r}: {{")
-            for status_code, model_name in status_codes.items():
-                lines.append(f"            {status_code!r}: {model_name},")
-            lines.append("        },")
-        lines.append("    },")
-    lines.append("}")
     return lines
+
+
+def _emit_typed_dict(type_name: str, fields: dict[str, str]) -> list[str]:
+    if not fields:
+        return [f"{type_name} = TypedDict({type_name!r}, {{}})"]
+    return [
+        f"{type_name} = TypedDict({type_name!r}, {{",
+        *(f"    {key!r}: {value}," for key, value in fields.items()),
+        "})",
+    ]
 
 
 def _build_openapi_object_schema(params: list[dict[str, Any]]) -> dict[str, Any]:

@@ -86,7 +86,17 @@ def test_route_generation_basic() -> None:
         GetUsersIdParams.model_rebuild()
 
 
-        Request = {
+        _GetUsersIdRequest = TypedDict('_GetUsersIdRequest', {
+            'params': type[GetUsersIdParams],
+        })
+        _UsersIdRequestMethods = TypedDict('_UsersIdRequestMethods', {
+            'GET': _GetUsersIdRequest,
+        })
+        _RequestMap = TypedDict('_RequestMap', {
+            '/users/{id}': _UsersIdRequestMethods,
+        })
+
+        Request: Final[_RequestMap] = {
             '/users/{id}': {
                 'GET': {
                     'params': GetUsersIdParams,
@@ -94,7 +104,17 @@ def test_route_generation_basic() -> None:
             },
         }
 
-        Response = {
+        _GetUsersIdResponse = TypedDict('_GetUsersIdResponse', {
+            '200': type[User],
+        })
+        _UsersIdResponseMethods = TypedDict('_UsersIdResponseMethods', {
+            'GET': _GetUsersIdResponse,
+        })
+        _ResponseMap = TypedDict('_ResponseMap', {
+            '/users/{id}': _UsersIdResponseMethods,
+        })
+
+        Response: Final[_ResponseMap] = {
             '/users/{id}': {
                 'GET': {
                     '200': User,
@@ -155,7 +175,17 @@ def test_route_with_query_params() -> None:
         GetUsers200Response.model_rebuild()
 
 
-        Request = {
+        _GetUsersRequest = TypedDict('_GetUsersRequest', {
+            'query': type[GetUsersQuery],
+        })
+        _UsersRequestMethods = TypedDict('_UsersRequestMethods', {
+            'GET': _GetUsersRequest,
+        })
+        _RequestMap = TypedDict('_RequestMap', {
+            '/users': _UsersRequestMethods,
+        })
+
+        Request: Final[_RequestMap] = {
             '/users': {
                 'GET': {
                     'query': GetUsersQuery,
@@ -163,7 +193,17 @@ def test_route_with_query_params() -> None:
             },
         }
 
-        Response = {
+        _GetUsersResponse = TypedDict('_GetUsersResponse', {
+            '200': type[GetUsers200Response],
+        })
+        _UsersResponseMethods = TypedDict('_UsersResponseMethods', {
+            'GET': _GetUsersResponse,
+        })
+        _ResponseMap = TypedDict('_ResponseMap', {
+            '/users': _UsersResponseMethods,
+        })
+
+        Response: Final[_ResponseMap] = {
             '/users': {
                 'GET': {
                     '200': GetUsers200Response,
@@ -305,7 +345,17 @@ def test_headers_with_alias() -> None:
         GetUsers200Response.model_rebuild()
 
 
-        Request = {
+        _GetUsersRequest = TypedDict('_GetUsersRequest', {
+            'headers': type[GetUsersHeaders],
+        })
+        _UsersRequestMethods = TypedDict('_UsersRequestMethods', {
+            'GET': _GetUsersRequest,
+        })
+        _RequestMap = TypedDict('_RequestMap', {
+            '/users': _UsersRequestMethods,
+        })
+
+        Request: Final[_RequestMap] = {
             '/users': {
                 'GET': {
                     'headers': GetUsersHeaders,
@@ -313,7 +363,17 @@ def test_headers_with_alias() -> None:
             },
         }
 
-        Response = {
+        _GetUsersResponse = TypedDict('_GetUsersResponse', {
+            '200': type[GetUsers200Response],
+        })
+        _UsersResponseMethods = TypedDict('_UsersResponseMethods', {
+            'GET': _GetUsersResponse,
+        })
+        _ResponseMap = TypedDict('_ResponseMap', {
+            '/users': _UsersResponseMethods,
+        })
+
+        Response: Final[_ResponseMap] = {
             '/users': {
                 'GET': {
                     '200': GetUsers200Response,
@@ -384,7 +444,21 @@ def test_multiple_methods_same_path() -> None:
         GetUsersIdParams.model_rebuild()
 
 
-        Request = {
+        _GetUsersIdRequest = TypedDict('_GetUsersIdRequest', {
+            'params': type[GetUsersIdParams],
+        })
+        _DeleteUsersIdRequest = TypedDict('_DeleteUsersIdRequest', {
+            'params': type[GetUsersIdParams],
+        })
+        _UsersIdRequestMethods = TypedDict('_UsersIdRequestMethods', {
+            'GET': _GetUsersIdRequest,
+            'DELETE': _DeleteUsersIdRequest,
+        })
+        _RequestMap = TypedDict('_RequestMap', {
+            '/users/{id}': _UsersIdRequestMethods,
+        })
+
+        Request: Final[_RequestMap] = {
             '/users/{id}': {
                 'GET': {
                     'params': GetUsersIdParams,
@@ -395,7 +469,21 @@ def test_multiple_methods_same_path() -> None:
             },
         }
 
-        Response = {
+        _GetUsersIdResponse = TypedDict('_GetUsersIdResponse', {
+            '200': type[GetUsersId200Response],
+        })
+        _DeleteUsersIdResponse = TypedDict('_DeleteUsersIdResponse', {
+            '204': type[GetUsersId200Response],
+        })
+        _UsersIdResponseMethods = TypedDict('_UsersIdResponseMethods', {
+            'GET': _GetUsersIdResponse,
+            'DELETE': _DeleteUsersIdResponse,
+        })
+        _ResponseMap = TypedDict('_ResponseMap', {
+            '/users/{id}': _UsersIdResponseMethods,
+        })
+
+        Response: Final[_ResponseMap] = {
             '/users/{id}': {
                 'GET': {
                     '200': GetUsersId200Response,
@@ -510,12 +598,40 @@ def test_deduplicated_error_schemas() -> None:
         UnauthorizedError.model_rebuild()
 
 
-        Request = {
+        _GetUsersRequest = TypedDict('_GetUsersRequest', {})
+        _PostUsersRequest = TypedDict('_PostUsersRequest', {})
+        _UsersRequestMethods = TypedDict('_UsersRequestMethods', {
+            'GET': _GetUsersRequest,
+            'POST': _PostUsersRequest,
+        })
+        _RequestMap = TypedDict('_RequestMap', {
+            '/users': _UsersRequestMethods,
+        })
+
+        Request: Final[_RequestMap] = {
             '/users': {
+                'GET': {},
+                'POST': {},
             },
         }
 
-        Response = {
+        _GetUsersResponse = TypedDict('_GetUsersResponse', {
+            '200': type[GetUsers200Response],
+            '401': type[UnauthorizedError],
+        })
+        _PostUsersResponse = TypedDict('_PostUsersResponse', {
+            '200': type[GetUsers200Response],
+            '401': type[UnauthorizedError],
+        })
+        _UsersResponseMethods = TypedDict('_UsersResponseMethods', {
+            'GET': _GetUsersResponse,
+            'POST': _PostUsersResponse,
+        })
+        _ResponseMap = TypedDict('_ResponseMap', {
+            '/users': _UsersResponseMethods,
+        })
+
+        Response: Final[_ResponseMap] = {
             '/users': {
                 'GET': {
                     '200': GetUsers200Response,
