@@ -537,34 +537,17 @@ def _emit_typed_client(request_paths: RouteMap, response_paths: RouteMap) -> lis
             routes_by_method.setdefault(method, []).append((path, parts, result_name))
 
     lines.append("")
-    lines.append("# Asyncio client with one typed method per HTTP verb in the OpenAPI document.")
+    lines.append("# Typed route methods; construct HttpxApiClient(url, request_map=Request,")
+    lines.append("# response_map=Response) or ApiClient(url, transport=..., request_map=..., ...).")
     lines.append("class ApiClient(_client.BaseApiClient):")
-    lines.append("    def __init__(")
-    lines.append("        self,")
-    lines.append("        base_url: str,")
-    lines.append("        *,")
-    lines.append("        transport: _client.Transport,")
-    lines.append("        headers: Mapping[str, Any] | None = None,")
-    lines.append("        on_validation_error: _client.ValidationErrorHandler | None = None,")
-    lines.append("        backoff: _client.Backoff = _client.exponential_backoff,")
-    lines.append("    ) -> None:")
-    lines.append("        super().__init__(")
-    lines.append("            base_url,")
-    lines.append("            transport=transport,")
-    lines.append("            request_map=Request,")
-    lines.append("            response_map=Response,")
-    lines.append("            headers=headers,")
-    lines.append("            on_validation_error=on_validation_error,")
-    lines.append("            backoff=backoff,")
-    lines.append("        )")
+    for index, method in enumerate(m for m in _CLIENT_METHOD_ORDER if m in routes_by_method):
+        if index:
+            lines.append("")
+        lines.extend(_emit_client_method(method, routes_by_method[method]))
 
-    for method in _CLIENT_METHOD_ORDER:
-        routes = routes_by_method.get(method)
-        if not routes:
-            continue
-        lines.append("")
-        lines.extend(_emit_client_method(method, routes))
-
+    lines.append("")
+    lines.append("class HttpxApiClient(ApiClient, _client.HttpxApiClient):")
+    lines.append("    pass")
     return lines
 
 

@@ -24,6 +24,7 @@ from python_pydantic_openapi.client import (
     BaseApiClient,
     HttpRequest,
     HttpResponse,
+    HttpxApiClient,
     HttpxTransport,
     RequestOptions,
     RetryContext,
@@ -161,6 +162,8 @@ def _client(sdk: types.ModuleType, transport: FakeTransport, **kwargs: Any) -> A
     return sdk.ApiClient(
         "https://api.example.test/",
         transport=transport,
+        request_map=sdk.Request,
+        response_map=sdk.Response,
         backoff=lambda attempt: 0.0,
         **kwargs,
     )
@@ -554,8 +557,12 @@ def test_generated_client_end_to_end_over_httpx(sdk: types.ModuleType) -> None:
         return httpx.Response(201, json={"id": ITEM_ID, "name": "widget"})
 
     async def scenario() -> Any:
-        async with _httpx_transport(handler) as transport:
-            client = sdk.ApiClient("https://api.example.test", transport=transport)
+        async with sdk.HttpxApiClient(
+            "https://api.example.test",
+            request_map=sdk.Request,
+            response_map=sdk.Response,
+            httpx_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+        ) as client:
             return await client.post(ITEMS_PATH, body=sdk.CreateItem(name="widget"))
 
     result = run(scenario())
@@ -563,3 +570,26 @@ def test_generated_client_end_to_end_over_httpx(sdk: types.ModuleType) -> None:
     assert isinstance(result, ApiSuccess)
     assert result.code == "201"
     assert result.body == sdk.Item(id=ITEM_ID, name="widget")
+
+
+def test_runtime_httpx_client_works_without_generated_class(sdk: types.ModuleType) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"message": "missing"})
+
+    async def scenario() -> Any:
+        client = HttpxApiClient(
+            "https://api.example.test",
+            request_map=sdk.Request,
+            response_map=sdk.Response,
+            httpx_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+        )
+        try:
+            return await client.request("GET", ITEM_PATH, params={"itemId": ITEM_ID})
+        finally:
+            await client.aclose()
+
+    result = run(scenario())
+
+    assert isinstance(result, ApiFailure)
+    assert result.code == "404"
+    assert result.error == sdk.ApiError(message="missing")

@@ -160,7 +160,7 @@ The generated `TypedDict` names are private (`_PostUsersRequest`, `_UsersRequest
 
 ## Generated `ApiClient`
 
-When routes are enabled, the module also emits an asyncio `ApiClient` that subclasses `python_pydantic_openapi.client.BaseApiClient`, plus one `{Method}{Path}Result` union per route. Python cannot derive a call signature from the `TypedDict` maps the way TypeScript maps over `typeof Request`, so each route gets an explicit `Literal` path overload carrying its exact request models and result type. A verb with a single route is emitted as a plain typed method.
+When routes are enabled, the module also emits two asyncio client classes and one `{Method}{Path}Result` union per route. `HttpxApiClient(base_url, request_map=Request, response_map=Response)` is the primary client and owns its `httpx` transport; `ApiClient(base_url, transport=..., request_map=Request, response_map=Response)` accepts any `Transport` implementation. Both carry the same typed route methods. Python cannot derive a call signature from the `TypedDict` maps the way TypeScript maps over `typeof Request`, so each route gets an explicit `Literal` path overload carrying its exact request models and result type. A verb with a single route is emitted as a plain typed method.
 
 ```python
 GetUsersIdResult = Union[
@@ -178,6 +178,9 @@ class ApiClient(_client.BaseApiClient):
         query: GetUsersIdQuery | None = None,
         options: _client.RequestOptions | None = None,
     ) -> GetUsersIdResult: ...
+
+class HttpxApiClient(ApiClient, _client.HttpxApiClient):
+    pass
 ```
 
 Route inputs are keyword arguments typed with the generated models: `params` is required when the path has parameters, `body` is required when the operation has a JSON request body, and `query` is optional. Transport concerns (`headers`, `timeout`, `retries`, `should_retry`) travel in `RequestOptions`.
@@ -185,14 +188,15 @@ Route inputs are keyword arguments typed with the generated models: `params` is 
 ```python
 import asyncio
 
-from python_pydantic_openapi.client import ApiFailure, ApiSuccess, HttpxTransport, RequestOptions
+from python_pydantic_openapi.client import ApiFailure, ApiSuccess, RequestOptions
 
-from generated_types import ApiClient, GetUsersIdParams
+from generated_types import GetUsersIdParams, HttpxApiClient, Request, Response
 
 
 async def main() -> None:
-    async with HttpxTransport() as transport:
-        client = ApiClient("https://api.example.com", transport=transport)
+    async with HttpxApiClient(
+        "https://api.example.com", request_map=Request, response_map=Response
+    ) as client:
         result = await client.get(
             "/users/{id}",
             params=GetUsersIdParams(id="u_1"),
@@ -217,6 +221,8 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
+Passing the maps mirrors `createApiClient({ baseUrl, Request, Response })` in TypeScript. Importing `HttpxApiClient` from the generated module gives the typed route methods; importing it from `python_pydantic_openapi.client` accepts the same arguments and gives runtime validation with the untyped `request()` API. Use `ApiClient(base_url, transport=..., request_map=..., response_map=...)` to plug in a different asyncio HTTP library.
+
 Narrow results with `isinstance` or `match`; the `success` attribute is present for parity with the TypeScript client but not every checker narrows on it. Only documented statuses appear in the union; a route without a documented 2xx body (for example `204`) includes `ApiSuccess[str, Any]` so its success is representable.
 
 ## `python_pydantic_openapi.client`
@@ -227,6 +233,7 @@ The runtime half of the client lives in the installed package, not in generated 
 | --- | --- |
 | `BaseApiClient` | Validates and encodes inputs with the `Request` map, sends through a `Transport`, validates responses with the `Response` map. `request(method, path, *, params, query, body, options)` returns an untyped `ApiResult`. |
 | `Transport` | Protocol with `async def send(request: HttpRequest) -> HttpResponse`. Implement it to use any asyncio HTTP library. |
+| `HttpxApiClient` | `BaseApiClient` that owns an `HttpxTransport`; constructed with `base_url`, `request_map`, `response_map`, optional `headers`, `on_validation_error`, `backoff`, and `httpx_client`. Supports `async with` and `aclose()`. Requires the `httpx` extra. |
 | `HttpxTransport` | `Transport` over `httpx.AsyncClient`; requires the `httpx` extra. Parses JSON by content type, returns `None` for `content-length: 0`, maps `httpx.TimeoutException` to `ApiTimeoutError` and other `httpx.HTTPError`s to `UnexpectedApiClientError`. Supports `async with`. |
 | `HttpRequest` / `HttpResponse` | Wire-level dataclasses exchanged with a transport. `HttpRequest.timeout` is in seconds. |
 | `ApiSuccess` / `ApiFailure` / `ApiUnexpectedError` | Result dataclasses with `code`, `body` or `error`, `raw`, `headers`, and `success`. |

@@ -707,6 +707,45 @@ class HttpxTransport:
         await self.aclose()
 
 
+class HttpxApiClient(BaseApiClient):
+    """``BaseApiClient`` over ``httpx``; the primary client when the ``httpx`` extra is installed.
+
+    Owns an ``HttpxTransport``. Pass ``httpx_client`` to share connection pools or configure
+    ``httpx.AsyncClient`` defaults; otherwise one is created and closed by ``aclose``.
+    """
+
+    def __init__(
+        self,
+        base_url: str,
+        *,
+        request_map: RouteMap,
+        response_map: RouteMap,
+        headers: Mapping[str, Any] | None = None,
+        on_validation_error: ValidationErrorHandler | None = None,
+        backoff: Backoff = exponential_backoff,
+        httpx_client: Any = None,
+    ) -> None:
+        self._httpx_transport = HttpxTransport(httpx_client)
+        super().__init__(
+            base_url,
+            transport=self._httpx_transport,
+            request_map=request_map,
+            response_map=response_map,
+            headers=headers,
+            on_validation_error=on_validation_error,
+            backoff=backoff,
+        )
+
+    async def aclose(self) -> None:
+        await self._httpx_transport.aclose()
+
+    async def __aenter__(self) -> HttpxApiClient:
+        return self
+
+    async def __aexit__(self, *exc_info: object) -> None:
+        await self.aclose()
+
+
 def _parse_response_data(response: Any) -> Any:
     if response.headers.get("content-length", "").strip() == "0":
         return None
@@ -732,6 +771,7 @@ __all__ = [
     "HttpMethod",
     "HttpRequest",
     "HttpResponse",
+    "HttpxApiClient",
     "HttpxTransport",
     "RequestOptions",
     "RetryContext",

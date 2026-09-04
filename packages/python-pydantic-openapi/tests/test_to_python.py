@@ -128,27 +128,9 @@ def test_route_generation_basic() -> None:
             _client.ApiUnexpectedError,
         ]
 
-        # Asyncio client with one typed method per HTTP verb in the OpenAPI document.
+        # Typed route methods; construct HttpxApiClient(url, request_map=Request,
+        # response_map=Response) or ApiClient(url, transport=..., request_map=..., ...).
         class ApiClient(_client.BaseApiClient):
-            def __init__(
-                self,
-                base_url: str,
-                *,
-                transport: _client.Transport,
-                headers: Mapping[str, Any] | None = None,
-                on_validation_error: _client.ValidationErrorHandler | None = None,
-                backoff: _client.Backoff = _client.exponential_backoff,
-            ) -> None:
-                super().__init__(
-                    base_url,
-                    transport=transport,
-                    request_map=Request,
-                    response_map=Response,
-                    headers=headers,
-                    on_validation_error=on_validation_error,
-                    backoff=backoff,
-                )
-
             async def get(
                 self,
                 path: Literal['/users/{id}'],
@@ -160,6 +142,9 @@ def test_route_generation_basic() -> None:
                     GetUsersIdResult,
                     await self.request('GET', path, params=params, options=options),
                 )
+
+        class HttpxApiClient(ApiClient, _client.HttpxApiClient):
+            pass
         """,
         options={"include_routes": True},
     )
@@ -256,27 +241,9 @@ def test_route_with_query_params() -> None:
             _client.ApiUnexpectedError,
         ]
 
-        # Asyncio client with one typed method per HTTP verb in the OpenAPI document.
+        # Typed route methods; construct HttpxApiClient(url, request_map=Request,
+        # response_map=Response) or ApiClient(url, transport=..., request_map=..., ...).
         class ApiClient(_client.BaseApiClient):
-            def __init__(
-                self,
-                base_url: str,
-                *,
-                transport: _client.Transport,
-                headers: Mapping[str, Any] | None = None,
-                on_validation_error: _client.ValidationErrorHandler | None = None,
-                backoff: _client.Backoff = _client.exponential_backoff,
-            ) -> None:
-                super().__init__(
-                    base_url,
-                    transport=transport,
-                    request_map=Request,
-                    response_map=Response,
-                    headers=headers,
-                    on_validation_error=on_validation_error,
-                    backoff=backoff,
-                )
-
             async def get(
                 self,
                 path: Literal['/users'],
@@ -288,6 +255,9 @@ def test_route_with_query_params() -> None:
                     GetUsersResult,
                     await self.request('GET', path, query=query, options=options),
                 )
+
+        class HttpxApiClient(ApiClient, _client.HttpxApiClient):
+            pass
         """,
         options={"include_routes": True},
     )
@@ -463,27 +433,9 @@ def test_headers_with_alias() -> None:
             _client.ApiUnexpectedError,
         ]
 
-        # Asyncio client with one typed method per HTTP verb in the OpenAPI document.
+        # Typed route methods; construct HttpxApiClient(url, request_map=Request,
+        # response_map=Response) or ApiClient(url, transport=..., request_map=..., ...).
         class ApiClient(_client.BaseApiClient):
-            def __init__(
-                self,
-                base_url: str,
-                *,
-                transport: _client.Transport,
-                headers: Mapping[str, Any] | None = None,
-                on_validation_error: _client.ValidationErrorHandler | None = None,
-                backoff: _client.Backoff = _client.exponential_backoff,
-            ) -> None:
-                super().__init__(
-                    base_url,
-                    transport=transport,
-                    request_map=Request,
-                    response_map=Response,
-                    headers=headers,
-                    on_validation_error=on_validation_error,
-                    backoff=backoff,
-                )
-
             async def get(
                 self,
                 path: Literal['/users'],
@@ -494,6 +446,9 @@ def test_headers_with_alias() -> None:
                     GetUsersResult,
                     await self.request('GET', path, options=options),
                 )
+
+        class HttpxApiClient(ApiClient, _client.HttpxApiClient):
+            pass
         """,
         options={"include_routes": True},
     )
@@ -618,27 +573,9 @@ def test_multiple_methods_same_path() -> None:
             _client.ApiUnexpectedError,
         ]
 
-        # Asyncio client with one typed method per HTTP verb in the OpenAPI document.
+        # Typed route methods; construct HttpxApiClient(url, request_map=Request,
+        # response_map=Response) or ApiClient(url, transport=..., request_map=..., ...).
         class ApiClient(_client.BaseApiClient):
-            def __init__(
-                self,
-                base_url: str,
-                *,
-                transport: _client.Transport,
-                headers: Mapping[str, Any] | None = None,
-                on_validation_error: _client.ValidationErrorHandler | None = None,
-                backoff: _client.Backoff = _client.exponential_backoff,
-            ) -> None:
-                super().__init__(
-                    base_url,
-                    transport=transport,
-                    request_map=Request,
-                    response_map=Response,
-                    headers=headers,
-                    on_validation_error=on_validation_error,
-                    backoff=backoff,
-                )
-
             async def get(
                 self,
                 path: Literal['/users/{id}'],
@@ -662,6 +599,9 @@ def test_multiple_methods_same_path() -> None:
                     DeleteUsersIdResult,
                     await self.request('DELETE', path, params=params, options=options),
                 )
+
+        class HttpxApiClient(ApiClient, _client.HttpxApiClient):
+            pass
         """,
         options={"include_routes": True},
     )
@@ -825,27 +765,9 @@ def test_deduplicated_error_schemas() -> None:
             _client.ApiUnexpectedError,
         ]
 
-        # Asyncio client with one typed method per HTTP verb in the OpenAPI document.
+        # Typed route methods; construct HttpxApiClient(url, request_map=Request,
+        # response_map=Response) or ApiClient(url, transport=..., request_map=..., ...).
         class ApiClient(_client.BaseApiClient):
-            def __init__(
-                self,
-                base_url: str,
-                *,
-                transport: _client.Transport,
-                headers: Mapping[str, Any] | None = None,
-                on_validation_error: _client.ValidationErrorHandler | None = None,
-                backoff: _client.Backoff = _client.exponential_backoff,
-            ) -> None:
-                super().__init__(
-                    base_url,
-                    transport=transport,
-                    request_map=Request,
-                    response_map=Response,
-                    headers=headers,
-                    on_validation_error=on_validation_error,
-                    backoff=backoff,
-                )
-
             async def get(
                 self,
                 path: Literal['/users'],
@@ -867,6 +789,9 @@ def test_deduplicated_error_schemas() -> None:
                     PostUsersResult,
                     await self.request('POST', path, options=options),
                 )
+
+        class HttpxApiClient(ApiClient, _client.HttpxApiClient):
+            pass
         """,
         options={"include_routes": True},
     )

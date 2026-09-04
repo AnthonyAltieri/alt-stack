@@ -109,19 +109,20 @@ user_class = Response["/users/{id}"]["GET"]["200"]  # type[User]
 Response["/users/{id}"]["GET"]["999"]  # type checker error: unknown status
 ```
 
-The module also emits an asyncio `ApiClient` with one typed method per route. Install the `httpx` extra (`python-pydantic-openapi[httpx]`) for the bundled transport, or implement the `Transport` protocol over another library:
+The module also emits an asyncio `HttpxApiClient` with one typed method per route. Install the `httpx` extra (`python-pydantic-openapi[httpx]`), or use `ApiClient(base_url, transport=..., request_map=..., response_map=...)` with your own `Transport` implementation:
 
 ```python
 import asyncio
 
-from python_pydantic_openapi.client import ApiSuccess, HttpxTransport
+from python_pydantic_openapi.client import ApiSuccess
 
-from generated_types import ApiClient, GetUsersIdParams
+from generated_types import GetUsersIdParams, HttpxApiClient, Request, Response
 
 
 async def main() -> None:
-    async with HttpxTransport() as transport:
-        client = ApiClient("https://api.example.com", transport=transport)
+    async with HttpxApiClient(
+        "https://api.example.com", request_map=Request, response_map=Response
+    ) as client:
         result = await client.get("/users/{id}", params=GetUsersIdParams(id="u_1"))
     if isinstance(result, ApiSuccess):
         print(result.body.name)  # result.body is User
