@@ -1,11 +1,11 @@
-# `alt-stack-pydantic-openapi`
+# `alt-stack-openapi-pydantic`
 
 Generate Python 3.11+ Pydantic 2 models, statically typed `Request`/`Response` route maps, and an asyncio `HttpxApiClient` from OpenAPI JSON. This is the Python counterpart of `@alt-stack/zod-openapi`; the generated client runs on `alt-stack-http-client-httpx`.
 
 ## Install
 
 ```bash
-python -m pip install alt-stack-pydantic-openapi
+python -m pip install alt-stack-openapi-pydantic
 ```
 
 Consumers of a generated SDK install the runtime package instead:
@@ -17,7 +17,7 @@ python -m pip install alt-stack-http-client-httpx
 ## Generate
 
 ```bash
-alt-stack-pydantic-openapi ./openapi.json --output ./generated_types.py
+alt-stack-openapi-pydantic ./openapi.json --output ./generated_types.py
 ```
 
 `input` may be a local JSON path or HTTP(S) URL. Use `--registry` to execute custom type mappings and `--include` to insert imports/definitions into output.

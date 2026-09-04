@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from alt_stack_pydantic_openapi.types.object import convert_openapi_object_to_pydantic
+from alt_stack_openapi_pydantic.types.object import convert_openapi_object_to_pydantic
 
 
 def test_object_default() -> None:

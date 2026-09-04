@@ -333,8 +333,8 @@
       ]
     },
     {
-      "name": "alt-stack-pydantic-openapi",
-      "source": "packages/python-pydantic-openapi/src/alt_stack_pydantic_openapi/__init__.py",
+      "name": "alt-stack-openapi-pydantic",
+      "source": "packages/python-pydantic-openapi/src/alt_stack_openapi_pydantic/__init__.py",
       "readme": "packages/python-pydantic-openapi/README.md",
       "docs": [
         "codegen/api/pydantic-openapi.md"

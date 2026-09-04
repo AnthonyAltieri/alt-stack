@@ -7,7 +7,7 @@ Choose the target you need:
 | Input | Output | Generator |
 | --- | --- | --- |
 | OpenAPI | TypeScript interfaces, Zod schemas, `Request`/`Response` maps | `@alt-stack/zod-openapi` |
-| OpenAPI | Python Pydantic models, `Request`/`Response` maps, and an asyncio client | `alt-stack-pydantic-openapi` (runtime: `alt-stack-http-client-httpx`) |
+| OpenAPI | Python Pydantic models, `Request`/`Response` maps, and an asyncio client | `alt-stack-openapi-pydantic` (runtime: `alt-stack-http-client-httpx`) |
 | OpenAPI | Rust Serde models and route modules | `rust-openapi` |
 | OpenAPI | complete Rust crate scaffold | `rust-openapi-crate-gen` |
 | AsyncAPI | TypeScript Zod schemas and a `Topics` map | `@alt-stack/zod-asyncapi` |
@@ -86,8 +86,8 @@ The final request assumes the example API is running on port 3000. See the [HTTP
 Python generation requires Python 3.11 or newer and Pydantic 2.7 or newer.
 
 ```bash
-python -m pip install alt-stack-pydantic-openapi
-alt-stack-pydantic-openapi openapi.json --output generated_types.py
+python -m pip install alt-stack-openapi-pydantic
+alt-stack-openapi-pydantic openapi.json --output generated_types.py
 ```
 
 Validate with the generated model:

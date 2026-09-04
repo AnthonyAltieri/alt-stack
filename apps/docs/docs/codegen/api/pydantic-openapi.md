@@ -1,17 +1,17 @@
 # Python/Pydantic OpenAPI API Documentation
 
-`alt-stack-pydantic-openapi` converts OpenAPI JSON into Python 3.11+ source using Pydantic 2.7+.
+`alt-stack-openapi-pydantic` converts OpenAPI JSON into Python 3.11+ source using Pydantic 2.7+.
 
 ```bash
-python -m pip install alt-stack-pydantic-openapi
+python -m pip install alt-stack-openapi-pydantic
 ```
 
-The installed distribution includes a `py.typed` marker and imports as `alt_stack_pydantic_openapi`. Generated modules do not depend on the generator at runtime: they import `alt_stack_http_client_httpx` from `alt-stack-http-client-httpx` for the client and inline the `all_of` validator when an input uses a non-object `allOf`.
+The installed distribution includes a `py.typed` marker and imports as `alt_stack_openapi_pydantic`. Generated modules do not depend on the generator at runtime: they import `alt_stack_http_client_httpx` from `alt-stack-http-client-httpx` for the client and inline the `all_of` validator when an input uses a non-object `allOf`.
 
-## CLI: `alt-stack-pydantic-openapi`
+## CLI: `alt-stack-openapi-pydantic`
 
 ```text
-alt-stack-pydantic-openapi <input> [options]
+alt-stack-openapi-pydantic <input> [options]
 ```
 
 | Argument/flag | Meaning |
@@ -257,4 +257,4 @@ Generated non-object intersections use an `all_of` helper that the generator inl
 
 ## Root export checklist
 
-`alt_stack_pydantic_openapi.__all__` contains exactly `SUPPORTED_STRING_FORMATS`, `clear_pydantic_schema_registry`, `get_schema_exported_variable_name_for_primitive_type`, `get_schema_exported_variable_name_for_string_format`, `openapi_to_pydantic_code`, `register_pydantic_type_to_openapi_schema`, and `schema_registry`.
+`alt_stack_openapi_pydantic.__all__` contains exactly `SUPPORTED_STRING_FORMATS`, `clear_pydantic_schema_registry`, `get_schema_exported_variable_name_for_primitive_type`, `get_schema_exported_variable_name_for_string_format`, `openapi_to_pydantic_code`, `register_pydantic_type_to_openapi_schema`, and `schema_registry`.

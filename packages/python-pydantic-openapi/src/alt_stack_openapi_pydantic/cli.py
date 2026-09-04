@@ -19,7 +19,7 @@ def _load_schema(source: str) -> dict[str, object]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        prog="alt-stack-pydantic-openapi",
+        prog="alt-stack-openapi-pydantic",
         description="Generate Pydantic models from an OpenAPI schema",
     )
     parser.add_argument("input", help="OpenAPI schema file path or URL")

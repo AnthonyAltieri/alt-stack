@@ -24,7 +24,7 @@ jobs:
       fail-fast: false
       matrix:
         package:
-          - name: alt-stack-pydantic-openapi
+          - name: alt-stack-openapi-pydantic
             dir: packages/python-pydantic-openapi
           - name: alt-stack-http-client-httpx
             dir: packages/python-http-client-httpx

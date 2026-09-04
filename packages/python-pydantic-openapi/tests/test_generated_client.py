@@ -22,8 +22,8 @@ from alt_stack_http_client_httpx import (
     HttpxApiClient,
 )
 
-from alt_stack_pydantic_openapi.registry import clear_pydantic_schema_registry
-from alt_stack_pydantic_openapi.to_python import openapi_to_pydantic_code
+from alt_stack_openapi_pydantic.registry import clear_pydantic_schema_registry
+from alt_stack_openapi_pydantic.to_python import openapi_to_pydantic_code
 
 T = TypeVar("T")
 

@@ -25,8 +25,8 @@ from typing import Any, Callable
 
 import pytest
 
-from alt_stack_pydantic_openapi.registry import clear_pydantic_schema_registry
-from alt_stack_pydantic_openapi.to_python import openapi_to_pydantic_code
+from alt_stack_openapi_pydantic.registry import clear_pydantic_schema_registry
+from alt_stack_openapi_pydantic.to_python import openapi_to_pydantic_code
 
 EXPECT_ERROR = "# expect-error"
 

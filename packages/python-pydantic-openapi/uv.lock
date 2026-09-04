@@ -23,7 +23,7 @@ requires-dist = [
 provides-extras = ["dev"]
 
 [[package]]
-name = "alt-stack-pydantic-openapi"
+name = "alt-stack-openapi-pydantic"
 version = "1.6.2"
 source = { editable = "." }
 dependencies = [

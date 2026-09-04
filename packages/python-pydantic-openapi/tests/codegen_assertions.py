@@ -3,7 +3,7 @@ from __future__ import annotations
 from textwrap import dedent
 from typing import Any
 
-from alt_stack_pydantic_openapi.to_python import openapi_to_pydantic_code
+from alt_stack_openapi_pydantic.to_python import openapi_to_pydantic_code
 
 PREAMBLE = dedent(
     """\
