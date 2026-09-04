@@ -20,7 +20,9 @@ Repository = "https://github.com/anthonyaltieri/alt-stack"
 Issues = "https://github.com/anthonyaltieri/alt-stack/issues"
 
 [project.optional-dependencies]
+httpx = ["httpx>=0.27.0"]
 dev = [
+  "httpx>=0.27.0",
   "pyrefly>=1.0.0",
   "pytest>=8.0.0",
   "ruff>=0.6.0",

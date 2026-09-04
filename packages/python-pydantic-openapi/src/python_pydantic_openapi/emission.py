@@ -103,12 +103,15 @@ def _build_module_preamble(custom_import_lines: list[str] | None) -> list[str]:
         "from __future__ import annotations",
         "",
         "from typing import Any, Annotated, Final, Literal, Optional, TypedDict, Union",
+        "from typing import cast, overload",
+        "from collections.abc import Mapping",
         "from datetime import date, datetime",
         "from uuid import UUID",
         "",
         "from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, RootModel",
         "from pydantic import AnyUrl, EmailStr",
         "from python_pydantic_openapi.all_of import all_of",
+        "import python_pydantic_openapi.client as _client",
         "",
         "def _reject_explicit_none(value: Any) -> Any:",
         "    if value is None:",
@@ -457,6 +460,8 @@ def _generate_request_response_objects(
     lines = _emit_route_map("Request", request_paths, used_type_names)
     lines.append("")
     lines.extend(_emit_route_map("Response", response_paths, used_type_names))
+    lines.append("")
+    lines.extend(_emit_typed_client(request_paths, response_paths))
     return lines
 
 
@@ -507,6 +512,115 @@ def _emit_route_map(name: str, paths: RouteMap, used_type_names: set[str]) -> li
             lines.append("        },")
         lines.append("    },")
     lines.append("}")
+    return lines
+
+
+_CLIENT_METHOD_ORDER = ("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS")
+
+
+def _emit_typed_client(request_paths: RouteMap, response_paths: RouteMap) -> list[str]:
+    """Emit ``{Method}{Path}Result`` unions and an ``ApiClient`` with typed route methods.
+
+    Python cannot derive a call signature from the ``TypedDict`` maps the way TypeScript
+    maps over ``typeof Request``, so each route gets an explicit ``Literal`` path overload
+    carrying its exact request models and result union. Methods with a single route are
+    emitted as a plain typed signature because a lone ``@overload`` is invalid.
+    """
+    lines: list[str] = ["# Typed Client"]
+    routes_by_method: dict[str, list[tuple[str, dict[str, str], str]]] = {}
+
+    for path, methods in request_paths.items():
+        for method, parts in methods.items():
+            result_name = build_route_schema_name(path, method, "Result")
+            statuses = response_paths.get(path, {}).get(method, {})
+            lines.extend(_emit_result_alias(result_name, statuses))
+            routes_by_method.setdefault(method, []).append((path, parts, result_name))
+
+    lines.append("")
+    lines.append("# Typed route methods; construct HttpxApiClient(url, request_map=Request,")
+    lines.append("# response_map=Response) or ApiClient(url, transport=..., request_map=..., ...).")
+    lines.append("class ApiClient(_client.BaseApiClient):")
+    for index, method in enumerate(m for m in _CLIENT_METHOD_ORDER if m in routes_by_method):
+        if index:
+            lines.append("")
+        lines.extend(_emit_client_method(method, routes_by_method[method]))
+
+    lines.append("")
+    lines.append("class HttpxApiClient(ApiClient, _client.HttpxApiClient):")
+    lines.append("    pass")
+    return lines
+
+
+def _emit_result_alias(result_name: str, statuses: dict[str, str]) -> list[str]:
+    members: list[str] = []
+    for status_code, model_name in statuses.items():
+        result_class = "ApiSuccess" if status_code.startswith("2") else "ApiFailure"
+        members.append(f"_client.{result_class}[Literal[{status_code!r}], {model_name}]")
+    if not any(status_code.startswith("2") for status_code in statuses):
+        # No documented 2xx body (for example 204): success carries the raw payload.
+        members.append("_client.ApiSuccess[str, Any]")
+    members.append("_client.ApiUnexpectedError")
+    return [f"{result_name} = Union[", *(f"    {member}," for member in members), "]"]
+
+
+def _emit_client_method(method: str, routes: list[tuple[str, dict[str, str], str]]) -> list[str]:
+    method_name = method.lower()
+    lines: list[str] = []
+
+    if len(routes) == 1:
+        path, parts, result_name = routes[0]
+        lines.extend(_emit_route_signature(method_name, path, parts, result_name, overload=False))
+        forwarded = ", ".join(f"{key}={key}" for key in parts if key != "headers")
+        call_args = ", ".join(filter(None, [f"{method!r}", "path", forwarded, "options=options"]))
+        lines.append("        return cast(")
+        lines.append(f"            {result_name},")
+        lines.append(f"            await self.request({call_args}),")
+        lines.append("        )")
+        return lines
+
+    for path, parts, result_name in routes:
+        lines.extend(_emit_route_signature(method_name, path, parts, result_name, overload=True))
+        lines.append("")
+    lines.append(f"    async def {method_name}(")
+    lines.append("        self,")
+    lines.append("        path: str,")
+    lines.append("        *,")
+    lines.append("        params: Any = None,")
+    lines.append("        query: Any = None,")
+    lines.append("        body: Any = None,")
+    lines.append("        options: _client.RequestOptions | None = None,")
+    lines.append("    ) -> Any:")
+    lines.append("        return await self.request(")
+    lines.append(
+        f"            {method!r}, path, params=params, query=query, body=body, options=options"
+    )
+    lines.append("        )")
+    return lines
+
+
+def _emit_route_signature(
+    method_name: str,
+    path: str,
+    parts: dict[str, str],
+    result_name: str,
+    *,
+    overload: bool,
+) -> list[str]:
+    lines: list[str] = []
+    if overload:
+        lines.append("    @overload")
+    lines.append(f"    async def {method_name}(")
+    lines.append("        self,")
+    lines.append(f"        path: Literal[{path!r}],")
+    lines.append("        *,")
+    if "params" in parts:
+        lines.append(f"        params: {parts['params']},")
+    if "query" in parts:
+        lines.append(f"        query: {parts['query']} | None = None,")
+    if "body" in parts:
+        lines.append(f"        body: {parts['body']},")
+    lines.append("        options: _client.RequestOptions | None = None,")
+    lines.append(f"    ) -> {result_name}:{' ...' if overload else ''}")
     return lines
 
 
