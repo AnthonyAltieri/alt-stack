@@ -109,6 +109,27 @@ user_class = Response["/users/{id}"]["GET"]["200"]  # type[User]
 Response["/users/{id}"]["GET"]["999"]  # type checker error: unknown status
 ```
 
+The module also emits an asyncio `ApiClient` with one typed method per route. Install the `httpx` extra (`python-pydantic-openapi[httpx]`) for the bundled transport, or implement the `Transport` protocol over another library:
+
+```python
+import asyncio
+
+from python_pydantic_openapi.client import ApiSuccess, HttpxTransport
+
+from generated_types import ApiClient, GetUsersIdParams
+
+
+async def main() -> None:
+    async with HttpxTransport() as transport:
+        client = ApiClient("https://api.example.com", transport=transport)
+        result = await client.get("/users/{id}", params=GetUsersIdParams(id="u_1"))
+    if isinstance(result, ApiSuccess):
+        print(result.body.name)  # result.body is User
+
+
+asyncio.run(main())
+```
+
 ## Rust models from OpenAPI
 
 The Rust generators are workspace crates in this repository. From the repository root:

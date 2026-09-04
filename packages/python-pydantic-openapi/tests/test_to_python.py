@@ -121,6 +121,45 @@ def test_route_generation_basic() -> None:
                 },
             },
         }
+
+        # Typed Client
+        GetUsersIdResult = Union[
+            _client.ApiSuccess[Literal['200'], User],
+            _client.ApiUnexpectedError,
+        ]
+
+        # Asyncio client with one typed method per HTTP verb in the OpenAPI document.
+        class ApiClient(_client.BaseApiClient):
+            def __init__(
+                self,
+                base_url: str,
+                *,
+                transport: _client.Transport,
+                headers: Mapping[str, Any] | None = None,
+                on_validation_error: _client.ValidationErrorHandler | None = None,
+                backoff: _client.Backoff = _client.exponential_backoff,
+            ) -> None:
+                super().__init__(
+                    base_url,
+                    transport=transport,
+                    request_map=Request,
+                    response_map=Response,
+                    headers=headers,
+                    on_validation_error=on_validation_error,
+                    backoff=backoff,
+                )
+
+            async def get(
+                self,
+                path: Literal['/users/{id}'],
+                *,
+                params: GetUsersIdParams,
+                options: _client.RequestOptions | None = None,
+            ) -> GetUsersIdResult:
+                return cast(
+                    GetUsersIdResult,
+                    await self.request('GET', path, params=params, options=options),
+                )
         """,
         options={"include_routes": True},
     )
@@ -210,6 +249,45 @@ def test_route_with_query_params() -> None:
                 },
             },
         }
+
+        # Typed Client
+        GetUsersResult = Union[
+            _client.ApiSuccess[Literal['200'], GetUsers200Response],
+            _client.ApiUnexpectedError,
+        ]
+
+        # Asyncio client with one typed method per HTTP verb in the OpenAPI document.
+        class ApiClient(_client.BaseApiClient):
+            def __init__(
+                self,
+                base_url: str,
+                *,
+                transport: _client.Transport,
+                headers: Mapping[str, Any] | None = None,
+                on_validation_error: _client.ValidationErrorHandler | None = None,
+                backoff: _client.Backoff = _client.exponential_backoff,
+            ) -> None:
+                super().__init__(
+                    base_url,
+                    transport=transport,
+                    request_map=Request,
+                    response_map=Response,
+                    headers=headers,
+                    on_validation_error=on_validation_error,
+                    backoff=backoff,
+                )
+
+            async def get(
+                self,
+                path: Literal['/users'],
+                *,
+                query: GetUsersQuery | None = None,
+                options: _client.RequestOptions | None = None,
+            ) -> GetUsersResult:
+                return cast(
+                    GetUsersResult,
+                    await self.request('GET', path, query=query, options=options),
+                )
         """,
         options={"include_routes": True},
     )
@@ -262,9 +340,7 @@ def test_allof_wrapper_around_root_model_imports() -> None:
                             "name": "filter",
                             "in": "query",
                             "required": False,
-                            "schema": {
-                                "allOf": [{"$ref": "#/components/schemas/Freeform"}]
-                            },
+                            "schema": {"allOf": [{"$ref": "#/components/schemas/Freeform"}]},
                         }
                     ]
                 }
@@ -380,6 +456,44 @@ def test_headers_with_alias() -> None:
                 },
             },
         }
+
+        # Typed Client
+        GetUsersResult = Union[
+            _client.ApiSuccess[Literal['200'], GetUsers200Response],
+            _client.ApiUnexpectedError,
+        ]
+
+        # Asyncio client with one typed method per HTTP verb in the OpenAPI document.
+        class ApiClient(_client.BaseApiClient):
+            def __init__(
+                self,
+                base_url: str,
+                *,
+                transport: _client.Transport,
+                headers: Mapping[str, Any] | None = None,
+                on_validation_error: _client.ValidationErrorHandler | None = None,
+                backoff: _client.Backoff = _client.exponential_backoff,
+            ) -> None:
+                super().__init__(
+                    base_url,
+                    transport=transport,
+                    request_map=Request,
+                    response_map=Response,
+                    headers=headers,
+                    on_validation_error=on_validation_error,
+                    backoff=backoff,
+                )
+
+            async def get(
+                self,
+                path: Literal['/users'],
+                *,
+                options: _client.RequestOptions | None = None,
+            ) -> GetUsersResult:
+                return cast(
+                    GetUsersResult,
+                    await self.request('GET', path, options=options),
+                )
         """,
         options={"include_routes": True},
     )
@@ -493,6 +607,61 @@ def test_multiple_methods_same_path() -> None:
                 },
             },
         }
+
+        # Typed Client
+        GetUsersIdResult = Union[
+            _client.ApiSuccess[Literal['200'], GetUsersId200Response],
+            _client.ApiUnexpectedError,
+        ]
+        DeleteUsersIdResult = Union[
+            _client.ApiSuccess[Literal['204'], GetUsersId200Response],
+            _client.ApiUnexpectedError,
+        ]
+
+        # Asyncio client with one typed method per HTTP verb in the OpenAPI document.
+        class ApiClient(_client.BaseApiClient):
+            def __init__(
+                self,
+                base_url: str,
+                *,
+                transport: _client.Transport,
+                headers: Mapping[str, Any] | None = None,
+                on_validation_error: _client.ValidationErrorHandler | None = None,
+                backoff: _client.Backoff = _client.exponential_backoff,
+            ) -> None:
+                super().__init__(
+                    base_url,
+                    transport=transport,
+                    request_map=Request,
+                    response_map=Response,
+                    headers=headers,
+                    on_validation_error=on_validation_error,
+                    backoff=backoff,
+                )
+
+            async def get(
+                self,
+                path: Literal['/users/{id}'],
+                *,
+                params: GetUsersIdParams,
+                options: _client.RequestOptions | None = None,
+            ) -> GetUsersIdResult:
+                return cast(
+                    GetUsersIdResult,
+                    await self.request('GET', path, params=params, options=options),
+                )
+
+            async def delete(
+                self,
+                path: Literal['/users/{id}'],
+                *,
+                params: GetUsersIdParams,
+                options: _client.RequestOptions | None = None,
+            ) -> DeleteUsersIdResult:
+                return cast(
+                    DeleteUsersIdResult,
+                    await self.request('DELETE', path, params=params, options=options),
+                )
         """,
         options={"include_routes": True},
     )
@@ -643,6 +812,61 @@ def test_deduplicated_error_schemas() -> None:
                 },
             },
         }
+
+        # Typed Client
+        GetUsersResult = Union[
+            _client.ApiSuccess[Literal['200'], GetUsers200Response],
+            _client.ApiFailure[Literal['401'], UnauthorizedError],
+            _client.ApiUnexpectedError,
+        ]
+        PostUsersResult = Union[
+            _client.ApiSuccess[Literal['200'], GetUsers200Response],
+            _client.ApiFailure[Literal['401'], UnauthorizedError],
+            _client.ApiUnexpectedError,
+        ]
+
+        # Asyncio client with one typed method per HTTP verb in the OpenAPI document.
+        class ApiClient(_client.BaseApiClient):
+            def __init__(
+                self,
+                base_url: str,
+                *,
+                transport: _client.Transport,
+                headers: Mapping[str, Any] | None = None,
+                on_validation_error: _client.ValidationErrorHandler | None = None,
+                backoff: _client.Backoff = _client.exponential_backoff,
+            ) -> None:
+                super().__init__(
+                    base_url,
+                    transport=transport,
+                    request_map=Request,
+                    response_map=Response,
+                    headers=headers,
+                    on_validation_error=on_validation_error,
+                    backoff=backoff,
+                )
+
+            async def get(
+                self,
+                path: Literal['/users'],
+                *,
+                options: _client.RequestOptions | None = None,
+            ) -> GetUsersResult:
+                return cast(
+                    GetUsersResult,
+                    await self.request('GET', path, options=options),
+                )
+
+            async def post(
+                self,
+                path: Literal['/users'],
+                *,
+                options: _client.RequestOptions | None = None,
+            ) -> PostUsersResult:
+                return cast(
+                    PostUsersResult,
+                    await self.request('POST', path, options=options),
+                )
         """,
         options={"include_routes": True},
     )
