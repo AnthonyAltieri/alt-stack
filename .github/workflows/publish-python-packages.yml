@@ -132,25 +132,24 @@ jobs:
         if: steps.detect.outputs.should_publish == 'true'
         uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
-          enable-cache: true
-          cache-dependency-glob: ${{ env.PACKAGE_DIR }}/uv.lock
+          enable-cache: false
 
       - name: Build distribution artifacts
         if: steps.detect.outputs.should_publish == 'true'
         shell: bash
         run: |
-          rm -rf "${{ env.DIST_DIR }}"
-          uv build "${{ env.PACKAGE_DIR }}" --out-dir "${{ env.DIST_DIR }}"
+          rm -rf "$DIST_DIR"
+          uv build "$PACKAGE_DIR" --out-dir "$DIST_DIR"
 
       - name: Check distribution metadata
         if: steps.detect.outputs.should_publish == 'true'
         shell: bash
-        run: uvx twine check "${{ env.DIST_DIR }}"/*
+        run: uvx twine check "$DIST_DIR"/*
 
       - name: List built artifacts
         if: steps.detect.outputs.should_publish == 'true'
         shell: bash
-        run: ls -lh "${{ env.DIST_DIR }}"
+        run: ls -lh "$DIST_DIR"
 
       - name: Dry-run summary
         if: steps.detect.outputs.should_publish == 'true' && steps.detect.outputs.dry_run == 'true'
