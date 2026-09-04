@@ -6,6 +6,7 @@ keys, and run real type checkers over both files. They pass only when:
 
 * a known request/response leaf is inferred as its exact ``type[Model]``;
 * unknown paths, methods, request parts, and status codes are static errors;
+* the generated ``ApiClient`` infers exact request models and result unions per route;
 * the generated module itself is free of type errors.
 """
 
@@ -135,14 +136,22 @@ def _consumer_source(module: types.ModuleType) -> str:
     params_model = request_map[TENANT_PATH]["GET"]["params"].__name__
     query_model = request_map[TENANT_PATH]["GET"]["query"].__name__
     health_model = response_map[HEALTH_PATH]["GET"]["200"].__name__
+    dto = 'CreateTenantDto(name="iad", regions=["us-east-1"])'
+    tenant_params = f'{params_model}(tenantId="t_1")'
 
     return "\n".join(
         [
-            "from typing import assert_type",
+            "from typing import Literal, assert_type",
             "",
+            "import python_pydantic_openapi.client as client_lib",
             "from generated_sdk import (",
+            "    ApiClient,",
             "    ApiError,",
             "    CreateTenantDto,",
+            "    GetApiV1HealthResult,",
+            "    GetApiV1TenantsTenantidResult,",
+            "    HttpxApiClient,",
+            "    PostApiV1TenantsResult,",
             f"    {params_model},",
             f"    {query_model},",
             f"    {health_model},",
@@ -188,6 +197,56 @@ def _consumer_source(module: types.ModuleType) -> str:
             f"{EXPECT_ERROR}",
             f'Request["{TENANTS_PATH}"]["POST"]["body"](name=123, regions=[])  {EXPECT_ERROR}',
             f'Response["{TENANTS_PATH}"]["POST"]["201"].model_validate({{}}).nope  {EXPECT_ERROR}',
+            "",
+            "",
+            "async def build_clients() -> None:",
+            "    # The primary constructor takes the maps and owns its transport",
+            "    httpx_client = HttpxApiClient(",
+            '        "https://x", request_map=Request, response_map=Response',
+            "    )",
+            "    assert_type(httpx_client, HttpxApiClient)",
+            f'    fetched = await httpx_client.get("{TENANT_PATH}", params={tenant_params})',
+            "    assert_type(fetched, GetApiV1TenantsTenantidResult)",
+            '    HttpxApiClient("https://x")  ' + EXPECT_ERROR,
+            "",
+            "",
+            "async def use_client(client: ApiClient) -> None:",
+            "    # Typed route methods infer the exact request model and result union",
+            f'    created = await client.post("{TENANTS_PATH}", body={dto})',
+            "    assert_type(created, PostApiV1TenantsResult)",
+            "    if isinstance(created, client_lib.ApiSuccess):",
+            '        assert_type(created.code, Literal["201"])',
+            "        assert_type(created.body, Tenant)",
+            "    elif isinstance(created, client_lib.ApiFailure):",
+            '        assert_type(created.code, Literal["400"])',
+            "        assert_type(created.error, ApiError)",
+            "    else:",
+            "        assert_type(created, client_lib.ApiUnexpectedError)",
+            "",
+            f'    fetched = await client.get("{TENANT_PATH}", params={tenant_params})',
+            "    assert_type(fetched, GetApiV1TenantsTenantidResult)",
+            "    match fetched:",
+            "        case client_lib.ApiSuccess(body=tenant_body):",
+            "            assert_type(tenant_body, Tenant)",
+            "        case client_lib.ApiFailure(error=api_error):",
+            "            assert_type(api_error, ApiError)",
+            "        case client_lib.ApiUnexpectedError(code=status):",
+            "            assert_type(status, int)",
+            "",
+            f'    health = await client.get("{HEALTH_PATH}")',
+            "    assert_type(health, GetApiV1HealthResult)",
+            "    if isinstance(health, client_lib.ApiSuccess):",
+            f"        assert_type(health.body, {health_model})",
+            "",
+            "    # Routes and inputs absent from the contract are rejected statically",
+            f'    await client.post("/api/v1/not-a-route", body={dto})  {EXPECT_ERROR}',
+            f'    await client.post("{TENANTS_PATH}")  {EXPECT_ERROR}',
+            f'    await client.post("{TENANTS_PATH}", body=Tenant(id="1", name="x"))  '
+            f"{EXPECT_ERROR}",
+            f'    await client.get("{TENANTS_PATH}")  {EXPECT_ERROR}',
+            f'    await client.get("{TENANT_PATH}")  {EXPECT_ERROR}',
+            f'    await client.get("{HEALTH_PATH}", params={tenant_params})  {EXPECT_ERROR}',
+            f'    await client.put("{TENANTS_PATH}", body={dto})  {EXPECT_ERROR}',
             "",
         ]
     )

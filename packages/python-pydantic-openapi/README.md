@@ -32,6 +32,26 @@ Response["/users/{id}"]["GET"]["200"]      # type[User]
 Response["/users/{id}"]["GET"]["999"]      # static error: unknown status
 ```
 
+Generated modules also include an asyncio `HttpxApiClient` with one typed method per route, built on `python_pydantic_openapi.client`. Install the `httpx` extra:
+
+```bash
+python -m pip install "python-pydantic-openapi[httpx]"
+```
+
+```python
+from python_pydantic_openapi.client import ApiSuccess
+
+from generated_types import GetUsersIdParams, HttpxApiClient, Request, Response
+
+async with HttpxApiClient(
+    "https://api.example.com", request_map=Request, response_map=Response
+) as client:
+    result = await client.get("/users/{id}", params=GetUsersIdParams(id="u_1"))
+
+if isinstance(result, ApiSuccess):
+    result.body  # User; unknown paths, missing params, and wrong models are static errors
+```
+
 Generated modules that use intersections import the installed package's `all_of` helper.
 
 ## Development

@@ -12,12 +12,15 @@ PREAMBLE = dedent(
     from __future__ import annotations
 
     from typing import Any, Annotated, Final, Literal, Optional, TypedDict, Union
+    from typing import cast, overload
+    from collections.abc import Mapping
     from datetime import date, datetime
     from uuid import UUID
 
     from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, RootModel
     from pydantic import AnyUrl, EmailStr
     from python_pydantic_openapi.all_of import all_of
+    import python_pydantic_openapi.client as _client
 
     def _reject_explicit_none(value: Any) -> Any:
         if value is None:
