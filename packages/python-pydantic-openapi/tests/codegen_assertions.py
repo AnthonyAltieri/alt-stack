@@ -11,7 +11,7 @@ PREAMBLE = dedent(
     # Do not manually edit this file
     from __future__ import annotations
 
-    from typing import Any, Annotated, Literal, Optional, Union
+    from typing import Any, Annotated, Final, Literal, Optional, TypedDict, Union
     from datetime import date, datetime
     from uuid import UUID
 

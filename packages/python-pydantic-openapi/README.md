@@ -22,7 +22,17 @@ from generated_types import User
 user = User.model_validate({"id": "u_1", "name": "Ada"})
 ```
 
-The CLI enables route generation and emits `Request`/`Response` dictionaries whose leaves are Pydantic model classes. Generated modules that use intersections import the installed package's `all_of` helper.
+The CLI enables route generation and emits `Request`/`Response` dictionaries whose leaves are Pydantic model classes. The dictionaries carry generated `TypedDict` annotations, so type checkers resolve literal lookups to the exact model and reject unknown paths, methods, request parts, and status codes:
+
+```python
+from generated_types import Request, Response
+
+Request["/users"]["POST"]["body"]          # type[CreateUserBody]
+Response["/users/{id}"]["GET"]["200"]      # type[User]
+Response["/users/{id}"]["GET"]["999"]      # static error: unknown status
+```
+
+Generated modules that use intersections import the installed package's `all_of` helper.
 
 ## Development
 

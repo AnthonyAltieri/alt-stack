@@ -144,7 +144,7 @@ This shape plugs into the TypeScript HTTP clients. The client currently does not
 
 ### Python OpenAPI
 
-With `include_routes`, the generator emits route Pydantic classes and `Request`/`Response` dictionaries containing those classes. Unlike the TypeScript generator, a method with no request parts is absent from `Request`; consult `Response` or the OpenAPI document for bare methods.
+With `include_routes`, the generator emits route Pydantic classes and `Request`/`Response` dictionaries containing those classes. Each dictionary is declared with generated `TypedDict` types and `Final`, the Python equivalent of `as const`, so `Request[path][METHOD][part]` and `Response[path][METHOD][status]` resolve to the exact model class under a type checker and unknown paths, methods, parts, and statuses are static errors. A method with no request parts is present as `{}` in `Request`, as in TypeScript.
 
 ### Rust OpenAPI
 

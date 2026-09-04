@@ -1,6 +1,6 @@
 [project]
 name = "python-pydantic-openapi"
-version = "0.1.0"
+version = "1.6.2"
 description = "Convert OpenAPI schemas to Pydantic models with Python code generation"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -21,9 +21,10 @@ Issues = "https://github.com/anthonyaltieri/alt-stack/issues"
 
 [project.optional-dependencies]
 dev = [
+  "pyrefly>=1.0.0",
   "pytest>=8.0.0",
   "ruff>=0.6.0",
-  "ty>=0.0.0",
+  "ty>=0.0.78",
 ]
 
 [project.scripts]

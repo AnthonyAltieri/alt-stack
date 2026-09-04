@@ -46,7 +46,7 @@ def _to_pascal_case(value: str) -> str:
     return "".join(part[:1].upper() + part[1:].lower() for part in parts)
 
 
-def build_route_schema_name(path: str, method: HttpMethod, suffix: str) -> str:
+def build_route_path_name(path: str) -> str:
     path_parts = []
     for part in path.split("/"):
         if not part:
@@ -55,9 +55,12 @@ def build_route_schema_name(path: str, method: HttpMethod, suffix: str) -> str:
             path_parts.append(part[1:-1])
         else:
             path_parts.append(part)
-    path_parts = [_to_pascal_case(part) for part in path_parts]
+    return "".join(_to_pascal_case(part) for part in path_parts)
+
+
+def build_route_schema_name(path: str, method: HttpMethod, suffix: str) -> str:
     method_prefix = method[:1] + method[1:].lower()
-    return "".join([method_prefix, *path_parts, suffix])
+    return "".join([method_prefix, build_route_path_name(path), suffix])
 
 
 def parse_openapi_paths(openapi: dict[str, Any]) -> list[RouteInfo]:

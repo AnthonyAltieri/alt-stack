@@ -99,7 +99,15 @@ user = User.model_validate({"id": "u_1", "name": "Ada"})
 print(user.name)
 ```
 
-The generated module also contains `Request` and `Response` dictionaries whose leaves are Pydantic model classes.
+The generated module also contains `Request` and `Response` dictionaries whose leaves are Pydantic model classes. Their keys are statically typed, so indexing with literal paths, methods, and status codes yields the exact model class:
+
+```python
+from generated_types import Request, Response
+
+body_class = Request["/users"]["POST"]["body"]  # type[CreateUserBody]
+user_class = Response["/users/{id}"]["GET"]["200"]  # type[User]
+Response["/users/{id}"]["GET"]["999"]  # type checker error: unknown status
+```
 
 ## Rust models from OpenAPI
 
