@@ -1,4 +1,4 @@
-"""Runtime behavior of ``alt_stack.http_client`` against hand-written route maps.
+"""Runtime behavior of ``alt_stack_http_client_httpx`` against hand-written route maps.
 
 These tests do not depend on the generator: the models and ``Request`` / ``Response``
 maps below have the same shape a generated SDK module produces.
@@ -17,7 +17,7 @@ import httpx
 import pytest
 from pydantic import BaseModel, ConfigDict, Field
 
-from alt_stack.http_client import (
+from alt_stack_http_client_httpx import (
     ApiFailure,
     ApiSuccess,
     ApiTimeoutError,

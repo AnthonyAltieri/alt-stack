@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from alt_stack.pydantic_openapi.types.boolean import convert_openapi_boolean_to_pydantic
+from alt_stack_pydantic_openapi.types.boolean import convert_openapi_boolean_to_pydantic
 
 
 def test_boolean_basic() -> None:

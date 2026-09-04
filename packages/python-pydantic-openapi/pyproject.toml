@@ -29,7 +29,7 @@ dev = [
 ]
 
 [project.scripts]
-alt-stack-pydantic-openapi = "alt_stack.pydantic_openapi.cli:main"
+alt-stack-pydantic-openapi = "alt_stack_pydantic_openapi.cli:main"
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]
@@ -41,10 +41,10 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["alt_stack.pydantic_openapi*"]
+include = ["alt_stack_pydantic_openapi*"]
 
 [tool.setuptools.package-data]
-"alt_stack.pydantic_openapi" = ["py.typed"]
+"alt_stack_pydantic_openapi" = ["py.typed"]
 
 [tool.uv.sources]
 alt-stack-http-client-httpx = { path = "../python-http-client-httpx" }

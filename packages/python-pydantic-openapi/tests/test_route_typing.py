@@ -25,8 +25,8 @@ from typing import Any, Callable
 
 import pytest
 
-from alt_stack.pydantic_openapi.registry import clear_pydantic_schema_registry
-from alt_stack.pydantic_openapi.to_python import openapi_to_pydantic_code
+from alt_stack_pydantic_openapi.registry import clear_pydantic_schema_registry
+from alt_stack_pydantic_openapi.to_python import openapi_to_pydantic_code
 
 EXPECT_ERROR = "# expect-error"
 
@@ -143,7 +143,7 @@ def _consumer_source(module: types.ModuleType) -> str:
         [
             "from typing import Literal, assert_type",
             "",
-            "import alt_stack.http_client as client_lib",
+            "import alt_stack_http_client_httpx as client_lib",
             "from generated_sdk import (",
             "    ApiClient,",
             "    ApiError,",

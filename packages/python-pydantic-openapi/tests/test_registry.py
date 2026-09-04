@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from alt_stack.pydantic_openapi.registry import (
+from alt_stack_pydantic_openapi.registry import (
     clear_pydantic_schema_registry,
     get_schema_exported_variable_name_for_string_format,
     register_pydantic_type_to_openapi_schema,

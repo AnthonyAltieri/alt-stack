@@ -38,10 +38,10 @@ Response["/users/{id}"]["GET"]["200"]      # type[User]
 Response["/users/{id}"]["GET"]["999"]      # static error: unknown status
 ```
 
-Generated modules also include an asyncio `HttpxApiClient` with one typed method per route, built on `alt_stack.http_client`:
+Generated modules also include an asyncio `HttpxApiClient` with one typed method per route, built on `alt_stack_http_client_httpx`:
 
 ```python
-from alt_stack.http_client import ApiSuccess
+from alt_stack_http_client_httpx import ApiSuccess
 
 from generated_types import GetUsersIdParams, HttpxApiClient, Request, Response
 

@@ -114,7 +114,7 @@ The module also emits an asyncio `HttpxApiClient` with one typed method per rout
 ```python
 import asyncio
 
-from alt_stack.http_client import ApiSuccess
+from alt_stack_http_client_httpx import ApiSuccess
 
 from generated_types import GetUsersIdParams, HttpxApiClient, Request, Response
 

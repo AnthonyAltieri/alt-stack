@@ -113,7 +113,7 @@ _ALL_OF_HELPER = [
 def _finalize_module(lines: list[str]) -> str:
     """Inline the ``all_of`` intersection helper when the module uses it.
 
-    Generated modules depend only on pydantic and ``alt_stack.http_client`` at runtime,
+    Generated modules depend only on pydantic and ``alt_stack_http_client_httpx`` at runtime,
     not on the generator package.
     """
     anchor = "_omit_not_null = BeforeValidator(_reject_explicit_none)"
@@ -137,7 +137,7 @@ def _build_module_preamble(custom_import_lines: list[str] | None) -> list[str]:
         "from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, RootModel",
         "from pydantic import TypeAdapter",
         "from pydantic import AnyUrl, EmailStr",
-        "import alt_stack.http_client as _client",
+        "import alt_stack_http_client_httpx as _client",
         "",
         "def _reject_explicit_none(value: Any) -> Any:",
         "    if value is None:",

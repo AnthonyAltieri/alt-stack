@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from alt_stack.pydantic_openapi.types.array import convert_openapi_array_to_pydantic
+from alt_stack_pydantic_openapi.types.array import convert_openapi_array_to_pydantic
 
 
 def _convert(schema: dict[str, object]) -> str:

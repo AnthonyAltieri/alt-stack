@@ -334,7 +334,7 @@
     },
     {
       "name": "alt-stack-pydantic-openapi",
-      "source": "packages/python-pydantic-openapi/src/alt_stack/pydantic_openapi/__init__.py",
+      "source": "packages/python-pydantic-openapi/src/alt_stack_pydantic_openapi/__init__.py",
       "readme": "packages/python-pydantic-openapi/README.md",
       "docs": [
         "codegen/api/pydantic-openapi.md"
@@ -420,7 +420,7 @@
     },
     {
       "name": "alt-stack-http-client-httpx",
-      "source": "packages/python-http-client-httpx/src/alt_stack/http_client/__init__.py",
+      "source": "packages/python-http-client-httpx/src/alt_stack_http_client_httpx/__init__.py",
       "readme": "packages/python-http-client-httpx/README.md",
       "docs": [
         "codegen/api/pydantic-openapi.md"

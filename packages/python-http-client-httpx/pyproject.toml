@@ -37,10 +37,10 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["alt_stack.http_client*"]
+include = ["alt_stack_http_client_httpx*"]
 
 [tool.setuptools.package-data]
-"alt_stack.http_client" = ["py.typed"]
+"alt_stack_http_client_httpx" = ["py.typed"]
 
 [tool.ruff]
 line-length = 100

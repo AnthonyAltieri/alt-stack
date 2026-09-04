@@ -3,7 +3,7 @@ from __future__ import annotations
 from textwrap import dedent
 from typing import Any
 
-from alt_stack.pydantic_openapi.to_python import openapi_to_pydantic_code
+from alt_stack_pydantic_openapi.to_python import openapi_to_pydantic_code
 
 PREAMBLE = dedent(
     """\
@@ -19,7 +19,7 @@ PREAMBLE = dedent(
     from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, RootModel
     from pydantic import TypeAdapter
     from pydantic import AnyUrl, EmailStr
-    import alt_stack.http_client as _client
+    import alt_stack_http_client_httpx as _client
 
     def _reject_explicit_none(value: Any) -> Any:
         if value is None:

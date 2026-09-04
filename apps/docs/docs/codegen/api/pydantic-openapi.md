@@ -6,7 +6,7 @@
 python -m pip install alt-stack-pydantic-openapi
 ```
 
-The installed distribution includes a `py.typed` marker and imports as `alt_stack.pydantic_openapi`. Generated modules do not depend on the generator at runtime: they import `alt_stack.http_client` from `alt-stack-http-client-httpx` for the client and inline the `all_of` validator when an input uses a non-object `allOf`.
+The installed distribution includes a `py.typed` marker and imports as `alt_stack_pydantic_openapi`. Generated modules do not depend on the generator at runtime: they import `alt_stack_http_client_httpx` from `alt-stack-http-client-httpx` for the client and inline the `all_of` validator when an input uses a non-object `allOf`.
 
 ## CLI: `alt-stack-pydantic-openapi`
 
@@ -188,7 +188,7 @@ Route inputs are keyword arguments typed with the generated models: `params` is 
 ```python
 import asyncio
 
-from alt_stack.http_client import ApiFailure, ApiSuccess, RequestOptions
+from alt_stack_http_client_httpx import ApiFailure, ApiSuccess, RequestOptions
 
 from generated_types import GetUsersIdParams, HttpxApiClient, Request, Response
 
@@ -221,13 +221,13 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-Passing the maps mirrors `createApiClient({ baseUrl, Request, Response })` in TypeScript. Importing `HttpxApiClient` from the generated module gives the typed route methods; importing it from `alt_stack.http_client` accepts the same arguments and gives runtime validation with the untyped `request()` API. Use `ApiClient(base_url, transport=..., request_map=..., response_map=...)` to plug in a different asyncio HTTP library.
+Passing the maps mirrors `createApiClient({ baseUrl, Request, Response })` in TypeScript. Importing `HttpxApiClient` from the generated module gives the typed route methods; importing it from `alt_stack_http_client_httpx` accepts the same arguments and gives runtime validation with the untyped `request()` API. Use `ApiClient(base_url, transport=..., request_map=..., response_map=...)` to plug in a different asyncio HTTP library.
 
 Narrow results with `isinstance` or `match`; the `success` attribute is present for parity with the TypeScript client but not every checker narrows on it. Only documented statuses appear in the union; a route without a documented 2xx body (for example `204`) includes `ApiSuccess[str, Any]` so its success is representable.
 
 ## `alt-stack-http-client-httpx`
 
-The runtime half of the client is its own distribution, `alt-stack-http-client-httpx`, imported as `alt_stack.http_client`. It is the Python counterpart of `@alt-stack/http-client-core` plus `@alt-stack/http-client-fetch`, depends on `pydantic` and `httpx`, and is the only runtime dependency of generated SDK modules besides `pydantic`. `BaseApiClient` is transport-agnostic; `HttpxApiClient` binds it to `httpx`.
+The runtime half of the client is its own distribution, `alt-stack-http-client-httpx`, imported as `alt_stack_http_client_httpx`. It is the Python counterpart of `@alt-stack/http-client-core` plus `@alt-stack/http-client-fetch`, depends on `pydantic` and `httpx`, and is the only runtime dependency of generated SDK modules besides `pydantic`. `BaseApiClient` is transport-agnostic; `HttpxApiClient` binds it to `httpx`.
 
 | Export | Purpose |
 | --- | --- |
@@ -257,4 +257,4 @@ Generated non-object intersections use an `all_of` helper that the generator inl
 
 ## Root export checklist
 
-`alt_stack.pydantic_openapi.__all__` contains exactly `SUPPORTED_STRING_FORMATS`, `clear_pydantic_schema_registry`, `get_schema_exported_variable_name_for_primitive_type`, `get_schema_exported_variable_name_for_string_format`, `openapi_to_pydantic_code`, `register_pydantic_type_to_openapi_schema`, and `schema_registry`.
+`alt_stack_pydantic_openapi.__all__` contains exactly `SUPPORTED_STRING_FORMATS`, `clear_pydantic_schema_registry`, `get_schema_exported_variable_name_for_primitive_type`, `get_schema_exported_variable_name_for_string_format`, `openapi_to_pydantic_code`, `register_pydantic_type_to_openapi_schema`, and `schema_registry`.

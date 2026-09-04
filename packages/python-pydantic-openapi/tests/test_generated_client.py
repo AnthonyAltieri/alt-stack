@@ -14,7 +14,7 @@ from typing import Any, TypeVar
 
 import httpx
 import pytest
-from alt_stack.http_client import (
+from alt_stack_http_client_httpx import (
     ApiFailure,
     ApiSuccess,
     HttpRequest,
@@ -22,8 +22,8 @@ from alt_stack.http_client import (
     HttpxApiClient,
 )
 
-from alt_stack.pydantic_openapi.registry import clear_pydantic_schema_registry
-from alt_stack.pydantic_openapi.to_python import openapi_to_pydantic_code
+from alt_stack_pydantic_openapi.registry import clear_pydantic_schema_registry
+from alt_stack_pydantic_openapi.to_python import openapi_to_pydantic_code
 
 T = TypeVar("T")
 
