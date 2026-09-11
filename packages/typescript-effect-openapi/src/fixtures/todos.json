@@ -1,0 +1,61 @@
+{
+  "openapi": "3.1.0",
+  "info": { "title": "Todos", "version": "1.0.0" },
+  "paths": {
+    "/api/todos": {
+      "get": {
+        "tags": ["todos"],
+        "operationId": "list",
+        "parameters": [{ "name": "limit", "in": "query", "required": true, "schema": { "type": "integer", "minimum": 1 } }],
+        "responses": { "200": { "description": "Todos", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Todo" } } } } } }
+      },
+      "post": {
+        "tags": ["todos"],
+        "operationId": "create",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateTodo" } } } },
+        "responses": { "201": { "description": "Created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Todo" } } } } }
+      }
+    },
+    "/api/todos/{id}": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "get": {
+        "tags": ["todos"],
+        "operationId": "byId",
+        "responses": {
+          "200": { "description": "Todo", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Todo" } } } },
+          "404": { "description": "Missing", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TodoNotFound" } } } }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Todo": {
+        "type": "object",
+        "required": ["id", "title", "completed"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "completed": { "type": "boolean" },
+          "description": { "type": "string" }
+        }
+      },
+      "CreateTodo": {
+        "type": "object",
+        "required": ["title"],
+        "properties": { "title": { "type": "string", "minLength": 1 } }
+      },
+      "TodoNotFound": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message"],
+            "properties": { "code": { "type": "string", "enum": ["NOT_FOUND"] }, "message": { "type": "string" } }
+          }
+        }
+      }
+    }
+  }
+}
