@@ -1006,3 +1006,55 @@ def test_intersection_helper_is_inlined_only_when_used() -> None:
 
     plain = openapi_to_pydantic_code({"components": {"schemas": {}}, "paths": {}})
     assert "def all_of" not in plain
+
+
+def test_const_discriminators_generate_a_valid_discriminated_union() -> None:
+    openapi = {
+        "components": {
+            "schemas": {
+                "Plaintext": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "mode": {"type": "string", "const": "plaintext"},
+                        "v": {"type": "integer", "const": 1},
+                        "data": {"type": "string"},
+                    },
+                    "required": ["mode", "v", "data"],
+                },
+                "Encrypted": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "mode": {"type": "string", "const": "kms"},
+                        "v": {"type": "integer", "const": 1},
+                        "ct": {"type": "string"},
+                    },
+                    "required": ["mode", "v", "ct"],
+                },
+                "Envelope": {
+                    "oneOf": [
+                        {"$ref": "#/components/schemas/Plaintext"},
+                        {"$ref": "#/components/schemas/Encrypted"},
+                    ],
+                    "discriminator": {
+                        "propertyName": "mode",
+                        "mapping": {
+                            "plaintext": "#/components/schemas/Plaintext",
+                            "kms": "#/components/schemas/Encrypted",
+                        },
+                    },
+                },
+            }
+        },
+        "paths": {},
+    }
+
+    module = _load_module(openapi_to_pydantic_code(openapi))
+
+    envelope = module.Envelope.model_validate({"mode": "plaintext", "v": 1, "data": "x"})
+    assert isinstance(envelope.root, module.Plaintext)
+    with pytest.raises(ValidationError):
+        module.Envelope.model_validate({"mode": "other", "v": 1, "data": "x"})
+    with pytest.raises(ValidationError):
+        module.Plaintext.model_validate({"mode": "plaintext", "v": 2, "data": "x"})

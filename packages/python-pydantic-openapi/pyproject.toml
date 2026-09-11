@@ -1,6 +1,6 @@
 [project]
 name = "alt-stack-openapi-pydantic"
-version = "1.6.2"
+version = "1.6.3"
 description = "Generate Pydantic models, typed route maps, and an asyncio client from OpenAPI"
 readme = "README.md"
 requires-python = ">=3.11"

@@ -160,3 +160,12 @@ def test_string_constraints() -> None:
 )
 def test_string_formats(schema: dict, expected: str) -> None:
     assert convert_schema_to_pydantic_string(schema) == expected
+
+
+def test_untyped_const_and_enum_render_as_literals() -> None:
+    assert convert_schema_to_pydantic_string({"const": "only"}) == "Literal['only']"
+    assert convert_schema_to_pydantic_string({"enum": ["a", 1]}) == "Literal['a', 1]"
+    assert (
+        convert_schema_to_pydantic_string({"const": "only", "nullable": True})
+        == "Optional[Literal['only']]"
+    )

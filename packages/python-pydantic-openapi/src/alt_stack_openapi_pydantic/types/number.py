@@ -3,13 +3,13 @@ from __future__ import annotations
 from typing import Any
 
 from ..registry import get_schema_exported_variable_name_for_primitive_type
-from ..type_render import format_openapi_metadata, wrap_annotated
+from ..type_render import format_openapi_metadata, integer_bound, literal_type_expr, wrap_annotated
 
 
 def convert_openapi_number_to_pydantic(schema: dict[str, Any]) -> str:
-    if isinstance(schema.get("enum"), list):
-        values = ", ".join(repr(value) for value in schema["enum"])
-        return f"Literal[{values}]"
+    literal = literal_type_expr(schema)
+    if literal is not None:
+        return literal
 
     schema_type = schema.get("type")
     if schema_type in {"number", "integer", "boolean"}:
@@ -24,9 +24,9 @@ def convert_openapi_number_to_pydantic(schema: dict[str, Any]) -> str:
 
     field_args: list[str] = ["strict=True"]
     if isinstance(minimum, (int, float)):
-        field_args.append(f"ge={minimum}")
+        field_args.append(f"ge={integer_bound(minimum, base)}")
     if isinstance(maximum, (int, float)):
-        field_args.append(f"le={maximum}")
+        field_args.append(f"le={integer_bound(maximum, base)}")
 
     meta: dict[str, Any] = {}
     if isinstance(minimum, (int, float)):

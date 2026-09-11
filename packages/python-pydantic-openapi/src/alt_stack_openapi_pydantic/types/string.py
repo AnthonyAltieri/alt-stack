@@ -3,13 +3,13 @@ from __future__ import annotations
 from typing import Any
 
 from ..registry import get_schema_exported_variable_name_for_string_format
-from ..type_render import format_openapi_metadata, wrap_annotated
+from ..type_render import format_openapi_metadata, literal_type_expr, wrap_annotated
 
 
 def convert_openapi_string_to_pydantic(schema: dict[str, Any]) -> str:
-    if isinstance(schema.get("enum"), list):
-        values = ", ".join(repr(value) for value in schema["enum"])
-        return f"Literal[{values}]"
+    literal = literal_type_expr(schema)
+    if literal is not None:
+        return literal
 
     fmt = schema.get("format")
     if isinstance(fmt, str) and fmt:
