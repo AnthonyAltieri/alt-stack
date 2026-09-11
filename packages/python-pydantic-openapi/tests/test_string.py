@@ -23,6 +23,11 @@ def test_enum_string() -> None:
     assert result == "Literal['red', 'green']"
 
 
+def test_const_string_is_a_single_literal() -> None:
+    result = convert_openapi_string_to_pydantic({"type": "string", "const": "plaintext"})
+    assert result == "Literal['plaintext']"
+
+
 def test_format_email() -> None:
     result = convert_openapi_string_to_pydantic({"type": "string", "format": "email"})
     assert (

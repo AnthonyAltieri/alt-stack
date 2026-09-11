@@ -61,12 +61,13 @@ The public entry point does not export the lower-level `convert_schema_to_pydant
 | `oneOf` / `anyOf` | `Union[...]`; discriminator becomes `Field(discriminator=...)` |
 | `allOf` non-object | `all_of(...)` annotated validator |
 | `allOf` objects/refs | model inheritance plus merged inline fields |
-| string enum / numeric enum | `Literal[...]` |
+| `enum` (string, number, boolean, or untyped) | `Literal[...]` |
+| `const` | `Literal[value]`, so `const` discriminators satisfy Pydantic's discriminated unions |
 | email | `EmailStr` |
 | URL/URI | `AnyUrl` |
 | UUID | `UUID` |
 | other string | strict `str` with length/pattern fields where present |
-| number/integer | strict `float`/`int` with `ge`/`le` |
+| number/integer | strict `float`/`int` with `ge`/`le`; integer bounds written as `0.0` render as `0` |
 | boolean | strict `bool` |
 | array | `list[...]` with length constraints |
 | nullable | `Optional[...]` |

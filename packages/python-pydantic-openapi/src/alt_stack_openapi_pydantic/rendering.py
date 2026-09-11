@@ -8,7 +8,7 @@ from .registry import (
     get_schema_exported_variable_name_for_primitive_type,
     get_schema_exported_variable_name_for_string_format,
 )
-from .type_render import format_openapi_metadata
+from .type_render import format_openapi_metadata, literal_type_expr
 from .types import AnySchema
 from .types.array import convert_openapi_array_to_pydantic
 from .types.boolean import convert_openapi_boolean_to_pydantic
@@ -135,10 +135,9 @@ def schema_to_type_expr(
         )
         return wrap_nullable(expr, schema)
 
-    if isinstance(schema.get("enum"), list):
-        values = ", ".join(repr(value) for value in schema["enum"])
-        expr = f"Literal[{values}]"
-        return wrap_nullable(expr, schema)
+    literal = literal_type_expr(schema)
+    if literal is not None:
+        return wrap_nullable(literal, schema)
 
     return wrap_nullable("Any", schema)
 

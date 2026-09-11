@@ -8,3 +8,9 @@ def test_boolean_basic() -> None:
         convert_openapi_boolean_to_pydantic({"type": "boolean"})
         == "Annotated[bool, Field(strict=True)]"
     )
+
+
+def test_const_boolean_is_a_single_literal() -> None:
+    assert (
+        convert_openapi_boolean_to_pydantic({"type": "boolean", "const": True}) == "Literal[True]"
+    )
