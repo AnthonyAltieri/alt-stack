@@ -1,0 +1,36 @@
+{
+  "name": "@alt-stack/effect-openapi",
+  "version": "1.6.2",
+  "description": "Generate native Effect v4 Schema and HttpApi declarations from OpenAPI",
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=22.19.0" },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "effect-openapi": "./dist/cli.js"
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@apidevtools/swagger-parser": "^12.1.0",
+    "@effect/openapi-generator": "4.0.0-rc.112",
+    "@effect/platform-node": "4.0.0-rc.112",
+    "effect": "4.0.0-rc.112"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "oxlint": "^1.24.0",
+    "tsup": "^8.0.0",
+    "typescript": "5.9.2",
+    "vitest": "^4.0.3"
+  }
+}
