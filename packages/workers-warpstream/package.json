@@ -1,6 +1,6 @@
 {
   "name": "@alt-stack/workers-warpstream",
-  "version": "1.6.2",
+  "version": "1.6.3",
   "description": "WarpStream/Kafka integration for @alt-stack/workers-core",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

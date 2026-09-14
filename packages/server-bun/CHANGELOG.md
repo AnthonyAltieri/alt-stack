@@ -1,5 +1,11 @@
 # @alt-stack/server-bun
 
+## 1.6.3
+
+### Patch Changes
+
+- @alt-stack/server-core@1.6.3
+
 ## 1.6.2
 
 ### Patch Changes
