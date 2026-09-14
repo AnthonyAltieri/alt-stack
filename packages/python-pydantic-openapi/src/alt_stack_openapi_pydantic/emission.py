@@ -9,6 +9,7 @@ from .rendering import (
     RenderContext,
     decode_component_ref,
     extra_field_annotation,
+    is_nullable_schema,
     is_object_model_schema,
     root_model_annotation,
     schema_to_type_expr,
@@ -266,7 +267,7 @@ def _build_model_lines(
             if is_required:
                 default_expr = f" = Field(alias={alias!r})" if alias else ""
             else:
-                if not isinstance(prop_schema, dict) or prop_schema.get("nullable") is not True:
+                if not is_nullable_schema(prop_schema):
                     type_expr = f"Annotated[Optional[{type_expr}], _omit_not_null]"
                 default_expr = f" = Field(default=None, alias={alias!r})" if alias else " = None"
 

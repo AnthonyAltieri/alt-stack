@@ -169,3 +169,30 @@ def test_untyped_const_and_enum_render_as_literals() -> None:
         convert_schema_to_pydantic_string({"const": "only", "nullable": True})
         == "Optional[Literal['only']]"
     )
+
+
+def test_null_members_render_as_optional() -> None:
+    assert (
+        convert_schema_to_pydantic_string({"anyOf": [{"type": "string"}, {"type": "null"}]})
+        == "Optional[Annotated[str, Field(strict=True)]]"
+    )
+    assert (
+        convert_schema_to_pydantic_string({"oneOf": [{"type": "integer"}, {"type": "null"}]})
+        == "Optional[Annotated[int, Field(strict=True)]]"
+    )
+    assert (
+        convert_schema_to_pydantic_string({"type": ["string", "null"]})
+        == "Optional[Annotated[str, Field(strict=True)]]"
+    )
+    assert (
+        convert_schema_to_pydantic_string(
+            {"anyOf": [{"type": "string"}, {"type": "integer"}, {"type": "null"}]}
+        )
+        == "Optional[Union[Annotated[str, Field(strict=True)], Annotated[int, Field(strict=True)]]]"
+    )
+    assert (
+        convert_schema_to_pydantic_string(
+            {"anyOf": [{"$ref": "#/components/schemas/User"}, {"type": "null"}]}
+        )
+        == "Optional[User]"
+    )

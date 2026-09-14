@@ -71,6 +71,7 @@ The public entry point does not export the lower-level `convert_schema_to_pydant
 | boolean | strict `bool` |
 | array | `list[...]` with length constraints |
 | nullable | `Optional[...]` |
+| `type: "null"`, `type: [T, "null"]`, or an `anyOf`/`oneOf` with a `{"type": "null"}` member | `None` / `Optional[...]`; an optional property spelled this way accepts an explicit null instead of the omit-only validator |
 | unknown | `Any` |
 
 Date and date-time formats remain constrained strings unless a custom registry maps them to another exported type. Constraint and format details are also placed under `json_schema_extra={"openapi": ...}` where implemented.

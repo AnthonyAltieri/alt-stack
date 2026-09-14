@@ -79,6 +79,13 @@ def schema_to_type_expr(
 
     render_context = context or RenderContext()
 
+    # OpenAPI 3.1 spells "may be null" three ways; all of them render as Optional[...].
+    if schema.get("type") == "null":
+        return "None"
+    without_null = strip_null_member(schema)
+    if without_null is not None:
+        return f"Optional[{schema_to_type_expr(without_null, context=render_context)}]"
+
     if isinstance(schema.get("$ref"), str):
         ref = schema["$ref"]
         if not ref.startswith("#/components/schemas/"):
@@ -146,6 +153,52 @@ def wrap_nullable(expr: str, schema: dict[str, Any]) -> str:
     if schema.get("nullable") is True:
         return f"Optional[{expr}]"
     return expr
+
+
+def _is_null_schema(schema: Any) -> bool:
+    return isinstance(schema, dict) and schema.get("type") == "null" and len(schema) <= 2
+
+
+def strip_null_member(schema: dict[str, Any]) -> dict[str, Any] | None:
+    """Return the schema without its null alternative, or None when it has none.
+
+    Handles ``type: ["string", "null"]`` and ``anyOf``/``oneOf`` compositions that include a
+    ``{"type": "null"}`` member. A composition left with one member collapses to that member so
+    the caller renders ``Optional[Member]`` rather than ``Optional[Union[Member]]``.
+    """
+    type_value = schema.get("type")
+    if isinstance(type_value, list) and "null" in type_value:
+        remaining = [item for item in type_value if item != "null"]
+        stripped = dict(schema)
+        if len(remaining) == 1:
+            stripped["type"] = remaining[0]
+        else:
+            stripped.pop("type")
+            stripped["anyOf"] = [{"type": item} for item in remaining]
+        return stripped
+    for keyword in ("anyOf", "oneOf"):
+        members = schema.get(keyword)
+        if isinstance(members, list) and any(_is_null_schema(member) for member in members):
+            remaining = [member for member in members if not _is_null_schema(member)]
+            stripped = {key: value for key, value in schema.items() if key != keyword}
+            if len(remaining) == 1 and isinstance(remaining[0], dict):
+                merged = dict(remaining[0])
+                for key in ("description", "title", "default"):
+                    if key in stripped and key not in merged:
+                        merged[key] = stripped[key]
+                return merged
+            stripped[keyword] = remaining
+            return stripped
+    return None
+
+
+def is_nullable_schema(schema: Any) -> bool:
+    """True when the schema admits null: ``nullable: true``, ``type: "null"``, or a null member."""
+    if not isinstance(schema, dict):
+        return False
+    if schema.get("nullable") is True or schema.get("type") == "null":
+        return True
+    return strip_null_member(schema) is not None
 
 
 def registered_output_alias(schema: AnySchema, context: RenderContext | None = None) -> str | None:
