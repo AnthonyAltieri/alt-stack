@@ -69,6 +69,10 @@ Returns a Zod expression as text. It does not evaluate or import Zod.
 | `oneOf` | `z.union([...])` |
 | `allOf` | nested two-argument `z.intersection(...)` |
 | string enum | `z.enum([...])` |
+| numeric enum | `z.union([z.literal(1), z.literal(2)])` (one value: the literal alone) |
+| `const` | `z.literal(value)` (`const: null` is `z.null()`) |
+| `type: "null"` | `z.null()` |
+| `anyOf` | `z.union([...])` like `oneOf`; a single member is returned as itself |
 | string | `z.string()` plus supported format/length/pattern modifiers |
 | number | `z.number()` plus min/max |
 | integer | `z.number().int()` plus min/max |
@@ -82,7 +86,7 @@ Returns a Zod expression as text. It does not evaluate or import Zod.
 
 Built-in modifiers are `email -> .email()`, `url`/`uri -> .url()`, `uuid -> .uuid()`, `date -> .date()`, `date-time -> .datetime()`, and `color-hex -> a six-digit regex`. `iso-date`, `iso-date-time`, `objectid`, and unknown formats retain a plain string unless registered. Format and explicit pattern metadata are also stored through `.meta({ openapi: ... })` for round-tripping.
 
-Current input constraints matter: `anyOf` is recognized by `schemaToTypeString` but not by this Zod converter; schema component names must form valid TypeScript identifiers; enum strings and regular-expression patterns are interpolated into generated literals without general source escaping. Validate or constrain schema names and literal contents before generation.
+Current input constraints matter: schema component names must form valid TypeScript identifiers; enum strings and regular-expression patterns are interpolated into generated literals without general source escaping. Validate or constrain schema names and literal contents before generation.
 
 ## Type rendering
 
@@ -92,7 +96,7 @@ Current input constraints matter: `anyOf` is recognized by `schemaToTypeString` 
 function schemaToTypeString(schema: AnySchema, options?: { outputSchemaNames?: Set<string> }): string;
 ```
 
-Returns a TypeScript type expression. It supports local `$ref` values (URI-decoded), `oneOf`, `anyOf`, `allOf`, string and numeric enums, primitives, arrays, object properties, typed/untyped additional properties, and `nullable`. Unknown shapes become `unknown`. Registered custom types render as a generated `z.output<typeof Name>` alias when an `outputSchemaNames` set is supplied.
+Returns a TypeScript type expression. It supports local `$ref` values (URI-decoded), `oneOf`, `anyOf`, `allOf`, `const` (rendered as a literal type), string and numeric enums, primitives, arrays, object properties, typed/untyped additional properties, and `nullable`. Unknown shapes become `unknown`. Registered custom types render as a generated `z.output<typeof Name>` alias when an `outputSchemaNames` set is supplied.
 
 ### `generateInterface`
 

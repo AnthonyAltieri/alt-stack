@@ -105,6 +105,12 @@ export function schemaToTypeString(
 
   let result: string = "unknown";
 
+  // A fixed value (OpenAPI 3.1 `const`) is a literal type; the Zod emitter renders the same value.
+  if ("const" in schema) {
+    const literal = JSON.stringify(schema["const"]);
+    return schema["nullable"] === true && schema["const"] !== null ? `(${literal} | null)` : literal;
+  }
+
   // Handle oneOf (union)
   if ("oneOf" in schema && Array.isArray(schema["oneOf"])) {
     const unionMembers = (schema["oneOf"] as AnySchema[]).map((s) =>

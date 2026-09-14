@@ -16,6 +16,40 @@ describe("convertSchemaToZodString", () => {
     clearZodSchemaToOpenApiSchemaRegistry();
   });
 
+  describe("OpenAPI 3.1 shapes", () => {
+    it("converts anyOf like oneOf", () => {
+      expect(convertSchemaToZodString({ anyOf: [{ type: "string" }, { type: "number" }] })).toBe(
+        "z.union([z.string(), z.number()])",
+      );
+    });
+
+    it("converts a nullable anyOf member to z.null()", () => {
+      expect(convertSchemaToZodString({ anyOf: [{ type: "string" }, { type: "null" }] })).toBe(
+        "z.union([z.string(), z.null()])",
+      );
+    });
+
+    it("returns a single-member composition as the member itself", () => {
+      expect(convertSchemaToZodString({ anyOf: [{ type: "integer" }] })).toBe("z.number().int()");
+      expect(convertSchemaToZodString({ oneOf: [{ type: "string" }] })).toBe("z.string()");
+    });
+
+    it("converts const to a literal", () => {
+      expect(convertSchemaToZodString({ type: "string", const: "plaintext" })).toBe('z.literal("plaintext")');
+      expect(convertSchemaToZodString({ type: "integer", const: 1 })).toBe("z.literal(1)");
+      expect(convertSchemaToZodString({ type: "boolean", const: true })).toBe("z.literal(true)");
+      expect(convertSchemaToZodString({ const: null })).toBe("z.null()");
+      expect(convertSchemaToZodString({ type: "string", const: "a", nullable: true })).toBe(
+        'z.literal("a").nullable()',
+      );
+    });
+
+    it("converts a numeric enum to a literal union", () => {
+      expect(convertSchemaToZodString({ type: "integer", enum: [1, 2] })).toBe("z.union([z.literal(1), z.literal(2)])");
+      expect(convertSchemaToZodString({ type: "number", enum: [0.5] })).toBe("z.literal(0.5)");
+    });
+  });
+
   describe("basic types", () => {
     it("should convert string schema", () => {
       const result = convertSchemaToZodString({ type: "string" });
@@ -253,7 +287,8 @@ describe("convertSchemaToZodString", () => {
         type: "string",
         oneOf: [{ type: "number" }],
       });
-      expect(result).toBe("z.union([z.number()])");
+      // A single-member oneOf still wins over `type`, and is emitted as the member itself.
+      expect(result).toBe("z.number()");
     });
 
     it("should prioritize allOf over type", () => {

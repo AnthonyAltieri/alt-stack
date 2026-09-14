@@ -10,6 +10,18 @@ describe("convertOpenAPIUnionToZod", () => {
     return "z.unknown()";
   };
 
+  describe("anyOf and single members", () => {
+    it("accepts anyOf like oneOf", () => {
+      expect(
+        convertOpenAPIUnionToZod({ anyOf: [{ type: "string" }, { type: "number" }] }, mockConvertSchema),
+      ).toBe("z.union([z.string(), z.number()])");
+    });
+
+    it("returns a single member unwrapped", () => {
+      expect(convertOpenAPIUnionToZod({ oneOf: [{ type: "string" }] }, mockConvertSchema)).toBe("z.string()");
+    });
+  });
+
   describe("union with two types", () => {
     it("should convert union of string and number", () => {
       const result = convertOpenAPIUnionToZod(
@@ -78,7 +90,8 @@ describe("convertOpenAPIUnionToZod", () => {
         },
         mockConvertSchema,
       );
-      expect(result).toBe("z.union([z.string()])");
+      // z.union needs at least two options, so a single member is emitted as itself.
+      expect(result).toBe("z.string()");
     });
   });
 
@@ -112,7 +125,8 @@ describe("convertOpenAPIUnionToZod", () => {
         },
         mockConvertSchema,
       );
-      expect(result).toBe("z.union([])");
+      // An empty composition has no members to validate against.
+      expect(result).toBe("z.unknown()");
     });
 
     it("should preserve order of union members", () => {

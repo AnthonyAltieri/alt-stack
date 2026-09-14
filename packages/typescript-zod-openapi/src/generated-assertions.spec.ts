@@ -101,7 +101,52 @@ const typedRecordFixture = {
   },
 };
 
+const openApi31Fixture = {
+  components: {
+    schemas: {
+      Envelope: {
+        oneOf: [
+          { $ref: "#/components/schemas/Plaintext" },
+          { $ref: "#/components/schemas/Encrypted" },
+        ],
+        discriminator: { propertyName: "mode" },
+      },
+      Plaintext: {
+        type: "object",
+        properties: {
+          mode: { type: "string", const: "plaintext" },
+          v: { type: "integer", const: 1 },
+          note: { anyOf: [{ type: "string" }, { type: "null" }] },
+          retries: { anyOf: [{ type: "integer" }, { type: "null" }] },
+        },
+        required: ["mode", "v", "note"],
+        additionalProperties: false,
+      },
+      Encrypted: {
+        type: "object",
+        properties: {
+          mode: { type: "string", const: "kms" },
+          v: { type: "integer", const: 1 },
+          ct: { type: "string" },
+        },
+        required: ["mode", "v", "ct"],
+        additionalProperties: false,
+      },
+    },
+  },
+};
+
 describe("generated schema/type assertions", () => {
+  it("compiles OpenAPI 3.1 nullable anyOf members and const discriminators", () => {
+    const code = openApiToZodTsCode(openApi31Fixture);
+
+    expect(code).toContain('mode: "plaintext";');
+    expect(code).toContain("note: (string | null);");
+    expect(code).toContain('mode: z.literal("plaintext")');
+    expect(code).toContain("note: z.union([z.string(), z.null()])");
+    expect(formatDiagnostics(compileGeneratedCode(code))).toBe("");
+  });
+
   it("compiles top-level and nested optional outputs with exact optional property types", () => {
     const code = openApiToZodTsCode(optionalPropertyFixture);
 
