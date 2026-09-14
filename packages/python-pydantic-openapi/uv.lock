@@ -24,7 +24,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "alt-stack-openapi-pydantic"
-version = "1.6.3"
+version = "1.6.4"
 source = { editable = "." }
 dependencies = [
     { name = "pydantic", extra = ["email"] },

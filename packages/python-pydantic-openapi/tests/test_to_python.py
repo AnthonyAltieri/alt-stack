@@ -292,6 +292,43 @@ def test_optional_non_nullable_fields_reject_explicit_none() -> None:
     module.Item.model_validate({"description": None})
 
 
+def test_optional_null_member_fields_accept_explicit_none() -> None:
+    openapi = {
+        "components": {
+            "schemas": {
+                "Bundle": {
+                    "type": "object",
+                    "properties": {
+                        "access_token": {"type": "string"},
+                        "refresh_token": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                        "expires_in": {"type": ["integer", "null"]},
+                        "scope": {"type": "string"},
+                    },
+                    "required": ["access_token"],
+                    "additionalProperties": False,
+                }
+            }
+        }
+    }
+
+    code = openapi_to_pydantic_code(openapi)
+    assert "refresh_token: Optional[Annotated[str, Field(strict=True)]] = None" in code
+    assert "expires_in: Optional[Annotated[int, Field(strict=True)]] = None" in code
+    assert (
+        "scope: Annotated[Optional[Annotated[str, Field(strict=True)]], _omit_not_null] = None"
+        in code
+    )
+
+    module = _load_module(code)
+    bundle = module.Bundle.model_validate(
+        {"access_token": "a", "refresh_token": None, "expires_in": None}
+    )
+    assert bundle.refresh_token is None and bundle.expires_in is None
+    assert module.Bundle.model_validate({"access_token": "a"}).refresh_token is None
+    with pytest.raises(ValidationError):
+        module.Bundle.model_validate({"access_token": "a", "scope": None})
+
+
 def test_allof_wrapper_around_root_model_imports() -> None:
     openapi = {
         "components": {
