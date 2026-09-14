@@ -23,11 +23,22 @@ export function convertSchemaToZodString(schema: AnySchema): string {
     return isNullable ? `${result}.nullable()` : result;
   }
 
+  // A fixed value (OpenAPI 3.1 `const`) is a literal; the interface emitter renders the same value.
+  if ("const" in schema) {
+    const literal = schema["const"] === null ? "z.null()" : `z.literal(${JSON.stringify(schema["const"])})`;
+    return isNullable && schema["const"] !== null ? `${literal}.nullable()` : literal;
+  }
+
   let result: string = "z.unknown()";
 
   if ("oneOf" in schema && Array.isArray(schema["oneOf"])) {
     result = convertOpenAPIUnionToZod(
       schema as { oneOf: AnySchema[] },
+      convertSchemaToZodString,
+    );
+  } else if ("anyOf" in schema && Array.isArray(schema["anyOf"])) {
+    result = convertOpenAPIUnionToZod(
+      schema as { anyOf: AnySchema[] },
       convertSchemaToZodString,
     );
   } else if ("allOf" in schema && Array.isArray(schema["allOf"])) {
@@ -49,6 +60,7 @@ export function convertSchemaToZodString(schema: AnySchema): string {
         break;
       case "number":
         result = convertOpenAPINumberToZod({
+          enum: schema["enum"],
           maximum: schema["maximum"],
           minimum: schema["minimum"],
           type: "number",
@@ -56,6 +68,7 @@ export function convertSchemaToZodString(schema: AnySchema): string {
         break;
       case "integer":
         result = convertOpenAPINumberToZod({
+          enum: schema["enum"],
           maximum: schema["maximum"],
           minimum: schema["minimum"],
           type: "integer",
@@ -63,6 +76,9 @@ export function convertSchemaToZodString(schema: AnySchema): string {
         break;
       case "boolean":
         result = convertOpenAPIBooleanToZod({ type: "boolean" });
+        break;
+      case "null":
+        result = "z.null()";
         break;
       case "array":
         result = convertOpenAPIArrayToZod(

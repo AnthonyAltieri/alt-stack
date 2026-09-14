@@ -46,6 +46,16 @@ describe("schemaToTypeString", () => {
     });
   });
 
+  describe("const", () => {
+    it("renders a fixed value as a literal type", () => {
+      expect(schemaToTypeString({ type: "string", const: "plaintext" })).toBe('"plaintext"');
+      expect(schemaToTypeString({ type: "integer", const: 1 })).toBe("1");
+      expect(schemaToTypeString({ type: "boolean", const: false })).toBe("false");
+      expect(schemaToTypeString({ const: null })).toBe("null");
+      expect(schemaToTypeString({ type: "string", const: "a", nullable: true })).toBe('("a" | null)');
+    });
+  });
+
   describe("string enums", () => {
     it("should convert string enum", () => {
       const result = schemaToTypeString({
