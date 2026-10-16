@@ -5,6 +5,7 @@ from typing import Any
 
 from .brands import newtype_base, prepare_brand_schemas
 from .dependencies import topological_sort_schemas
+from .identifiers import component_identifiers, field_identifiers
 from .lowering import LoweringContext, NamedSchema, lower_named_schema
 from .rendering import (
     RenderContext,
@@ -34,8 +35,6 @@ from .schema_dedup import (
 )
 from .types import AnySchema
 
-_VALID_IDENTIFIER_CHARS = set("_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-
 
 @dataclass(slots=True)
 class EmissionState:
@@ -60,16 +59,19 @@ def openapi_to_pydantic_code(
         schemas, routes, schema_to_type_expr, is_object_model_schema
     )
 
-    lowering_context = LoweringContext(set(schemas.keys()))
+    component_names = component_identifiers(schemas)
+    lowering_context = LoweringContext(set(component_names.values()))
     lowered_components: list[NamedSchema] = []
     for name in topological_sort_schemas(schemas):
         schema = schemas.get(name)
         if schema is None:
             continue
-        lowered_components.extend(lower_named_schema(lowering_context, name, schema))
+        lowered_components.extend(
+            lower_named_schema(lowering_context, component_names[name], schema)
+        )
 
     lines = _build_module_preamble(custom_import_lines)
-    state = EmissionState()
+    state = EmissionState(render_context=RenderContext(component_names=component_names))
     registry = create_schema_registry()
 
     for named_schema in lowered_components:
@@ -96,7 +98,11 @@ def openapi_to_pydantic_code(
             lines.extend(_emit_model_rebuilds(state.rebuild_names))
             if route_lines:
                 lines.append("")
-            lines.extend(_generate_request_response_objects(routes, schema_name_to_canonical))
+            lines.extend(
+                _generate_request_response_objects(
+                    routes, schema_name_to_canonical, state.render_context
+                )
+            )
             return _finalize_module(lines, state)
 
     lines.extend(_emit_model_rebuilds(state.rebuild_names))
@@ -188,7 +194,7 @@ def _has_root_model_allof_base(schema: AnySchema, state: EmissionState) -> bool:
     return any(
         isinstance(part, dict)
         and isinstance(part.get("$ref"), str)
-        and decode_component_ref(part["$ref"]) in state.render_context.root_model_names
+        and state.render_context.resolve_ref(part["$ref"]) in state.render_context.root_model_names
         for part in all_of
     )
 
@@ -196,7 +202,7 @@ def _has_root_model_allof_base(schema: AnySchema, state: EmissionState) -> bool:
 def _emit_object_model(name: str, schema: AnySchema, state: EmissionState) -> list[str]:
     all_of = schema.get("allOf") if isinstance(schema, dict) else None
     if isinstance(all_of, list):
-        base_classes, merged_schema = _merge_allof_object_schema(all_of)
+        base_classes, merged_schema = _merge_allof_object_schema(all_of, state.render_context)
         model_lines = _build_model_lines(
             name, merged_schema, context=state.render_context, base_classes=base_classes or None
         )
@@ -219,7 +225,9 @@ def _emit_root_model(name: str, schema: AnySchema, state: EmissionState) -> list
     ]
 
 
-def _merge_allof_object_schema(all_of: list[Any]) -> tuple[list[str], dict[str, Any]]:
+def _merge_allof_object_schema(
+    all_of: list[Any], context: RenderContext
+) -> tuple[list[str], dict[str, Any]]:
     base_classes: list[str] = []
     inline_properties: dict[str, Any] = {}
     inline_required: list[str] = []
@@ -229,7 +237,7 @@ def _merge_allof_object_schema(all_of: list[Any]) -> tuple[list[str], dict[str, 
         if not isinstance(part, dict):
             continue
         if isinstance(part.get("$ref"), str):
-            base_classes.append(decode_component_ref(part["$ref"]))
+            base_classes.append(context.resolve_ref(part["$ref"]))
             continue
 
         if part.get("type") == "object" or "properties" in part:
@@ -275,23 +283,25 @@ def _build_model_lines(
 
     alias_used = False
     field_lines: list[str] = []
-    used_names: set[str] = set()
 
     if isinstance(properties, dict):
+        attr_names = field_identifiers(properties)
         for prop_name, prop_schema in properties.items():
-            attr_name = _dedupe_name(_sanitize_identifier(prop_name), used_names)
+            attr_name = attr_names[prop_name]
             alias = prop_name if attr_name != prop_name else None
-            if alias:
+            if alias is not None:
                 alias_used = True
 
             type_expr = schema_to_type_expr(prop_schema, context=context)
             is_required = prop_name in required
             if is_required:
-                default_expr = f" = Field(alias={alias!r})" if alias else ""
+                default_expr = f" = Field(alias={alias!r})" if alias is not None else ""
             else:
                 if not is_nullable_schema(prop_schema):
                     type_expr = f"Annotated[Optional[{type_expr}], _omit_not_null]"
-                default_expr = f" = Field(default=None, alias={alias!r})" if alias else " = None"
+                default_expr = (
+                    f" = Field(default=None, alias={alias!r})" if alias is not None else " = None"
+                )
 
             field_lines.append(f"    {attr_name}: {type_expr}{default_expr}")
 
@@ -361,7 +371,7 @@ def _emit_route_schemas(
         )
 
     def register_route_schema(name: str, schema: AnySchema) -> None:
-        if _route_schema_ref_target(schema):
+        if _route_schema_ref_target(schema, state.render_context):
             return
         register_named_schema_batch(lower_named_schema(lowering_context, name, schema))
 
@@ -446,12 +456,13 @@ RouteMap = dict[str, dict[str, dict[str, str]]]
 def _generate_request_response_objects(
     routes: list[RouteInfo],
     schema_name_to_canonical: dict[str, str],
+    context: RenderContext,
 ) -> list[str]:
     request_paths: RouteMap = {}
     response_paths: RouteMap = {}
 
     def resolve_schema_name(name: str, schema: AnySchema) -> str:
-        ref_target = _route_schema_ref_target(schema)
+        ref_target = _route_schema_ref_target(schema, context)
         if ref_target:
             return ref_target
         return schema_name_to_canonical.get(name, name)
@@ -692,7 +703,7 @@ def _build_openapi_object_schema(params: list[dict[str, Any]]) -> dict[str, Any]
     }
 
 
-def _route_schema_ref_target(schema: AnySchema) -> str | None:
+def _route_schema_ref_target(schema: AnySchema, context: RenderContext) -> str | None:
     if not isinstance(schema, dict):
         return None
     ref = schema.get("$ref")
@@ -700,7 +711,7 @@ def _route_schema_ref_target(schema: AnySchema) -> str | None:
         return None
     if set(schema.keys()) != {"$ref"}:
         return None
-    return decode_component_ref(ref)
+    return context.resolve_ref(ref)
 
 
 def _rewrite_schema_refs(schema: AnySchema, aliases: dict[str, str]) -> AnySchema:
@@ -725,15 +736,6 @@ def _rewrite_schema_refs(schema: AnySchema, aliases: dict[str, str]) -> AnySchem
             ]
 
     return rewritten
-
-
-def _sanitize_identifier(name: str) -> str:
-    result = "".join(ch if ch in _VALID_IDENTIFIER_CHARS else "_" for ch in name)
-    if result and result[0].isupper() and result[1:].islower():
-        result = result[0].lower() + result[1:]
-    if not result or result[0].isdigit():
-        result = f"_{result}"
-    return f"{result}_" if result in {"class", "from", "global", "pass"} else result
 
 
 def _dedupe_name(name: str, used: set[str]) -> str:

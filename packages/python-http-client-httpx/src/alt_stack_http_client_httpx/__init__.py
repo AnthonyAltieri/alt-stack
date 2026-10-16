@@ -621,6 +621,8 @@ def _build_query_string(query: Mapping[str, Any]) -> str:
         if isinstance(value, (list, tuple)):
             pairs.extend((key, _to_wire_string(item)) for item in value if item is not None)
         else:
+            if isinstance(value, float) and value.is_integer():
+                value = int(value)
             pairs.append((key, _to_wire_string(value)))
     encoded = urlencode(pairs)
     return f"?{encoded}" if encoded else ""

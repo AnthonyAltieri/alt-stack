@@ -188,6 +188,46 @@ def test_path_params_are_url_encoded() -> None:
     assert transport.requests[0].url == "https://api.example.test/files/a%2Fb%20c"
 
 
+def test_integral_query_floats_preserve_other_values_and_json_bodies() -> None:
+    class NumberQuery(BaseModel):
+        limit: float
+        offset: float
+        active: bool
+        label: str
+        values: list[float | bool | str | None]
+        omitted: float | None = None
+
+    transport = FakeTransport(_ok(204, None))
+    client = BaseApiClient(
+        "https://api.example.test",
+        transport=transport,
+        request_map={ITEMS_PATH: {"POST": {"query": NumberQuery}}},
+        response_map={},
+    )
+    run(
+        client.request(
+            "POST",
+            ITEMS_PATH,
+            query={
+                "limit": 10.0,
+                "offset": 2.5,
+                "active": True,
+                "label": "10.0",
+                "values": [10.0, 2.5, True, "10.0", None],
+                "omitted": None,
+            },
+            body={"limit": 10.0},
+        )
+    )
+
+    sent = transport.requests[0]
+    assert sent.url == (
+        "https://api.example.test/items?limit=10&offset=2.5&active=true&label=10.0"
+        "&values=10.0&values=2.5&values=true&values=10.0"
+    )
+    assert sent.body == '{"limit": 10.0}'
+
+
 def test_post_validates_and_serializes_body_by_alias() -> None:
     transport = FakeTransport(
         _ok(201, {"id": ITEM_ID, "name": "widget"}),

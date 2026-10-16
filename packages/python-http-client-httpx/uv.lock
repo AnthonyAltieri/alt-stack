@@ -4,7 +4,7 @@ requires-python = ">=3.11"
 
 [[package]]
 name = "alt-stack-http-client-httpx"
-version = "1.6.2"
+version = "1.7.1"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },

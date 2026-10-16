@@ -77,12 +77,26 @@ Python requires a class as a `NewType` base. Literal brands use their primitive
 base; composite unions use `object` with the original Pydantic validator retained
 in `Annotated` metadata.
 
+## Identifiers and wire names
+
+Component names become Python identifiers: `Rule-Output` becomes `Rule_Output`,
+leading digits gain an underscore, and Python keywords gain a trailing underscore.
+Names that normalize to the same identifier cause a generation error with both
+original names. References and route maps use the generated identifiers.
+
+Underscore properties become public fields with aliases: `_id` becomes `id_`.
+Invalid property characters and Python keywords are also handled, with numeric
+suffixes where needed to avoid field collisions. Validate with the original wire
+names and use `model_dump(by_alias=True)` or `model_dump_json(by_alias=True)` to
+serialize them. The HTTP client serializes aliases automatically.
+
 ## Development
 
 ```bash
-uv run --project packages/python-pydantic-openapi --extra dev pytest packages/python-pydantic-openapi/tests
-uv run --project packages/python-pydantic-openapi --extra dev ruff check packages/python-pydantic-openapi
-uv run --project packages/python-pydantic-openapi --extra dev ty check packages/python-pydantic-openapi
+uv sync --project packages/python-pydantic-openapi --extra dev
+packages/python-pydantic-openapi/.venv/bin/pytest packages/python-pydantic-openapi/tests -q
+packages/python-pydantic-openapi/.venv/bin/ruff check packages/python-pydantic-openapi
+packages/python-pydantic-openapi/.venv/bin/ty check packages/python-pydantic-openapi
 ```
 
 ## Documentation

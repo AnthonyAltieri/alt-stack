@@ -10,6 +10,12 @@ import document from "@alt-stack/openapi-test-spec/openapi.json";
 
 The OpenAPI 3.0 document covers primitives, formats, constraints, arrays, objects, nullable/reference shapes, `oneOf`, `allOf`, route parameters/bodies/responses, and repeated error schemas. `x-altstack-examples.valid` and `.invalid` values drive test assertions; the extension is not a public generator option.
 
+`python-identifiers.json` is a companion OpenAPI 3.1 fixture for hyphenated component
+names and underscore properties. The Python master conformance test checks its
+validation, alias serialization, and schema round-trip. It is separate because the
+TypeScript generator currently requires identifier-safe component names; the shared
+document and its existing generated-output baselines stay unchanged.
+
 Run the language-specific conformance suites after changing the fixture:
 
 ```bash

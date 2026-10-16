@@ -1,6 +1,6 @@
 [project]
 name = "alt-stack-http-client-httpx"
-version = "1.6.2"
+version = "1.7.1"
 description = "Asyncio HTTP client for alt-stack generated Pydantic SDKs, backed by httpx"
 readme = "README.md"
 requires-python = ">=3.11"
