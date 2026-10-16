@@ -2,6 +2,8 @@ import type { HttpExecutor, ExecuteRequest, ExecuteResponse } from "@alt-stack/h
 import { TimeoutError, UnexpectedApiClientError } from "@alt-stack/http-client-core";
 
 export interface FetchExecutorOptions {
+  /** Fetch implementation. Defaults to globalThis.fetch at execution time. */
+  fetch?: typeof globalThis.fetch;
   /**
    * Additional fetch options to pass to every request.
    * These are merged with the request-specific options.
@@ -54,6 +56,7 @@ export class FetchExecutor implements HttpExecutor<Response> {
         fetchOptions.body = request.body;
       }
 
+      const fetch = this.options.fetch ?? globalThis.fetch;
       const response = await fetch(request.url, fetchOptions);
       const data = await parseResponseData(response);
 

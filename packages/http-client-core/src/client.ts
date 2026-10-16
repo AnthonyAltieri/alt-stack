@@ -27,7 +27,8 @@ export interface ApiClientOptions<
   TRawResponse = unknown,
 > extends ApiClientLoggingOptions {
   baseUrl: string;
-  headers?: Record<string, unknown>;
+  /** Client defaults, resolved once per attempt before request headers are applied. */
+  headers?: Record<string, unknown> | (() => Record<string, unknown> | Promise<Record<string, unknown>>);
   Request: TRequest;
   Response: TResponse;
   /**
@@ -324,9 +325,6 @@ export class ApiClient<
     const queryString = buildQueryString(wireQuery);
     const url = `${this.options.baseUrl}${interpolatedPath}${queryString}`;
 
-    // Merge headers
-    const headers = buildHeaders(this.options.headers, requestHeaders);
-
     // Make request with retry logic
     let lastError: unknown;
     let lastResult: ExecuteResponse<TRawResponse> | undefined;
@@ -334,6 +332,19 @@ export class ApiClient<
 
     while (attempt <= retries) {
       try {
+        let clientHeaders = this.options.headers;
+        if (typeof clientHeaders === "function") {
+          try {
+            clientHeaders = await clientHeaders();
+          } catch {
+            // A previous response must not hide a failed provider on a later attempt.
+            lastResult = undefined;
+            // Provider errors may contain credentials; do not retain their message or cause.
+            throw new UnexpectedApiClientError("Header provider failed", undefined, endpoint, method);
+          }
+        }
+        const headers = buildHeaders(clientHeaders, requestHeaders);
+
         const result = await this.options.executor.execute({
           method,
           url,

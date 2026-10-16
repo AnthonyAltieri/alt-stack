@@ -33,6 +33,8 @@ const api = createApiClient({
 
 The executor forces `throwHttpErrors: false` so documented non-2xx responses become typed result values. Avoid combining Ky retries with core `retries` unless two retry layers are intentional.
 
+Client-level `headers` accepts a static record or a sync/async function returning a record, such as a provider that calls `getToken()` for an `Authorization` header. Core resolves it once per attempt before request headers overlay it; nullish entries are omitted. Provider failures throw a sanitized `UnexpectedApiClientError`. Only core retries re-evaluate the provider; Ky's internal retries reuse the resolved headers. See the [core API](../../apps/docs/docs/http-client/api/core.md) for details.
+
 ## Documentation
 
 - [Quickstart](../../apps/docs/docs/http-client/quickstart.md)

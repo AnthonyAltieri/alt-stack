@@ -34,7 +34,7 @@ The endpoint generic is restricted to routes that contain the selected uppercase
 | Property | Type | Meaning |
 | --- | --- | --- |
 | `baseUrl` | `string` | Prefix concatenated directly with the interpolated endpoint. A trailing slash plus a leading endpoint slash produces `//`. |
-| `headers` | `Record<string, unknown>?` | Client-wide headers. Non-null values are stringified. |
+| `headers` | `Record<string, unknown> \| (() => Record<string, unknown> \| Promise<Record<string, unknown>>)` (optional) | Static client headers or a provider evaluated once per attempt. |
 | `Request` | `TRequest` | Zod request-schema map keyed by endpoint and uppercase method. |
 | `Response` | `TResponse` | Zod response-schema map keyed by endpoint, uppercase method, and string status code. |
 | `onValidationError` | `ApiClientValidationErrorHandler<TRawResponse>?` | Observes Zod parse failures. Callback exceptions are swallowed. |
@@ -42,6 +42,16 @@ The endpoint generic is restricted to routes that contain the selected uppercase
 | `logger` | `Logger?` | Optional structured logging handlers. |
 
 `ApiClientLoggingOptions` is the reusable `{ logger?: Logger }` base interface.
+
+### Header providers
+
+Client `headers` can be a record or a zero-argument function returning a record or a `Promise` of one. A provider runs after request validation, once per attempt, including retries controlled by core. Its resolved headers are not cached between requests or attempts.
+
+Headers merge in order: `Content-Type: application/json`, client headers, then per-request headers. Non-nullish values are converted with `String`; `null` and `undefined` are skipped without removing an earlier value. Keys merge as ordinary case-sensitive object keys. Only records are supported; convert `Headers` or tuple lists to a record before supplying them.
+
+Provider throws and rejections enter the existing thrown-error retry path as `UnexpectedApiClientError("Header provider failed")`, with endpoint and method context. The original thrown value is discarded, including its message and cause, so it cannot expose credentials through the returned error, retry callbacks or internal logs. The failed attempt does not invoke the executor. The executor's `timeout` starts after headers resolve and does not bound provider execution.
+
+See [custom fetch and auth headers](../common-patterns.md#custom-fetch-and-auth-headers) for an example shared by the Fetch and Ky adapters. Ky's internal retries reuse resolved headers; use core `retries` to refresh a provider on retry.
 
 ## Request methods and `RequestOptions`
 
