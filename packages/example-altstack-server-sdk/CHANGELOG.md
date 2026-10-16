@@ -1,5 +1,7 @@
 # @alt-stack/example-altstack-server-sdk
 
+## 1.7.0
+
 ## 1.6.3
 
 ## 1.6.2

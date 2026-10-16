@@ -1,5 +1,11 @@
 # @alt-stack/kafka-core
 
+## 1.7.0
+
+### Patch Changes
+
+- @alt-stack/result@1.7.0
+
 ## 1.6.3
 
 ### Patch Changes

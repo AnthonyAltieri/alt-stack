@@ -1,6 +1,6 @@
 {
   "name": "@alt-stack/example-altstack-server-sdk",
-  "version": "1.6.3",
+  "version": "1.7.0",
   "description": "Auto-generated TypeScript SDK for altstack-server",
   "type": "module",
   "main": "./dist/index.js",
