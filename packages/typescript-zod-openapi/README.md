@@ -27,6 +27,24 @@ const source = openApiToZodTsCode(document, undefined, {
 
 Generated files begin with a do-not-edit banner. Change the OpenAPI source, registry/include files, or generator options and regenerate the whole file.
 
+## Branded types
+
+Add `x-altstack-brand` to an identity schema to give its output a nominal type:
+
+```json
+{ "type": "string", "format": "uuid", "x-altstack-brand": "UserId" }
+```
+
+The generator emits `z.string().uuid().brand<"UserId">()` and exports one shared
+`UserId` type, using the package's concrete type-alias convention. References,
+parameters, optional and nullable properties, array items, and union members retain
+the brand. Parse a value with its generated schema before assigning it to `UserId`.
+Branding adds no runtime validation beyond the underlying schema.
+
+Names must be ASCII identifiers (`[A-Za-z_][A-Za-z0-9_]*`) and must not be reserved
+words or collide with another component type. Reusing a name with incompatible
+base types produces a generation error. Each use keeps its own validation constraints.
+
 ## Documentation
 
 - [Code generation Quickstart](../../apps/docs/docs/codegen/quickstart.md)

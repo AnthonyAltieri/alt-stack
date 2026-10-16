@@ -12,7 +12,15 @@ from typing import Annotated, Any, Literal, Union, cast, get_args, get_origin
 from uuid import UUID
 
 import pytest
-from pydantic import AnyUrl, BaseModel, BeforeValidator, EmailStr, RootModel, ValidationError
+from pydantic import (
+    AnyUrl,
+    BaseModel,
+    BeforeValidator,
+    EmailStr,
+    JsonValue,
+    RootModel,
+    ValidationError,
+)
 from pydantic.fields import FieldInfo
 
 from alt_stack_openapi_pydantic.registry import clear_pydantic_schema_registry
@@ -33,7 +41,7 @@ def _strip_examples(value: Any) -> Any:
         for key, child in value.items():
             if key == "x-altstack-examples":
                 continue
-            result[key] = _strip_examples(child)
+            result["oneOf" if key == "anyOf" else key] = _strip_examples(child)
         return result
     return value
 
@@ -137,7 +145,12 @@ def _to_openapi_schema(
     schema: dict[str, Any]
 
     origin = get_origin(base)
-    if origin is Literal:
+    if hasattr(base, "__supertype__"):
+        schema = _to_openapi_schema(base.__supertype__, type_to_name, self_name=self_name)
+        schema["x-altstack-brand"] = base.__name__
+    elif base is JsonValue:
+        schema = {}
+    elif origin is Literal:
         values = list(get_args(base))
         schema = {"enum": values}
         if all(isinstance(v, str) for v in values):

@@ -388,7 +388,7 @@ describe("convertOpenAPIStringToZod", () => {
         format: "date-time",
       });
       expect(result).toBe(
-        `z.string().datetime().meta(${JSON.stringify({ openapi: { format: "date-time" } })})`,
+        `z.string().datetime({ offset: true }).meta(${JSON.stringify({ openapi: { format: "date-time" } })})`,
       );
     });
 

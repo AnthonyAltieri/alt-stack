@@ -15,7 +15,8 @@ import {
   type RouteInfo,
   type RouteParameter,
 } from "./routes";
-import { generateInterface, schemaExportNameToOutputAlias } from "./interface-generator";
+import { generateInterface, schemaExportNameToOutputAlias, schemaToTypeString } from "./interface-generator";
+import { collectBrands } from "./brands";
 
 const validIdentifierRegex = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/;
 
@@ -377,6 +378,20 @@ export const openApiToZodTsCode = (
   const typeAssertions: string[] = [];
   const outputSchemaNames = new Set<string>();
   const schemaBlocks: string[] = [];
+  const routes = options?.includeRoutes ? parseOpenApiPaths(openapi) : [];
+  const roots = [
+    ...Object.values(schemas),
+    ...routes.flatMap((route) => [
+      ...route.parameters.map((param) => param.schema),
+      ...(route.requestBody ? [route.requestBody] : []),
+      ...Object.values(route.responses).filter((schema): schema is AnySchema => !!schema),
+    ]),
+  ];
+  const brands = collectBrands({ schemas, roots, toType: (schema) => schemaToTypeString(schema, { outputSchemaNames }) });
+  for (const [name, baseType] of brands) {
+    schemaBlocks.push(`export type ${name} = (${baseType}) & z.$brand<${JSON.stringify(name)}>;`);
+  }
+  if (brands.size > 0) schemaBlocks.push("");
 
   for (const name of sortedSchemaNames) {
     const schema = schemas[name];
@@ -386,14 +401,17 @@ export const openApiToZodTsCode = (
       const typeName = name;
 
       // Generate interface (concrete type in .d.ts)
-      schemaBlocks.push(generateInterface(typeName, schema, { outputSchemaNames }));
+      if (!brands.has(typeName)) {
+        schemaBlocks.push(generateInterface(typeName, schema, { outputSchemaNames }));
+      }
 
       // Generate schema with ZodType<T> annotation (simple type in .d.ts)
       schemaBlocks.push(`export const ${schemaName} = ${zodExpr};`);
       schemaBlocks.push("");
 
       // Add type assertion to verify interface matches schema
-      typeAssertions.push(`type _Assert${typeName} = _AssertTrue<_AssertEqual<${typeName}, z.output<typeof ${schemaName}>>>;`);
+      const assertedType = brands.has(typeName) ? schemaToTypeString(schema, { outputSchemaNames }) : typeName;
+      typeAssertions.push(`type _Assert${typeName} = _AssertTrue<_AssertEqual<${assertedType}, z.output<typeof ${schemaName}>>>;`);
 
       // Register component schemas so they can be referenced by route schemas
       const fingerprint = getSchemaFingerprint(schema);
@@ -420,7 +438,6 @@ export const openApiToZodTsCode = (
   }
 
   if (options?.includeRoutes) {
-    const routes = parseOpenApiPaths(openapi);
     if (routes.length > 0) {
       // Find common schemas that appear multiple times (for error responses, etc.)
       const routeSchemaList = collectRouteSchemas(routes);

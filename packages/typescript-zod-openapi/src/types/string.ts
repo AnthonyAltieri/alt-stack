@@ -74,7 +74,7 @@ function getFormatModifier(format: string): string {
     case "date":
       return ".date()";
     case "date-time":
-      return ".datetime()";
+      return ".datetime({ offset: true })";
     case "color-hex":
       return ".regex(/^[a-fA-F0-9]{6}$/)";
     default:

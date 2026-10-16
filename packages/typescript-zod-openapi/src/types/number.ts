@@ -6,6 +6,8 @@ export function convertOpenAPINumberToZod(schema: {
   enum?: number[];
   minimum?: number;
   maximum?: number;
+  exclusiveMinimum?: number;
+  exclusiveMaximum?: number;
 }): string {
   // A numeric enum is a union of literals, mirroring the `1 | 2` the interface emitter renders.
   if (schema.enum && schema.enum.length > 0) {
@@ -22,5 +24,7 @@ export function convertOpenAPINumberToZod(schema: {
   if (typeof schema.maximum === "number") {
     result += `.max(${schema.maximum})`;
   }
+  if (typeof schema.exclusiveMinimum === "number") result += `.gt(${schema.exclusiveMinimum})`;
+  if (typeof schema.exclusiveMaximum === "number") result += `.lt(${schema.exclusiveMaximum})`;
   return result;
 }

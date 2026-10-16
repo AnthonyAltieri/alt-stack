@@ -37,8 +37,8 @@ describe("schemaToTypeString", () => {
       expect(schemaToTypeString({ type: "null" })).toBe("null");
     });
 
-    it("should return unknown for unknown schema", () => {
-      expect(schemaToTypeString({})).toBe("unknown");
+    it("should return a JSON type for an empty schema", () => {
+      expect(schemaToTypeString({})).toBe("z.core.util.JSONType");
     });
 
     it("should return unknown for null input", () => {
@@ -143,7 +143,7 @@ describe("schemaToTypeString", () => {
           required: ["id"],
         },
       });
-      expect(result).toBe("Array<{ id: string }>");
+      expect(result).toBe("Array<{ id: string; [key: string]: unknown }>");
     });
 
     it("should convert array without items", () => {
@@ -173,7 +173,7 @@ describe("schemaToTypeString", () => {
         },
         required: ["id", "name"],
       });
-      expect(result).toBe("{ id: string; name: string }");
+      expect(result).toBe("{ id: string; name: string; [key: string]: unknown }");
     });
 
     it("should convert object with optional properties", () => {
@@ -185,7 +185,7 @@ describe("schemaToTypeString", () => {
         },
         required: ["id"],
       });
-      expect(result).toBe("{ id: string; name?: string | undefined }");
+      expect(result).toBe("{ id: string; name?: string | undefined; [key: string]: unknown }");
     });
 
     it("should convert object without required array", () => {
@@ -195,7 +195,7 @@ describe("schemaToTypeString", () => {
           id: { type: "string" },
         },
       });
-      expect(result).toBe("{ id?: string | undefined }");
+      expect(result).toBe("{ id?: string | undefined; [key: string]: unknown }");
     });
 
     it("should convert empty object", () => {
@@ -238,7 +238,7 @@ describe("schemaToTypeString", () => {
         },
         required: ["Content-Type"],
       });
-      expect(result).toBe("{ 'Content-Type': string }");
+      expect(result).toBe("{ 'Content-Type': string; [key: string]: unknown }");
     });
   });
 
@@ -351,14 +351,14 @@ describe("schemaToTypeString", () => {
           { type: "object", properties: { b: { type: "number" } }, required: ["b"] },
         ],
       });
-      expect(result).toBe("({ a: string } & { b: number })");
+      expect(result).toBe("({ a: string; [key: string]: unknown } & { b: number; [key: string]: unknown })");
     });
 
     it("should handle single allOf", () => {
       const result = schemaToTypeString({
         allOf: [{ type: "object", properties: { a: { type: "string" } }, required: ["a"] }],
       });
-      expect(result).toBe("{ a: string }");
+      expect(result).toBe("{ a: string; [key: string]: unknown }");
     });
 
     it("should handle allOf with $ref", () => {
@@ -368,7 +368,7 @@ describe("schemaToTypeString", () => {
           { type: "object", properties: { extra: { type: "string" } }, required: ["extra"] },
         ],
       });
-      expect(result).toBe("(Base & { extra: string })");
+      expect(result).toBe("(Base & { extra: string; [key: string]: unknown })");
     });
   });
 });
@@ -386,6 +386,7 @@ describe("generateInterface", () => {
     expect(result).toBe(`export interface User {
   id: string;
   name: string;
+  [key: string]: unknown;
 }`);
   });
 
@@ -401,6 +402,7 @@ describe("generateInterface", () => {
     expect(result).toBe(`export interface User {
   id: string;
   email?: string | undefined;
+  [key: string]: unknown;
 }`);
   });
 

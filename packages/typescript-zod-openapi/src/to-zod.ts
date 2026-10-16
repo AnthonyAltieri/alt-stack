@@ -6,9 +6,17 @@ import { convertOpenAPIObjectToZod } from "./types/object";
 import { convertOpenAPIUnionToZod } from "./types/union";
 import { convertOpenAPIIntersectionToZod } from "./types/intersection";
 import type { AnySchema } from "./types/types";
+import { brandBaseSchema, getBrandName } from "./brands";
 
 export function convertSchemaToZodString(schema: AnySchema): string {
   if (!schema || typeof schema !== "object") return "z.unknown()";
+
+  const brand = getBrandName(schema);
+  if (brand) {
+    const base = convertSchemaToZodString(brandBaseSchema(schema));
+    const branded = `${base}.brand<${JSON.stringify(brand)}>().meta(${JSON.stringify({ "x-altstack-brand": brand })})`;
+    return schema["nullable"] === true ? `${branded}.nullable()` : branded;
+  }
 
   const isNullable = schema["nullable"] === true;
 
@@ -63,6 +71,8 @@ export function convertSchemaToZodString(schema: AnySchema): string {
           enum: schema["enum"],
           maximum: schema["maximum"],
           minimum: schema["minimum"],
+          exclusiveMinimum: schema["exclusiveMinimum"],
+          exclusiveMaximum: schema["exclusiveMaximum"],
           type: "number",
         });
         break;
@@ -71,6 +81,8 @@ export function convertSchemaToZodString(schema: AnySchema): string {
           enum: schema["enum"],
           maximum: schema["maximum"],
           minimum: schema["minimum"],
+          exclusiveMinimum: schema["exclusiveMinimum"],
+          exclusiveMaximum: schema["exclusiveMaximum"],
           type: "integer",
         });
         break;
@@ -114,7 +126,7 @@ export function convertSchemaToZodString(schema: AnySchema): string {
             convertSchemaToZodString,
           );
         } else {
-          result = "z.unknown()";
+          result = schema["type"] === undefined ? "z.json()" : "z.unknown()";
         }
         break;
     }
