@@ -1,5 +1,7 @@
 # @alt-stack/example-kafka-producer-sdk
 
+## 1.6.3
+
 ## 1.6.2
 
 ## 1.6.1

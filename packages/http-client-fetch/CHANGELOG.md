@@ -1,5 +1,11 @@
 # @alt-stack/http-client-fetch
 
+## 1.6.3
+
+### Patch Changes
+
+- @alt-stack/http-client-core@1.6.3
+
 ## 1.6.2
 
 ### Patch Changes
