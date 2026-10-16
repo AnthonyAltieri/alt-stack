@@ -26,12 +26,17 @@ Creates a `FetchExecutor`, then constructs the core `ApiClient`. `FetchApiClient
 | `baseUrl` | `string` | yes |
 | `Request` | `TRequest` | yes |
 | `Response` | `TResponse` | yes |
-| `headers` | `Record<string, unknown>` | no |
+| `headers` | `ApiClientOptions<TRequest, TResponse, Response>["headers"]` | no |
+| `fetch` | `typeof globalThis.fetch` | no |
 | `fetchOptions` | `FetchExecutorOptions["fetchOptions"]` | no |
 | `onValidationError` | `ApiClientValidationErrorHandler<Response>` | no |
 | `logger` | `Logger` | no |
 
 See the [core API](./core.md) for shared request, response, retry, validation, logging, and error behavior.
+
+`fetch` supplies a transport for proxies, React Native polyfills, instrumentation, or tests. The same implementation is used on every attempt, including retries. When omitted, `globalThis.fetch` is resolved at execution time, so installing or replacing a polyfill after client construction works. The selected function is invoked as `fetch(input, init)` without binding it to the client, executor, or options object.
+
+`headers` accepts a static record or a sync/async provider. Core evaluates a provider once per attempt before per-request headers overlay it. See the [custom fetch and auth headers pattern](../common-patterns.md#custom-fetch-and-auth-headers).
 
 ## `FetchExecutor`
 
@@ -42,10 +47,11 @@ class FetchExecutor implements HttpExecutor<Response> {
 }
 ```
 
-`FetchExecutorOptions` has one optional property:
+`FetchExecutorOptions` has two optional properties:
 
 ```typescript
 interface FetchExecutorOptions {
+  fetch?: typeof globalThis.fetch;
   fetchOptions?: Omit<RequestInit, "method" | "headers" | "body" | "signal">;
 }
 ```

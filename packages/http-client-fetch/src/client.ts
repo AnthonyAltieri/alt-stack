@@ -1,5 +1,6 @@
 import {
   ApiClient,
+  type ApiClientOptions,
   type ApiClientLoggingOptions,
   type ApiClientValidationErrorHandler,
   type ApiRequestSchema,
@@ -15,13 +16,15 @@ export interface FetchClientOptions<
   TResponse extends ApiResponseSchema,
 > extends ApiClientLoggingOptions {
   baseUrl: string;
-  headers?: Record<string, unknown>;
+  headers?: ApiClientOptions<TRequest, TResponse, Response>["headers"];
   Request: TRequest;
   Response: TResponse;
   /**
    * Called when Zod validation fails for request or response data.
    */
   onValidationError?: ApiClientValidationErrorHandler<Response>;
+  /** Fetch implementation. Defaults to globalThis.fetch at execution time. */
+  fetch?: typeof globalThis.fetch;
   /**
    * Additional fetch options to pass to every request.
    * Useful for credentials, cache, mode, etc.
@@ -66,7 +69,7 @@ export function createApiClient<
   TRequest extends ApiRequestSchema,
   TResponse extends ApiResponseSchema,
 >(options: FetchClientOptions<TRequest, TResponse>): FetchApiClient<TRequest, TResponse> {
-  const executor = new FetchExecutor({ fetchOptions: options.fetchOptions });
+  const executor = new FetchExecutor({ fetch: options.fetch, fetchOptions: options.fetchOptions });
 
   return new ApiClient({
     baseUrl: options.baseUrl,

@@ -118,6 +118,35 @@ Header values are converted with `String`; `undefined` and `null` are omitted. T
 
 The generated OpenAPI map can contain a `headers` schema, but the current `RequestOptions` and runtime validate only `params`, `query`, and `body`. Send HTTP headers through the top-level `headers` option.
 
+## Custom fetch and auth headers
+
+Supply a Fetch-compatible transport and resolve short-lived credentials at request time:
+
+```typescript
+import { createApiClient } from "@alt-stack/http-client-fetch";
+import { Request, Response } from "./generated-api.js";
+import { customFetch, getToken } from "./runtime.js";
+
+const api = createApiClient({
+  baseUrl: "https://api.example.test",
+  Request,
+  Response,
+  fetch: customFetch,
+  headers: async () => ({ Authorization: `Bearer ${await getToken()}` }),
+});
+
+await api.get("/users/{id}", {
+  params: { id: "u_1" },
+  headers: { "X-Request-Id": "request-123" },
+});
+```
+
+Here `customFetch` has type `typeof globalThis.fetch`; it can wrap instrumentation, a proxy, or a platform polyfill. Omit `fetch` to use the global implementation resolved at each attempt. The lower-level executor also accepts `new FetchExecutor({ fetch: customFetch })`.
+
+Client `headers` accepts a record, a synchronous provider, or an async provider. Providers run once per attempt, including core retries, before request headers overlay them. Nullish entries are omitted without deleting defaults. A provider failure throws `UnexpectedApiClientError` with the generic message `Header provider failed`; the original message and cause are discarded to avoid exposing credentials. Request timeouts cover transport execution after header resolution.
+
+Ky clients accept the same `headers` providers through core. To refresh tokens on retry, use core `retries`; retries inside Ky reuse the headers already resolved by core.
+
 ## Know the serialization rules
 
 - Path values replace the matching `{name}` with `String(value)`; they are not URL-encoded.

@@ -1,6 +1,7 @@
 import type { KyInstance, Options as KyOptions, KyResponse } from "ky";
 import {
   ApiClient,
+  type ApiClientOptions,
   type ApiClientLoggingOptions,
   type ApiClientValidationErrorHandler,
   type ApiRequestSchema,
@@ -16,7 +17,7 @@ export interface KyClientOptions<
   TResponse extends ApiResponseSchema,
 > extends ApiClientLoggingOptions {
   baseUrl: string;
-  headers?: Record<string, unknown>;
+  headers?: ApiClientOptions<TRequest, TResponse, KyResponse>["headers"];
   Request: TRequest;
   Response: TResponse;
   /**

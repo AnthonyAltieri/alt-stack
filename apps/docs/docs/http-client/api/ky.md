@@ -26,7 +26,7 @@ Creates a `KyExecutor`, then constructs the core `ApiClient`. `KyApiClient<TRequ
 | `baseUrl` | `string` | yes |
 | `Request` | `TRequest` | yes |
 | `Response` | `TResponse` | yes |
-| `headers` | `Record<string, unknown>` | no |
+| `headers` | `ApiClientOptions<TRequest, TResponse, KyResponse>["headers"]` | no |
 | `ky` | `KyInstance` | no |
 | `kyOptions` | `KyExecutorOptions["kyOptions"]` | no |
 | `onValidationError` | `ApiClientValidationErrorHandler<KyResponse>` | no |
