@@ -1,5 +1,11 @@
 # @alt-stack/kafka-client-kafkajs
 
+## 1.8.0
+
+### Patch Changes
+
+- @alt-stack/kafka-client-core@1.8.0
+
 ## 1.7.0
 
 ### Patch Changes
