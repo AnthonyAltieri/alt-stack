@@ -616,14 +616,13 @@ def _interpolate_path(endpoint: str, params: Mapping[str, Any]) -> str:
 def _build_query_string(query: Mapping[str, Any]) -> str:
     pairs: list[tuple[str, str]] = []
     for key, value in query.items():
-        if value is None:
-            continue
-        if isinstance(value, (list, tuple)):
-            pairs.extend((key, _to_wire_string(item)) for item in value if item is not None)
-        else:
-            if isinstance(value, float) and value.is_integer():
-                value = int(value)
-            pairs.append((key, _to_wire_string(value)))
+        values = value if isinstance(value, (list, tuple)) else (value,)
+        for item in values:
+            if item is None:
+                continue
+            if isinstance(item, float) and item.is_integer():
+                item = int(item)
+            pairs.append((key, _to_wire_string(item)))
     encoded = urlencode(pairs)
     return f"?{encoded}" if encoded else ""
 

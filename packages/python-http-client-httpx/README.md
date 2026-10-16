@@ -36,10 +36,10 @@ Importing `HttpxApiClient` from the generated module gives one typed method per 
 
 `BaseApiClient` sends through the `Transport` protocol, a single `async def send(request: HttpRequest) -> HttpResponse`. Implement it over any asyncio HTTP library and pass it to the generated `ApiClient(base_url, transport=..., request_map=Request, response_map=Response)`.
 
-Scalar query floats with an integral value use integer spelling (`10.0` becomes
-`limit=10`); fractional values keep their decimal spelling (`2.5`). Strings,
-booleans, repeated list values, omitted `None` values, and JSON bodies retain their
-existing encoding.
+Query floats with an integral value use integer spelling (`10.0` becomes
+`limit=10`), including repeated list and tuple values (`[0.0, -2.0]` becomes
+`ids=0&ids=-2`). Fractional values keep their decimal spelling (`2.5`). Strings,
+booleans, omitted `None` values, and JSON bodies retain their existing encoding.
 
 ## Development
 

@@ -223,9 +223,44 @@ def test_integral_query_floats_preserve_other_values_and_json_bodies() -> None:
     sent = transport.requests[0]
     assert sent.url == (
         "https://api.example.test/items?limit=10&offset=2.5&active=true&label=10.0"
-        "&values=10.0&values=2.5&values=true&values=10.0"
+        "&values=10&values=2.5&values=true&values=10.0"
     )
     assert sent.body == '{"limit": 10.0}'
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        pytest.param([0.0, -2.0, 10.0, 2.5, "-2.0", True, False, None], id="list"),
+        pytest.param((0.0, -2.0, 10.0, 2.5, "-2.0", True, False, None), id="tuple"),
+    ],
+)
+def test_repeated_query_numbers_preserve_other_encodings(
+    values: list[Any] | tuple[Any, ...],
+) -> None:
+    transport = FakeTransport(_ok(204, None))
+    client = BaseApiClient(
+        "https://api.example.test", transport=transport, request_map={}, response_map={}
+    )
+
+    run(
+        client.request(
+            "POST",
+            "/items/{version}",
+            params={"version": -2.0},
+            query={"ids": values, "limit": 10.0, "omitted": None},
+            body={"ids": values},
+            options=RequestOptions(headers={"X-Limit": 10.0}),
+        )
+    )
+
+    sent = transport.requests[0]
+    assert sent.url == (
+        "https://api.example.test/items/-2.0?ids=0&ids=-2&ids=10&ids=2.5&ids=-2.0"
+        "&ids=true&ids=false&limit=10"
+    )
+    assert sent.body == '{"ids": [0.0, -2.0, 10.0, 2.5, "-2.0", true, false, null]}'
+    assert sent.headers["X-Limit"] == "10.0"
 
 
 def test_post_validates_and_serializes_body_by_alias() -> None:
