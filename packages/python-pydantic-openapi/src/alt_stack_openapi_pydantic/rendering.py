@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import unquote
 
+from .brands import branded_annotation, get_brand_name
 from .registry import (
     get_schema_exported_variable_name_for_primitive_type,
     get_schema_exported_variable_name_for_string_format,
@@ -22,6 +23,7 @@ from .types.union import convert_openapi_union_to_pydantic
 @dataclass(slots=True)
 class RenderContext:
     root_model_names: set[str] = field(default_factory=set)
+    uses_json: bool = False
 
 
 def decode_component_ref(ref: str) -> str:
@@ -78,6 +80,17 @@ def schema_to_type_expr(
         return "Any"
 
     render_context = context or RenderContext()
+
+    brand_schema = schema.get("_altstack_brand_schema")
+    if isinstance(brand_schema, dict):
+        name = decode_component_ref(schema["$ref"])
+        expr = schema_to_type_expr(brand_schema, context=render_context)
+        return wrap_nullable(branded_annotation(name, expr), schema)
+    brand = get_brand_name(schema)
+    if brand:
+        base = {k: v for k, v in schema.items() if k not in {"x-altstack-brand", "nullable"}}
+        expr = schema_to_type_expr(base, context=render_context)
+        return wrap_nullable(branded_annotation(brand, expr), schema)
 
     # OpenAPI 3.1 spells "may be null" three ways; all of them render as Optional[...].
     if schema.get("type") == "null":
@@ -146,7 +159,10 @@ def schema_to_type_expr(
     if literal is not None:
         return wrap_nullable(literal, schema)
 
-    return wrap_nullable("Any", schema)
+    json_value = "Annotated[_JsonValue, BeforeValidator(_json_value.validate_python)]"
+    if schema_type is None:
+        render_context.uses_json = True
+    return wrap_nullable(json_value if schema_type is None else "Any", schema)
 
 
 def wrap_nullable(expr: str, schema: dict[str, Any]) -> str:
@@ -197,6 +213,11 @@ def is_nullable_schema(schema: Any) -> bool:
     if not isinstance(schema, dict):
         return False
     if schema.get("nullable") is True or schema.get("type") == "null":
+        return True
+    if not any(
+        key in schema
+        for key in ("type", "$ref", "properties", "enum", "const", "anyOf", "oneOf", "allOf")
+    ):
         return True
     return strip_null_member(schema) is not None
 

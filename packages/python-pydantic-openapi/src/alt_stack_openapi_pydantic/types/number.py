@@ -21,18 +21,28 @@ def convert_openapi_number_to_pydantic(schema: dict[str, Any]) -> str:
 
     minimum = schema.get("minimum")
     maximum = schema.get("maximum")
+    exclusive_minimum = schema.get("exclusiveMinimum")
+    exclusive_maximum = schema.get("exclusiveMaximum")
 
     field_args: list[str] = ["strict=True"]
     if isinstance(minimum, (int, float)):
         field_args.append(f"ge={integer_bound(minimum, base)}")
     if isinstance(maximum, (int, float)):
         field_args.append(f"le={integer_bound(maximum, base)}")
+    if type(exclusive_minimum) in (int, float):
+        field_args.append(f"gt={integer_bound(exclusive_minimum, base)}")
+    if type(exclusive_maximum) in (int, float):
+        field_args.append(f"lt={integer_bound(exclusive_maximum, base)}")
 
     meta: dict[str, Any] = {}
     if isinstance(minimum, (int, float)):
         meta["minimum"] = minimum
     if isinstance(maximum, (int, float)):
         meta["maximum"] = maximum
+    if type(exclusive_minimum) in (int, float):
+        meta["exclusiveMinimum"] = exclusive_minimum
+    if type(exclusive_maximum) in (int, float):
+        meta["exclusiveMaximum"] = exclusive_maximum
     if meta:
         field_args.append(format_openapi_metadata(meta))
 

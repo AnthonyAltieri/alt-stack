@@ -46,6 +46,31 @@ import { z } from 'zod';
 type _AssertEqual<T, U> = [T] extends [U] ? ([U] extends [T] ? true : false) : false;
 type _AssertTrue<T extends true> = T;
 
+export type UserId = (string) & z.$brand<"UserId">;
+
+export type BrandedUserId = UserId;
+export const BrandedUserIdSchema = z.string().uuid().meta({"openapi":{"format":"uuid"}}).brand<"UserId">().meta({"x-altstack-brand":"UserId"});
+
+export interface BrandedAccount {
+  id: UserId;
+  backupId?: (UserId | null) | undefined;
+  ids: Array<UserId>;
+  choice: (UserId | number);
+}
+export const BrandedAccountSchema = z.object({ id: z.string().uuid().meta({"openapi":{"format":"uuid"}}).brand<"UserId">().meta({"x-altstack-brand":"UserId"}), backupId: z.string().uuid().meta({"openapi":{"format":"uuid"}}).brand<"UserId">().meta({"x-altstack-brand":"UserId"}).nullable().optional(), ids: z.array(z.string().uuid().meta({"openapi":{"format":"uuid"}}).brand<"UserId">().meta({"x-altstack-brand":"UserId"})), choice: z.union([z.string().uuid().meta({"openapi":{"format":"uuid"}}).brand<"UserId">().meta({"x-altstack-brand":"UserId"}), z.number().int()]) }).strict();
+
+export type JsonValue = z.core.util.JSONType;
+export const JsonValueSchema = z.json();
+
+export type ExclusiveNumber = number;
+export const ExclusiveNumberSchema = z.number().min(-1).max(11).gt(0).lt(10);
+
+export interface OpenRecord {
+  name: string;
+  [key: string]: unknown;
+}
+export const OpenRecordSchema = z.object({ name: z.string() }).loose();
+
 export type ScalarString = string;
 export const ScalarStringSchema = z.string();
 
@@ -95,8 +120,9 @@ export interface ObjectOptionalAndNullable {
   name: string;
   nickname?: (string | null) | undefined;
   'x-rate-limit'?: number | undefined;
+  [key: string]: unknown;
 }
-export const ObjectOptionalAndNullableSchema = z.object({ name: z.string().min(1), nickname: z.string().nullable().optional(), 'x-rate-limit': z.number().int().min(0).optional() });
+export const ObjectOptionalAndNullableSchema = z.object({ name: z.string().min(1), nickname: z.string().nullable().optional(), 'x-rate-limit': z.number().int().min(0).optional() }).loose();
 
 export interface EmptyObjectStrict {
   [key: string]: never;
@@ -110,20 +136,23 @@ export const FreeformObjectSchema = z.record(z.string(), z.unknown());
 
 export interface Named {
   name: string;
+  [key: string]: unknown;
 }
-export const NamedSchema = z.object({ name: z.string().min(1) });
+export const NamedSchema = z.object({ name: z.string().min(1) }).loose();
 
 export interface Timestamped {
   createdAt: string;
   updatedAt?: (string | null) | undefined;
+  [key: string]: unknown;
 }
-export const TimestampedSchema = z.object({ createdAt: z.string().datetime().meta({"openapi":{"format":"date-time"}}), updatedAt: z.string().datetime().meta({"openapi":{"format":"date-time"}}).nullable().optional() });
+export const TimestampedSchema = z.object({ createdAt: z.string().datetime({ offset: true }).meta({"openapi":{"format":"date-time"}}), updatedAt: z.string().datetime({ offset: true }).meta({"openapi":{"format":"date-time"}}).nullable().optional() }).loose();
 
 export interface Audited {
   createdBy: string;
   updatedBy?: (string | null) | undefined;
+  [key: string]: unknown;
 }
-export const AuditedSchema = z.object({ createdBy: z.string().min(1), updatedBy: z.string().nullable().optional() });
+export const AuditedSchema = z.object({ createdBy: z.string().min(1), updatedBy: z.string().nullable().optional() }).loose();
 
 export interface Cat {
   kind: "cat";
@@ -171,8 +200,9 @@ export const ImplicitObjectSchema = z.object({ id: StringUuidSchema }).strict();
 export interface ObjectSimple {
   id: StringUuid;
   count?: IntegerMinMax | undefined;
+  [key: string]: unknown;
 }
-export const ObjectSimpleSchema = z.object({ id: StringUuidSchema, count: IntegerMinMaxSchema.optional() });
+export const ObjectSimpleSchema = z.object({ id: StringUuidSchema, count: IntegerMinMaxSchema.optional() }).loose();
 
 export type NamedTimestamped = (Named & Timestamped);
 export const NamedTimestampedSchema = z.intersection(NamedSchema, TimestampedSchema);
@@ -218,6 +248,11 @@ export type Event = (UserCreatedEvent | PetAdoptedEvent);
 export const EventSchema = z.union([UserCreatedEventSchema, PetAdoptedEventSchema]);
 
 // Compile-time type assertions - ensure interfaces match schemas
+type _AssertBrandedUserId = _AssertTrue<_AssertEqual<BrandedUserId, z.output<typeof BrandedUserIdSchema>>>;
+type _AssertBrandedAccount = _AssertTrue<_AssertEqual<BrandedAccount, z.output<typeof BrandedAccountSchema>>>;
+type _AssertJsonValue = _AssertTrue<_AssertEqual<JsonValue, z.output<typeof JsonValueSchema>>>;
+type _AssertExclusiveNumber = _AssertTrue<_AssertEqual<ExclusiveNumber, z.output<typeof ExclusiveNumberSchema>>>;
+type _AssertOpenRecord = _AssertTrue<_AssertEqual<OpenRecord, z.output<typeof OpenRecordSchema>>>;
 type _AssertScalarString = _AssertTrue<_AssertEqual<ScalarString, z.output<typeof ScalarStringSchema>>>;
 type _AssertStringEmail = _AssertTrue<_AssertEqual<StringEmail, z.output<typeof StringEmailSchema>>>;
 type _AssertStringUrl = _AssertTrue<_AssertEqual<StringUrl, z.output<typeof StringUrlSchema>>>;
@@ -263,6 +298,8 @@ export const GetUsersId401ErrorResponse = UnauthorizedErrorSchema;
 export const GetUsersId200Response = UserSchema;
 
 // Route Schemas
+export const GetAccountsIdParams = z.object({ id: z.string().uuid().meta({"openapi":{"format":"uuid"}}).brand<"UserId">().meta({"x-altstack-brand":"UserId"}) });
+export const GetAccountsId200Response = BrandedAccountSchema;
 export const GetUsersIdParams = z.object({ id: z.string().uuid().meta({"openapi":{"format":"uuid"}}) });
 export const GetUsersIdQuery = z.object({ includeProfile: z.boolean().optional() });
 export const GetUsersIdHeaders = z.object({ 'x-trace-id': z.string().min(8) });
@@ -277,6 +314,11 @@ export const GetStats200Response = z.object({ count: z.number().int().min(0) }).
 export const GetStats401ErrorResponse = GetUsersId401ErrorResponse;
 
 export const Request = {
+  '/accounts/{id}': {
+    GET: {
+      params: GetAccountsIdParams,
+    },
+  },
   '/users/{id}': {
     GET: {
       params: GetUsersIdParams,
@@ -298,6 +340,11 @@ export const Request = {
 } as const;
 
 export const Response = {
+  '/accounts/{id}': {
+    GET: {
+      '200': GetAccountsId200Response,
+    },
+  },
   '/users/{id}': {
     GET: {
       '200': GetUsersId200Response,
@@ -373,6 +420,53 @@ const EXPECTED_OPENAPI_JSON = String.raw`
           "createdBy"
         ],
         "type": "object"
+      },
+      "BrandedAccount": {
+        "additionalProperties": false,
+        "properties": {
+          "backupId": {
+            "format": "uuid",
+            "nullable": true,
+            "type": "string",
+            "x-altstack-brand": "UserId"
+          },
+          "choice": {
+            "oneOf": [
+              {
+                "format": "uuid",
+                "type": "string",
+                "x-altstack-brand": "UserId"
+              },
+              {
+                "type": "integer"
+              }
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string",
+            "x-altstack-brand": "UserId"
+          },
+          "ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string",
+              "x-altstack-brand": "UserId"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "ids",
+          "choice"
+        ],
+        "type": "object"
+      },
+      "BrandedUserId": {
+        "format": "uuid",
+        "type": "string",
+        "x-altstack-brand": "UserId"
       },
       "Cat": {
         "additionalProperties": false,
@@ -454,6 +548,13 @@ const EXPECTED_OPENAPI_JSON = String.raw`
           }
         ]
       },
+      "ExclusiveNumber": {
+        "exclusiveMaximum": 10,
+        "exclusiveMinimum": 0,
+        "maximum": 11,
+        "minimum": -1,
+        "type": "number"
+      },
       "FreeformObject": {
         "type": "object"
       },
@@ -487,6 +588,7 @@ const EXPECTED_OPENAPI_JSON = String.raw`
         "minimum": 1,
         "type": "integer"
       },
+      "JsonValue": {},
       "Named": {
         "properties": {
           "name": {
@@ -578,6 +680,17 @@ const EXPECTED_OPENAPI_JSON = String.raw`
         },
         "required": [
           "id"
+        ],
+        "type": "object"
+      },
+      "OpenRecord": {
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
         ],
         "type": "object"
       },
@@ -829,6 +942,34 @@ const EXPECTED_OPENAPI_JSON = String.raw`
   },
   "openapi": "3.0.0",
   "paths": {
+    "/accounts/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string",
+              "x-altstack-brand": "UserId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrandedAccount"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/pets": {
       "get": {
         "responses": {
@@ -1048,9 +1189,8 @@ async function loadGeneratedModule(tsCode: string): Promise<{
   const entryPath = `${tmpDir}/generated.mjs`;
   writeFileSync(entryPath, jsCode, "utf8");
 
-  // Cache-bust so local dev reruns always import the latest generated file
   const module = (await import(
-    `${pathToFileURL(entryPath).href}?t=${Date.now()}`
+    pathToFileURL(entryPath).href
   )) as GeneratedModule;
 
   return { module, tmpDir };
@@ -1183,6 +1323,8 @@ function zodToOpenApiSchema(
     const checks = (schema._def as any).checks as unknown[] | undefined;
     let minimum: number | undefined;
     let maximum: number | undefined;
+    let exclusiveMinimum: number | undefined;
+    let exclusiveMaximum: number | undefined;
     let isInt = false;
 
     for (const check of checks ?? []) {
@@ -1191,8 +1333,10 @@ function zodToOpenApiSchema(
 
       if (def.check === "greater_than" && typeof def.value === "number") {
         if (def.inclusive === true) minimum = def.value;
+        else exclusiveMinimum = def.value;
       } else if (def.check === "less_than" && typeof def.value === "number") {
         if (def.inclusive === true) maximum = def.value;
+        else exclusiveMaximum = def.value;
       } else if (def.check === "number_format") {
         // `.int()` currently yields a "safeint" format in Zod v4
         if (def.format === "safeint" || def.format === "int") {
@@ -1207,6 +1351,8 @@ function zodToOpenApiSchema(
     result = { type: isInt ? "integer" : "number" };
     if (typeof minimum === "number") result.minimum = minimum;
     if (typeof maximum === "number") result.maximum = maximum;
+    if (typeof exclusiveMinimum === "number") result.exclusiveMinimum = exclusiveMinimum;
+    if (typeof exclusiveMaximum === "number") result.exclusiveMaximum = exclusiveMaximum;
   } else if (schema instanceof z.ZodBoolean) {
     result = { type: "boolean" };
   } else if (schema instanceof z.ZodArray) {
@@ -1271,6 +1417,9 @@ function zodToOpenApiSchema(
         additionalProperties: zodToOpenApiSchema(valueType, ctx),
       };
     }
+  } else if (schema instanceof z.ZodLazy) {
+    // z.json() is a lazy recursive JSON schema.
+    result = {};
   } else if (schema instanceof z.ZodUnion) {
     const unionOptions = (schema._def as any).options as z.ZodTypeAny[];
     const oneOf = unionOptions.map((opt) => zodToOpenApiSchema(opt, ctx, options));
@@ -1367,6 +1516,9 @@ function zodToOpenApiSchema(
   if (unwrapped.nullable) {
     result = { ...result, nullable: true };
   }
+
+  const brand = schema.meta()?.["x-altstack-brand"];
+  if (typeof brand === "string") result["x-altstack-brand"] = brand;
 
   return result;
 }

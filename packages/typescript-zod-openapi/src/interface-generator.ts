@@ -10,6 +10,7 @@ import {
   getSchemaExportedVariableNameForStringFormat,
 } from "./registry";
 import type { AnySchema } from "./types/types";
+import { brandBaseSchema, getBrandName } from "./brands";
 
 const validIdentifierRegex = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/;
 
@@ -86,6 +87,9 @@ export function schemaToTypeString(
   options?: SchemaToTypeOptions,
 ): string {
   if (!schema || typeof schema !== "object") return "unknown";
+
+  const brand = getBrandName(schema);
+  if (brand) return schema["nullable"] === true ? `(${brand} | null)` : brand;
 
   // Handle $ref
   if (schema["$ref"] && typeof schema["$ref"] === "string") {
@@ -191,7 +195,7 @@ export function schemaToTypeString(
             .map((v) => JSON.stringify(v))
             .join(" | ");
         } else {
-          result = "unknown";
+          result = schema["type"] === undefined ? "z.core.util.JSONType" : "unknown";
         }
         break;
     }
@@ -252,13 +256,16 @@ function objectSchemaToTypeString(
   }
 
   // Handle additionalProperties
-  if (additionalProperties === true) {
+  if (additionalProperties === true || additionalProperties === undefined) {
     propertyStrings.push("[key: string]: unknown");
   } else if (
     typeof additionalProperties === "object" &&
     additionalProperties !== null
   ) {
     const additionalType = schemaToTypeString(additionalProperties as AnySchema, options);
+    if (hasProperties) {
+      return `({ ${propertyStrings.join("; ")} } & { [key: string]: ${additionalType} })`;
+    }
     propertyStrings.push(`[key: string]: ${additionalType}`);
   }
 
@@ -277,12 +284,19 @@ export function generateInterface(
   schema: AnySchema,
   options?: SchemaToTypeOptions,
 ): string {
+  if (getBrandName(schema) === name) {
+    const base = schemaToTypeString(brandBaseSchema(schema), options);
+    const branded = `(${base}) & z.$brand<${JSON.stringify(name)}>`;
+    const output = schema["nullable"] === true ? `((${branded}) | null)` : branded;
+    return `export type ${name} = ${output};`;
+  }
   const properties = schema["properties"] as Record<string, AnySchema> | undefined;
   const required = new Set((schema["required"] as string[]) ?? []);
   const hasProperties = Object.keys(properties ?? {}).length > 0;
 
   // For non-object types, use type alias instead of interface
-  if (schema["type"] !== "object" && !properties) {
+  const hasTypedExtras = hasProperties && typeof schema["additionalProperties"] === "object" && schema["additionalProperties"] !== null;
+  if (getBrandName(schema) || hasTypedExtras || (schema["type"] !== "object" && !properties)) {
     return `export type ${name} = ${schemaToTypeString(schema, options)};`;
   }
 
@@ -308,7 +322,7 @@ export function generateInterface(
     lines.push("  [key: string]: never;");
   } else if (!hasProperties && additionalProperties === undefined) {
     lines.push("  [key: string]: unknown;");
-  } else if (additionalProperties === true) {
+  } else if (additionalProperties === true || additionalProperties === undefined) {
     lines.push("  [key: string]: unknown;");
   } else if (
     typeof additionalProperties === "object" &&

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from .brands import newtype_base, prepare_brand_schemas
 from .dependencies import topological_sort_schemas
 from .lowering import LoweringContext, NamedSchema, lower_named_schema
 from .rendering import (
@@ -40,6 +41,7 @@ _VALID_IDENTIFIER_CHARS = set("_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUV
 class EmissionState:
     render_context: RenderContext = field(default_factory=RenderContext)
     rebuild_names: list[str] = field(default_factory=list)
+    uses_brands: bool = False
 
 
 def openapi_to_pydantic_code(
@@ -52,6 +54,11 @@ def openapi_to_pydantic_code(
     schemas = components.get("schemas") if isinstance(components, dict) else {}
     if not isinstance(schemas, dict):
         schemas = {}
+
+    routes = parse_openapi_paths(openapi) if include_routes else []
+    schemas, routes = prepare_brand_schemas(
+        schemas, routes, schema_to_type_expr, is_object_model_schema
+    )
 
     lowering_context = LoweringContext(set(schemas.keys()))
     lowered_components: list[NamedSchema] = []
@@ -74,7 +81,6 @@ def openapi_to_pydantic_code(
         )
 
     if include_routes:
-        routes = parse_openapi_paths(openapi)
         if routes:
             route_lines, schema_name_to_canonical = _emit_route_schemas(
                 routes,
@@ -91,10 +97,10 @@ def openapi_to_pydantic_code(
             if route_lines:
                 lines.append("")
             lines.extend(_generate_request_response_objects(routes, schema_name_to_canonical))
-            return _finalize_module(lines)
+            return _finalize_module(lines, state)
 
     lines.extend(_emit_model_rebuilds(state.rebuild_names))
-    return _finalize_module(lines)
+    return _finalize_module(lines, state)
 
 
 _ALL_OF_HELPER = [
@@ -111,12 +117,21 @@ _ALL_OF_HELPER = [
 ]
 
 
-def _finalize_module(lines: list[str]) -> str:
+def _finalize_module(lines: list[str], state: EmissionState) -> str:
     """Inline the ``all_of`` intersection helper when the module uses it.
 
     Generated modules depend only on pydantic and ``alt_stack_http_client_httpx`` at runtime,
     not on the generator package.
     """
+    if state.uses_brands:
+        lines.insert(5, "from typing import NewType")
+    if state.render_context.uses_json:
+        lines.insert(5, "from pydantic import JsonValue as _JsonValue")
+        index = lines.index("def _reject_explicit_none(value: Any) -> Any:")
+        lines[index:index] = [
+            "_json_value = TypeAdapter(_JsonValue, config=ConfigDict(allow_inf_nan=False))",
+            "",
+        ]
     anchor = "_omit_not_null = BeforeValidator(_reject_explicit_none)"
     if any("all_of(" in line for line in lines) and anchor in lines:
         index = lines.index(anchor) + 1
@@ -155,6 +170,10 @@ def _build_module_preamble(custom_import_lines: list[str] | None) -> list[str]:
 
 
 def _emit_named_schema(name: str, schema: AnySchema, state: EmissionState) -> list[str]:
+    if isinstance(schema, dict) and schema.get("_altstack_newtype"):
+        state.uses_brands = True
+        base = newtype_base(schema_to_type_expr(schema, context=state.render_context))
+        return [f'{name} = NewType("{name}", {base})', ""]
     if is_object_model_schema(schema) and not _has_root_model_allof_base(schema, state):
         return _emit_object_model(name, schema, state)
     return _emit_root_model(name, schema, state)
@@ -178,10 +197,12 @@ def _emit_object_model(name: str, schema: AnySchema, state: EmissionState) -> li
     all_of = schema.get("allOf") if isinstance(schema, dict) else None
     if isinstance(all_of, list):
         base_classes, merged_schema = _merge_allof_object_schema(all_of)
-        model_lines = _build_model_lines(name, merged_schema, base_classes=base_classes or None)
+        model_lines = _build_model_lines(
+            name, merged_schema, context=state.render_context, base_classes=base_classes or None
+        )
         model_lines.insert(1, f"    __openapi_allof__ = {all_of!r}")
     else:
-        model_lines = _build_model_lines(name, schema)
+        model_lines = _build_model_lines(name, schema, context=state.render_context)
 
     state.rebuild_names.append(name)
     return [*model_lines, ""]
@@ -242,6 +263,7 @@ def _build_model_lines(
     name: str,
     schema: AnySchema,
     *,
+    context: RenderContext,
     base_classes: list[str] | None = None,
 ) -> list[str]:
     properties = schema.get("properties") if isinstance(schema, dict) else None
@@ -262,7 +284,7 @@ def _build_model_lines(
             if alias:
                 alias_used = True
 
-            type_expr = schema_to_type_expr(prop_schema)
+            type_expr = schema_to_type_expr(prop_schema, context=context)
             is_required = prop_name in required
             if is_required:
                 default_expr = f" = Field(alias={alias!r})" if alias else ""
@@ -284,7 +306,7 @@ def _build_model_lines(
         config_args.append("extra='allow'")
     elif isinstance(additional, dict):
         config_args.append("extra='allow'")
-        extra_type = schema_to_type_expr(additional)
+        extra_type = schema_to_type_expr(additional, context=context)
         extra_line = (
             f"    __pydantic_extra__: {extra_field_annotation(extra_type)} = Field(init=False)"
         )

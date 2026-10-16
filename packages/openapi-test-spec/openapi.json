@@ -5,6 +5,34 @@
     "version": "0.0.0"
   },
   "paths": {
+    "/accounts/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "x-altstack-brand": "UserId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrandedAccount"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/users/{id}": {
       "get": {
         "parameters": [
@@ -146,6 +174,133 @@
   },
   "components": {
     "schemas": {
+      "BrandedUserId": {
+        "type": "string",
+        "format": "uuid",
+        "x-altstack-brand": "UserId",
+        "x-altstack-examples": {
+          "valid": [
+            "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+          ],
+          "invalid": [
+            "invalid"
+          ]
+        }
+      },
+      "BrandedAccount": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string", "format": "uuid", "x-altstack-brand": "UserId"
+          },
+          "backupId": {
+            "type": "string",
+            "format": "uuid",
+            "x-altstack-brand": "UserId",
+            "nullable": true
+          },
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "x-altstack-brand": "UserId"
+            }
+          },
+          "choice": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "x-altstack-brand": "UserId"
+              },
+              {
+                "type": "integer"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "ids",
+          "choice"
+        ],
+        "additionalProperties": false,
+        "x-altstack-examples": {
+          "valid": [
+            {
+              "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+              "ids": [],
+              "choice": 1
+            }
+          ],
+          "invalid": [
+            {
+              "id": "invalid",
+              "ids": [],
+              "choice": 1
+            }
+          ]
+        }
+      },
+      "JsonValue": {
+        "x-altstack-examples": {
+          "valid": [
+            null,
+            true,
+            1,
+            "text",
+            [],
+            {
+              "nested": [
+                1,
+                null
+              ]
+            }
+          ]
+        }
+      },
+      "ExclusiveNumber": {
+        "type": "number",
+        "minimum": -1,
+        "maximum": 11,
+        "exclusiveMinimum": 0,
+        "exclusiveMaximum": 10,
+        "x-altstack-examples": {
+          "valid": [
+            1,
+            9.5
+          ],
+          "invalid": [
+            0,
+            10
+          ]
+        }
+      },
+      "OpenRecord": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "x-altstack-examples": {
+          "valid": [
+            {
+              "name": "Ada",
+              "extra": {
+                "enabled": true
+              }
+            }
+          ],
+          "invalid": [
+            {}
+          ]
+        }
+      },
       "ScalarString": {
         "type": "string",
         "x-altstack-examples": {
@@ -356,7 +511,7 @@
         },
         "required": ["createdAt"],
         "x-altstack-examples": {
-          "valid": [{ "createdAt": "2020-01-01T00:00:00.000Z", "updatedAt": null }],
+          "valid": [{ "createdAt": "2020-01-01T00:00:00.000Z", "updatedAt": null }, { "createdAt": "2020-01-01T00:00:00+00:00" }],
           "invalid": [{ "createdAt": 1 }]
         }
       },

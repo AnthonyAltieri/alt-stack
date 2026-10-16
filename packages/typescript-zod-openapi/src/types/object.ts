@@ -47,6 +47,10 @@ export function convertOpenAPIObjectToZod(
 
   if (schema.additionalProperties === false) {
     result += ".strict()";
+  } else if (typeof schema.additionalProperties === "object" && schema.additionalProperties !== null) {
+    result += `.catchall(${convertSchema(schema.additionalProperties)})`;
+  } else {
+    result += ".loose()";
   }
 
   return result;

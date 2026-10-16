@@ -56,6 +56,27 @@ if isinstance(result, ApiSuccess):
 
 Generated modules that use non-object intersections inline a small `all_of` validator, so they depend only on `pydantic` and `alt-stack-http-client-httpx` at runtime.
 
+## Branded types
+
+Annotate an identity schema in OpenAPI:
+
+```json
+{ "type": "string", "format": "uuid", "x-altstack-brand": "UserId" }
+```
+
+The generated module declares `UserId = NewType("UserId", UUID)` once and uses it
+in field and parameter annotations. Pydantic still parses UUID strings into UUID
+values and applies each use's existing constraints. Optional and nullable fields,
+references, array items, and union members retain the nominal type.
+
+Names must be ASCII identifiers (`[A-Za-z_][A-Za-z0-9_]*`) and must not be Python
+keywords, imported helper names, or unrelated component names. Conflicting base
+types produce a generation error. If a component and its brand have the same name,
+the Pydantic wrapper is named `UserIdModel`, leaving `UserId` for the `NewType`.
+Python requires a class as a `NewType` base. Literal brands use their primitive
+base; composite unions use `object` with the original Pydantic validator retained
+in `Annotated` metadata.
+
 ## Development
 
 ```bash

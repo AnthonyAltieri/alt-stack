@@ -89,7 +89,7 @@ describe("convertSchemaToZodString", () => {
         },
         required: ["name"],
       });
-      expect(result).toBe("z.object({ name: z.string() })");
+      expect(result).toBe("z.object({ name: z.string() }).loose()");
     });
 
     it("should convert union schema", () => {
@@ -197,7 +197,7 @@ describe("convertSchemaToZodString", () => {
         required: ["name"],
         nullable: true,
       });
-      expect(result).toBe("z.object({ name: z.string() }).nullable()");
+      expect(result).toBe("z.object({ name: z.string() }).loose().nullable()");
     });
   });
 
@@ -228,7 +228,7 @@ describe("convertSchemaToZodString", () => {
         required: ["user"],
       });
       expect(result).toBe(
-        "z.object({ user: z.object({ name: z.string() }) })",
+        "z.object({ user: z.object({ name: z.string() }).loose() }).loose()",
       );
     });
 
@@ -243,7 +243,7 @@ describe("convertSchemaToZodString", () => {
           required: ["name"],
         },
       });
-      expect(result).toBe("z.array(z.object({ name: z.string() }))");
+      expect(result).toBe("z.array(z.object({ name: z.string() }).loose())");
     });
   });
 
@@ -270,7 +270,7 @@ describe("convertSchemaToZodString", () => {
         },
         required: ["name"],
       });
-      expect(result).toBe("z.object({ name: z.string() })");
+      expect(result).toBe("z.object({ name: z.string() }).loose()");
     });
 
     it("should handle unknown type", () => {
@@ -330,7 +330,7 @@ describe("openApiToZodTsCode", () => {
       expect(result).toContain("import { z } from 'zod';");
       // New format: interface + schema without explicit type annotation
       expect(result).toContain("export interface User {");
-      expect(result).toContain("export const UserSchema = z.object({ name: z.string() })");
+      expect(result).toContain("export const UserSchema = z.object({ name: z.string() }).loose()");
       // Type assertion for compile-time verification
       expect(result).toContain("type _AssertUser = _AssertTrue<_AssertEqual<User, z.output<typeof UserSchema>>>;");
     });
@@ -361,7 +361,7 @@ describe("openApiToZodTsCode", () => {
       // New format: interface + schema without explicit type annotation
       expect(result).toContain("export interface User {");
       expect(result).toContain("export interface Product {");
-      expect(result).toContain("export const UserSchema = z.object({ name: z.string() })");
+      expect(result).toContain("export const UserSchema = z.object({ name: z.string() }).loose()");
       expect(result).toContain("export const ProductSchema = z.object({ id: z.number() })");
     });
 

@@ -76,7 +76,7 @@ describe("convertOpenAPIObjectToZod", () => {
         },
         mockConvertSchema,
       );
-      expect(result).toBe("z.object({ name: z.string() })");
+      expect(result).toBe("z.object({ name: z.string() }).loose()");
     });
 
     it("should convert object with multiple required properties", () => {
@@ -92,7 +92,7 @@ describe("convertOpenAPIObjectToZod", () => {
         mockConvertSchema,
       );
       expect(result).toBe(
-        "z.object({ name: z.string(), age: z.number() })",
+        "z.object({ name: z.string(), age: z.number() }).loose()",
       );
     });
 
@@ -110,7 +110,7 @@ describe("convertOpenAPIObjectToZod", () => {
         mockConvertSchema,
       );
       expect(result).toBe(
-        "z.object({ a: z.string(), b: z.number(), c: z.boolean() })",
+        "z.object({ a: z.string(), b: z.number(), c: z.boolean() }).loose()",
       );
     });
   });
@@ -126,7 +126,7 @@ describe("convertOpenAPIObjectToZod", () => {
         },
         mockConvertSchema,
       );
-      expect(result).toBe("z.object({ name: z.string().optional() })");
+      expect(result).toBe("z.object({ name: z.string().optional() }).loose()");
     });
 
     it("should convert object with multiple optional properties", () => {
@@ -141,7 +141,7 @@ describe("convertOpenAPIObjectToZod", () => {
         mockConvertSchema,
       );
       expect(result).toBe(
-        "z.object({ name: z.string().optional(), age: z.number().optional() })",
+        "z.object({ name: z.string().optional(), age: z.number().optional() }).loose()",
       );
     });
   });
@@ -161,7 +161,7 @@ describe("convertOpenAPIObjectToZod", () => {
         mockConvertSchema,
       );
       expect(result).toBe(
-        "z.object({ name: z.string(), age: z.number().optional(), email: z.string().optional() })",
+        "z.object({ name: z.string(), age: z.number().optional(), email: z.string().optional() }).loose()",
       );
     });
 
@@ -180,7 +180,7 @@ describe("convertOpenAPIObjectToZod", () => {
         mockConvertSchema,
       );
       expect(result).toBe(
-        "z.object({ id: z.number(), name: z.string(), email: z.string().optional(), age: z.number().optional() })",
+        "z.object({ id: z.number(), name: z.string(), email: z.string().optional(), age: z.number().optional() }).loose()",
       );
     });
   });
@@ -229,7 +229,7 @@ describe("convertOpenAPIObjectToZod", () => {
         },
         mockConvertSchema,
       );
-      expect(result).toBe("z.object({ name: z.string().optional() })");
+      expect(result).toBe("z.object({ name: z.string().optional() }).loose()");
     });
   });
 
@@ -248,7 +248,7 @@ describe("convertOpenAPIObjectToZod", () => {
         mockConvertSchema,
       );
       expect(result).toBe(
-        "z.object({ a: z.string().optional(), b: z.number(), c: z.boolean().optional() })",
+        "z.object({ a: z.string().optional(), b: z.number(), c: z.boolean().optional() }).loose()",
       );
     });
   });
@@ -268,7 +268,7 @@ describe("convertOpenAPIObjectToZod", () => {
         mockConvertSchema,
       );
       expect(result).toBe(
-        "z.object({ 'first-name': z.string(), 'last-name': z.string().optional(), age: z.number().optional() })",
+        "z.object({ 'first-name': z.string(), 'last-name': z.string().optional(), age: z.number().optional() }).loose()",
       );
     });
 
@@ -285,7 +285,7 @@ describe("convertOpenAPIObjectToZod", () => {
         mockConvertSchema,
       );
       expect(result).toBe(
-        "z.object({ 'x-custom-header': z.string().optional(), $special: z.string().optional(), _private: z.string().optional() })",
+        "z.object({ 'x-custom-header': z.string().optional(), $special: z.string().optional(), _private: z.string().optional() }).loose()",
       );
     });
   });
@@ -301,7 +301,7 @@ describe("convertOpenAPIObjectToZod", () => {
         },
         mockConvertSchema,
       );
-      expect(result).toBe("z.object({ unknown: z.unknown().optional() })");
+      expect(result).toBe("z.object({ unknown: z.unknown().optional() }).loose()");
     });
 
     it("should handle null property schemas", () => {
@@ -314,7 +314,7 @@ describe("convertOpenAPIObjectToZod", () => {
         },
         mockConvertSchema,
       );
-      expect(result).toBe("z.object({ nullProp: z.unknown().optional() })");
+      expect(result).toBe("z.object({ nullProp: z.unknown().optional() }).loose()");
     });
 
     it("should handle properties not in required array", () => {
@@ -328,7 +328,7 @@ describe("convertOpenAPIObjectToZod", () => {
         },
         mockConvertSchema,
       );
-      expect(result).toBe("z.object({ name: z.string().optional() })");
+      expect(result).toBe("z.object({ name: z.string().optional() }).loose()");
     });
 
     it("should handle empty required array", () => {
@@ -342,7 +342,7 @@ describe("convertOpenAPIObjectToZod", () => {
         },
         mockConvertSchema,
       );
-      expect(result).toBe("z.object({ name: z.string().optional() })");
+      expect(result).toBe("z.object({ name: z.string().optional() }).loose()");
     });
 
     it("should handle required array with duplicate values", () => {
@@ -356,7 +356,7 @@ describe("convertOpenAPIObjectToZod", () => {
         },
         mockConvertSchema,
       );
-      expect(result).toBe("z.object({ name: z.string() })");
+      expect(result).toBe("z.object({ name: z.string() }).loose()");
     });
   });
 });

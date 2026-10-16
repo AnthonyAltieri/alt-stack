@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import * as ts from "typescript";
 import { openApiToZodTsCode } from "./to-typescript";
+import { generateInterface } from "./interface-generator";
 
 const strictCompilerOptions: ts.CompilerOptions = {
   exactOptionalPropertyTypes: true,
@@ -137,6 +138,52 @@ const openApi31Fixture = {
 };
 
 describe("generated schema/type assertions", () => {
+  it("shares brands across components, parameters, optional nullable fields, arrays and anyOf", () => {
+    const id = { type: "string", format: "uuid", "x-altstack-brand": "UserId" };
+    const code = openApiToZodTsCode({
+      components: { schemas: {
+        UserId: id,
+        User: { type: "object", properties: {
+          id: { $ref: "#/components/schemas/UserId" },
+          optional: { ...id, nullable: true },
+          ids: { type: "array", items: id },
+          choice: { anyOf: [id, { type: "null" }] },
+        }, required: ["id", "ids", "choice"], additionalProperties: false },
+      } },
+      paths: { "/users/{id}": { get: {
+        parameters: [{ name: "id", in: "path", required: true, schema: id }],
+        responses: { "200": { content: { "application/json": { schema: { $ref: "#/components/schemas/User" } } } } },
+      } } },
+    }, undefined, { includeRoutes: true });
+    expect(code.match(/export type UserId =/g)).toHaveLength(1);
+    expect(code).toContain('.brand<"UserId">()');
+    const orderId = generateInterface("OrderId", { type: "string", "x-altstack-brand": "OrderId" });
+    const consumer = `
+${orderId}
+const userId = UserIdSchema.parse("f47ac10b-58cc-4372-a567-0e02b2c3d479");
+const params = Request["/users/{id}"].GET.params.parse({id: userId});
+type _BrandedParam = _AssertTrue<_AssertEqual<typeof params.id, UserId>>;
+type _BrandedResponse = _AssertTrue<_AssertEqual<z.output<typeof Response["/users/{id}"]["GET"]["200"]>["id"], UserId>>;
+// @ts-expect-error Plain strings cannot replace parsed branded identifiers.
+const plain: UserId = "unparsed";
+`;
+    expect(formatDiagnostics(compileGeneratedCode(code + consumer))).toBe("");
+  });
+
+  it.each(["bad-name", "class", "", 123, null])("rejects invalid brand %j", (brand) => {
+    expect(() => openApiToZodTsCode({ components: { schemas: { Value: { type: "string", "x-altstack-brand": brand } } } })).toThrow(/Invalid x-altstack-brand/);
+  });
+
+  it("rejects conflicting brand bases and component names", () => {
+    expect(() => openApiToZodTsCode({ components: { schemas: {
+      First: { type: "string", "x-altstack-brand": "UserId" },
+      Second: { type: "integer", "x-altstack-brand": "UserId" },
+    } } })).toThrow(/Conflicting base types.*UserId/);
+    expect(() => openApiToZodTsCode({ components: { schemas: {
+      UserId: { type: "integer" }, First: { type: "string", "x-altstack-brand": "UserId" },
+    } } })).toThrow(/conflicts with component UserId/);
+  });
+
   it("compiles OpenAPI 3.1 nullable anyOf members and const discriminators", () => {
     const code = openApiToZodTsCode(openApi31Fixture);
 
@@ -151,7 +198,7 @@ describe("generated schema/type assertions", () => {
     const code = openApiToZodTsCode(optionalPropertyFixture);
 
     expect(code).toContain("topLevel?: string | undefined;");
-    expect(code).toContain("nested: { inner?: number | undefined };");
+    expect(code).toContain("nested: { inner?: number | undefined; [key: string]: unknown };");
     expect(formatDiagnostics(compileGeneratedCode(code))).toBe("");
   });
 
@@ -168,6 +215,11 @@ describe("generated schema/type assertions", () => {
       "type _AssertStringOrStringArrayRecord = _AssertTrue<_AssertEqual<StringOrStringArrayRecord, z.output<typeof StringOrStringArrayRecordSchema>>>;",
     );
     expect(formatDiagnostics(compileGeneratedCode(code))).toBe("");
+    const mixed = openApiToZodTsCode({ components: { schemas: {
+      MixedRecord: { type: "object", properties: { name: { type: "string" } },
+        required: ["name"], additionalProperties: { type: "number" } },
+    } } });
+    expect(formatDiagnostics(compileGeneratedCode(mixed))).toBe("");
   });
 
   it("rejects a generated interface that differs from its Zod output", () => {
