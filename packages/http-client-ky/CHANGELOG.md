@@ -1,5 +1,16 @@
 # @alt-stack/http-client-ky
 
+## 1.8.0
+
+### Minor Changes
+
+- 4438628: Add an optional fetch implementation to the Fetch client and executor, and support synchronous or asynchronous client header providers in core and both adapters. Providers resolve once per attempt before request headers are applied, including core retries, and failures use a sanitized unexpected error.
+
+### Patch Changes
+
+- Updated dependencies [4438628]
+  - @alt-stack/http-client-core@1.8.0
+
 ## 1.7.0
 
 ### Patch Changes
