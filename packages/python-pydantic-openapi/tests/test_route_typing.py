@@ -394,13 +394,15 @@ def test_route_maps_infer_exact_models_with_pyrefly(
         pytest.param(_check_with_pyrefly, PYREFLY_PATTERN, id="pyrefly"),
     ],
 )
+@pytest.mark.parametrize("filename", ["openapi.json", "python-identifiers.json"])
 def test_master_spec_route_maps_type_check(
     check: Callable[[Path], str],
     pattern: str,
+    filename: str,
 ) -> None:
     """The full test spec's route maps produce a type-clean module (no name collisions)."""
     clear_pydantic_schema_registry()
-    spec_path = Path(__file__).resolve().parents[2] / "openapi-test-spec" / "openapi.json"
+    spec_path = Path(__file__).resolve().parents[2] / "openapi-test-spec" / filename
     spec = json.loads(spec_path.read_text(encoding="utf-8"))
     code = openapi_to_pydantic_code(spec, options={"include_routes": True})
 

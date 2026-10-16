@@ -1,0 +1,71 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Python Identifier Conformance",
+    "version": "1"
+  },
+  "paths": {
+    "/items": {
+      "post": {
+        "parameters": [
+          { "name": "limit", "in": "query", "schema": { "type": "number" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/Order-Input" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Rule-Output" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Order-Input": {
+        "type": "object",
+        "properties": {
+          "_id": { "type": "string" },
+          "name": { "type": "string" }
+        },
+        "required": ["_id", "name"],
+        "additionalProperties": false,
+        "x-altstack-examples": {
+          "valid": [{ "_id": "order-1", "name": "First order" }],
+          "invalid": [{ "name": "First order" }, { "_id": 1, "name": "First order" }]
+        }
+      },
+      "Rule-Output": {
+        "type": "object",
+        "properties": {
+          "_id": { "type": "string" },
+          "name": { "type": "string" },
+          "_meta": { "type": "string" }
+        },
+        "required": ["_id", "name"],
+        "additionalProperties": false,
+        "x-altstack-examples": {
+          "valid": [
+            { "_id": "rule-1", "name": "First rule" },
+            { "_id": "rule-1", "name": "First rule", "_meta": "visible" }
+          ],
+          "invalid": [
+            { "name": "First rule" },
+            { "_id": 1, "name": "First rule" },
+            { "_id": "rule-1", "name": "First rule", "_meta": 1 }
+          ]
+        }
+      }
+    }
+  }
+}

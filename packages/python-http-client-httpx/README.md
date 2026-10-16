@@ -36,12 +36,18 @@ Importing `HttpxApiClient` from the generated module gives one typed method per 
 
 `BaseApiClient` sends through the `Transport` protocol, a single `async def send(request: HttpRequest) -> HttpResponse`. Implement it over any asyncio HTTP library and pass it to the generated `ApiClient(base_url, transport=..., request_map=Request, response_map=Response)`.
 
+Scalar query floats with an integral value use integer spelling (`10.0` becomes
+`limit=10`); fractional values keep their decimal spelling (`2.5`). Strings,
+booleans, repeated list values, omitted `None` values, and JSON bodies retain their
+existing encoding.
+
 ## Development
 
 ```bash
-uv run --project packages/python-http-client-httpx --extra dev pytest packages/python-http-client-httpx/tests
-uv run --project packages/python-http-client-httpx --extra dev ruff check packages/python-http-client-httpx
-uv run --project packages/python-http-client-httpx --extra dev ty check packages/python-http-client-httpx
+uv sync --project packages/python-http-client-httpx --extra dev
+packages/python-http-client-httpx/.venv/bin/pytest packages/python-http-client-httpx/tests -q
+packages/python-http-client-httpx/.venv/bin/ruff check packages/python-http-client-httpx
+packages/python-http-client-httpx/.venv/bin/ty check packages/python-http-client-httpx
 ```
 
 ## Documentation

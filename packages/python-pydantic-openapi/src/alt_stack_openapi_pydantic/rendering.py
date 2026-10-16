@@ -24,6 +24,11 @@ from .types.union import convert_openapi_union_to_pydantic
 class RenderContext:
     root_model_names: set[str] = field(default_factory=set)
     uses_json: bool = False
+    component_names: dict[str, str] = field(default_factory=dict)
+
+    def resolve_ref(self, ref: str) -> str:
+        name = decode_component_ref(ref)
+        return self.component_names.get(name, name)
 
 
 def decode_component_ref(ref: str) -> str:
@@ -83,7 +88,7 @@ def schema_to_type_expr(
 
     brand_schema = schema.get("_altstack_brand_schema")
     if isinstance(brand_schema, dict):
-        name = decode_component_ref(schema["$ref"])
+        name = render_context.resolve_ref(schema["$ref"])
         expr = schema_to_type_expr(brand_schema, context=render_context)
         return wrap_nullable(branded_annotation(name, expr), schema)
     brand = get_brand_name(schema)
@@ -103,7 +108,7 @@ def schema_to_type_expr(
         ref = schema["$ref"]
         if not ref.startswith("#/components/schemas/"):
             return wrap_nullable("Any", schema)
-        expr = decode_component_ref(ref)
+        expr = render_context.resolve_ref(ref)
         return wrap_nullable(expr, schema)
 
     if isinstance(schema.get("oneOf"), list):

@@ -28,8 +28,8 @@ from alt_stack_openapi_pydantic.schema_dedup import get_schema_fingerprint
 from alt_stack_openapi_pydantic.to_python import openapi_to_pydantic_code
 
 
-def _load_fixture() -> dict[str, Any]:
-    spec_path = Path(__file__).resolve().parents[2] / "openapi-test-spec" / "openapi.json"
+def _load_fixture(filename: str) -> dict[str, Any]:
+    spec_path = Path(__file__).resolve().parents[2] / "openapi-test-spec" / filename
     return json.loads(spec_path.read_text(encoding="utf-8"))
 
 
@@ -280,22 +280,27 @@ def _to_openapi_schema(
     return schema
 
 
-def test_master_openapi_fixture() -> None:
+@pytest.mark.parametrize("filename", ["openapi.json", "python-identifiers.json"])
+def test_master_openapi_fixture(filename: str) -> None:
     clear_pydantic_schema_registry()
-    spec = _load_fixture()
+    spec = _load_fixture(filename)
     code = openapi_to_pydantic_code(spec, options={"include_routes": True})
     module = _load_module(code)
 
     schemas = spec.get("components", {}).get("schemas", {})
-    type_to_name = {getattr(module, name): name for name in schemas}
+    python_names = {"Rule-Output": "Rule_Output", "Order-Input": "Order_Input"}
+    models = {name: getattr(module, python_names.get(name, name)) for name in schemas}
+    type_to_name = {model: name for name, model in models.items()}
 
     for name, schema in schemas.items():
         examples = schema.get("x-altstack-examples")
         if not isinstance(examples, dict):
             continue
-        model = getattr(module, name)
+        model = models[name]
         for value in examples.get("valid", []):
-            model.model_validate(value)
+            instance = model.model_validate(value)
+            if filename == "python-identifiers.json":
+                assert instance.model_dump(by_alias=True, exclude_unset=True) == value
         for value in examples.get("invalid", []):
             with pytest.raises(ValidationError):
                 model.model_validate(value)
@@ -311,7 +316,7 @@ def test_master_openapi_fixture() -> None:
 
     for name in schemas:
         actual["components"]["schemas"][name] = _to_openapi_schema(
-            getattr(module, name),
+            models[name],
             type_to_name,
             self_name=name,
             schema_fingerprint_to_name=schema_fingerprint_to_name,
