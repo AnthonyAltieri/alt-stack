@@ -9,7 +9,7 @@
     "generate": "tsx src/generate-spec.ts && pnpm --filter @real-life/backend-auth-sdk generate"
   },
   "dependencies": {
-    "@hono/node-server": "^1.0.0",
+    "@hono/node-server": "^2.0.10",
     "@alt-stack/server-hono": "^1.4.0",
     "@t3-oss/env-core": "^0.13.11",
     "hono": "^4.0.0",
