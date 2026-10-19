@@ -1,6 +1,11 @@
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { z } from "zod";
+import { createApiClient as createFetchClient } from "../../http-client-fetch/src/index.js";
+import { createApiClient as createKyClient } from "../../http-client-ky/src/index.js";
+import type { ApiRequestSchema, ApiResponseSchema, Logger } from "../../http-client-core/src/types.js";
+import { describe, expect, it, vi } from "vitest";
 import * as ts from "typescript";
 import { openApiToZodTsCode } from "./to-typescript";
 import { generateInterface } from "./interface-generator";
@@ -254,4 +259,110 @@ const plain: UserId = "unparsed";
 
     expect(formatDiagnostics(compileGeneratedCode(code))).toBe("");
   });
+});
+
+const adapters = ["fetch", "ky"] as const;
+
+function createClient<TRequest extends ApiRequestSchema, TResponse extends ApiResponseSchema>(
+  adapter: typeof adapters[number],
+  fetch: typeof globalThis.fetch,
+  schemas: { Request: TRequest; Response: TResponse },
+  logger: Logger = {},
+) {
+  const options = { baseUrl: "https://api.example.test", ...schemas, logger };
+  return adapter === "fetch"
+    ? createFetchClient({ ...options, fetch })
+    : createKyClient({ ...options, kyOptions: { fetch, retry: 0 } });
+}
+
+it("generates and executes content-free success responses as undefined", async () => {
+  const fixture = { paths: { "/v1/sessions/{id}/logout": { delete: {
+    parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+    responses: {
+      "204": { description: "No Content" },
+      "422": { description: "Invalid session", content: { "application/json": { schema: { type: "string" } } } },
+    },
+  } } } };
+  const code = openApiToZodTsCode(fixture, undefined, { includeRoutes: true });
+  expect(formatDiagnostics(compileGeneratedCode(code + `
+import type { ApiResponse } from "../../http-client-core/src/types.js";
+declare const result: ApiResponse<typeof Response, "/v1/sessions/{id}/logout", "DELETE">;
+if (result.success) {
+  const body: undefined = result.body;
+  const code: "204" = result.code;
+}
+`))).toBe("");
+  const javascript = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+  const exports: { Request?: ApiRequestSchema; Response?: ApiResponseSchema } = {};
+  new Function("require", "exports", javascript)(createRequire(import.meta.url), exports);
+  if (!exports.Request || !exports.Response) throw new Error("Missing generated maps");
+  const schemas = { Request: exports.Request, Response: exports.Response };
+  for (const adapter of adapters) {
+    for (const response of [
+      new globalThis.Response(null, { status: 204 }),
+      new globalThis.Response(null, { status: 204, headers: { "content-type": "application/json" } }),
+      new globalThis.Response(null, { status: 204, headers: { "content-length": "0" } }),
+    ]) {
+      const fetch = vi.fn<typeof globalThis.fetch>(async () => response);
+      const result = await createClient(adapter, fetch, schemas).delete("/v1/sessions/{id}/logout", { params: { id: "s_1" } });
+      expect(result).toMatchObject({ success: true, code: "204", body: undefined, raw: response });
+      expect(fetch).toHaveBeenCalledOnce();
+    }
+  }
+});
+
+it("rejects an undeclared 201 on a 200-only route", async () => {
+  for (const adapter of adapters) {
+    const response = new globalThis.Response('{"id":"u_1"}', { status: 201, headers: { "content-type": "application/json" } });
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => response);
+    const result = await createClient(adapter, fetch, {
+      Request: { "/v1/users": { GET: {} } },
+      Response: { "/v1/users": { GET: { "200": z.object({ id: z.string() }) } } },
+    }).get("/v1/users", {});
+    expect(result).toMatchObject({ success: false, code: 201, raw: response,
+      error: { name: "UnexpectedApiClientError", code: 201 } });
+    expect(fetch).toHaveBeenCalledOnce();
+  }
+});
+
+it("keeps transport secrets out of errors and structured and debug logs", async () => {
+  const debug: { enable(value: string): void; disable(): string } = createRequire(
+    new URL("../../http-client-core/package.json", import.meta.url),
+  )("debug");
+  const previous = debug.disable();
+  debug.enable("alt-stack:http-client:*");
+  const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+  const secret = "SENTINEL_TRANSPORT_SECRET";
+  try {
+    for (const adapter of adapters) {
+      for (const name of [`Transport${secret}`, "AbortError", "TimeoutError"]) {
+        const transportError = Object.assign(new Error(`https://api.example.test/?token=${secret}`), {
+          name, code: secret, detail: secret,
+          toJSON: () => ({ message: secret }),
+        });
+        const fetch = vi.fn<typeof globalThis.fetch>(async () => { throw transportError; });
+        const log = vi.fn();
+        const client = createClient(adapter, fetch, {
+          Request: { "/v1/users": { GET: { query: z.object({ token: z.string() }) } } },
+          Response: { "/v1/users": { GET: { "200": z.string() } } },
+        }, { error: log, warn: log, info: log, debug: log });
+        stderr.mockClear();
+        const error: unknown = await client.get("/v1/users", { query: { token: secret } }).catch((error: unknown) => error);
+        expect(error).toBeInstanceOf(Error);
+        if (!(error instanceof Error)) throw new Error("Expected a transport error");
+        expect(error.message).toBe(name === "AbortError" || (adapter === "ky" && name === "TimeoutError")
+          ? "Request timeout after 0ms"
+          : "Network request failed");
+        expect(error).toMatchObject({ cause: undefined, endpoint: undefined });
+        for (const rendered of [error.message, String(error), JSON.stringify(error), JSON.stringify(log.mock.calls), JSON.stringify(stderr.mock.calls)]) {
+          expect(rendered).not.toContain(secret);
+        }
+        expect(log).toHaveBeenCalled();
+        expect(stderr).toHaveBeenCalled();
+      }
+    }
+  } finally {
+    stderr.mockRestore();
+    debug.enable(previous);
+  }
 });

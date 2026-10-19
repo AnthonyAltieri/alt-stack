@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { expect, it, vi } from "vitest";
 import { createApiClient } from "./index.js";
 
@@ -11,7 +12,7 @@ it("applies async client headers before request overrides through Ky", async () 
   const client = createApiClient({
     baseUrl: "https://api.example.test",
     Request: { "/health": { GET: {} } },
-    Response: {},
+    Response: { "/health": { GET: { "200": z.string() } } },
     headers: async () => ({ Authorization: "Bearer token", "X-Request-Id": "client-id" }),
     kyOptions: { fetch, retry: 0 },
   });

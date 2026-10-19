@@ -106,9 +106,9 @@ type UnexpectedErrorResponse<TRaw = unknown> = {
 
 - `SuccessResponse` is produced for string codes beginning with `2`.
 - `ErrorResponse` is produced for documented codes that do not begin with `2`.
-- `UnexpectedErrorResponse` is the catch-all type for undocumented non-2xx statuses and response-validation mismatches.
+- `UnexpectedErrorResponse` is the catch-all type for undocumented statuses (including 2xx) and response-validation mismatches.
 
-An undocumented 2xx response is returned as success at runtime even though that success member is not represented by the static union. Its body is not validated. A documented response-schema mismatch calls the validation hook and currently returns `{ success: false, code: number, error: UnexpectedApiClientError, raw }`.
+An undocumented status, including 2xx, returns `{ success: false, code: number, error: UnexpectedApiClientError, raw }`. The error carries the received numeric status. This strict behavior also applies when the response map is empty; there is no permissive option. Declare every expected success status. A content-free success uses `z.undefined()` and returns `body: undefined`; custom executors must supply `data: undefined` for an empty body. A documented response-schema mismatch calls the validation hook and currently returns `{ success: false, code: number, error: UnexpectedApiClientError, raw }`.
 
 ### Response extraction types
 
@@ -135,6 +135,8 @@ An undocumented 2xx response is returned as success at runtime even though that 
 | `ParamsRequired<...>` | `true` for a params schema or a path containing tokens |
 | `BodyRequired<...>` | `true` when the method entry has a Zod `body` schema |
 | `EndpointsWithMethod<TRequest, TMethod>` | endpoint-key union containing the requested method |
+
+Path parameter fields whose schema output is branded require the branded output type. Parse identifiers with their schema before passing them to the client. Unbranded path fields retain schema input types, preserving codec inputs. Query and body types always use `z.input`, so output-only brands do not tighten those call sites.
 
 These are compile-time utilities; they do not inspect the response map.
 
@@ -194,7 +196,7 @@ Base `Error` with readonly optional `endpoint`, `method`, and `cause`. Its `name
 
 ### `UnexpectedApiClientError`
 
-Adds optional numeric `code`. Executors use it for network failures (without a code); response handling uses it for undocumented non-2xx statuses and response validation failures (with a status code).
+Adds optional numeric `code`. Executors use it for network failures (without a code); response handling uses it for undocumented statuses and response validation failures (with a status code).
 
 ### `ValidationError`
 
@@ -203,6 +205,8 @@ Adds `validationErrors: unknown`. Zod failures store `ZodIssue[]`; missing path 
 ### `TimeoutError`
 
 Adds `timeout: number` and uses the message `Request timeout after <timeout>ms`. Timeout enforcement belongs to the executor.
+
+The Fetch and Ky adapters discard original transport exceptions, including their name, code, message and cause. Network failures use the fixed message `Network request failed`; timeout failures retain only the configured timeout. Their errors omit the request URL and original cause, keeping query credentials out of error serialization. Core logs contain the stable wrapper name and message alongside the route template and method. Custom executors own sanitization of their thrown errors.
 
 All subclasses repair their prototype chain and expose stable `name` values for `instanceof` checks.
 

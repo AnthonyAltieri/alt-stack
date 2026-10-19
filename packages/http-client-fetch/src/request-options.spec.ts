@@ -1,7 +1,8 @@
+import { z } from "zod";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApiClient, FetchExecutor, UnexpectedApiClientError } from "./index.js";
 
-const schemas = { Request: { "/health": { GET: {} } }, Response: {} } as const;
+const schemas = { Request: { "/health": { GET: {} } }, Response: { "/health": { GET: { "200": z.string() } } } } as const;
 const baseUrl = "https://api.example.test";
 
 const entrypoints = [

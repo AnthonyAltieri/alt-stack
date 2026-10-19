@@ -73,6 +73,17 @@ export type ExtractPathParams<T extends string> = T extends `${string}{${infer P
 // Request Type Extraction
 // ============================================================================
 
+/** Preserve output-only brands without changing codec input types. */
+type PathParamsInput<TInput, TOutput> = {
+  [K in keyof TInput]: K extends keyof TOutput
+    ? TOutput[K] extends null | undefined
+      ? TInput[K]
+      : NonNullable<TOutput[K]> extends z.$brand<infer _Brand>
+        ? TOutput[K]
+        : TInput[K]
+    : TInput[K];
+};
+
 /**
  * Extracts params type from Request object
  */
@@ -82,7 +93,7 @@ export type ExtractRequestParams<
   TMethod extends keyof TRequest[TEndpoint],
 > = TRequest[TEndpoint][TMethod] extends { params: infer P }
   ? P extends z.ZodTypeAny
-    ? z.input<P>
+    ? PathParamsInput<z.input<P>, z.output<P>>
     : never
   : ExtractPathParams<TEndpoint & string> extends never
     ? never

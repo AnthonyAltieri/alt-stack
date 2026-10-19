@@ -68,6 +68,7 @@ describe("FetchApiClient", () => {
   afterEach(() => {
     globalThis.fetch = originalFetch;
     vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   describe("createApiClient", () => {
@@ -344,7 +345,7 @@ describe("FetchApiClient", () => {
         },
         Response: {
           "/users/{id}": {
-            DELETE: { "204": z.null() },
+            DELETE: { "204": z.undefined() },
           },
         },
       });
@@ -365,7 +366,7 @@ describe("FetchApiClient", () => {
       const client = createApiClient({
         baseUrl: "https://api.example.com",
         Request: { "/items/{id}": { DELETE: { params: z.object({ id: z.string() }) } } },
-        Response: { "/items/{id}": { DELETE: { "204": z.null() } } },
+        Response: { "/items/{id}": { DELETE: { "204": z.undefined() } } },
       });
       await client.delete("/items/{id}", { params: { id: "1" } });
 
@@ -555,7 +556,7 @@ describe("FetchApiClient", () => {
       }
     });
 
-    it("returns null for content-length 0 regardless of parsed body content", async () => {
+    it("returns undefined for content-length 0 regardless of parsed body content", async () => {
       const json = vi.fn().mockResolvedValue({ ignored: true });
       const text = vi.fn().mockResolvedValue("ignored");
 
@@ -573,13 +574,13 @@ describe("FetchApiClient", () => {
       const client = createApiClient({
         baseUrl: "https://api.example.com",
         Request: { "/empty": { GET: {} } },
-        Response: { "/empty": { GET: { "200": z.null() } } },
+        Response: { "/empty": { GET: { "200": z.undefined() } } },
       });
       const result = await client.get("/empty", {});
 
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.body).toBeNull();
+        expect(result.body).toBeUndefined();
       }
       expect(json).not.toHaveBeenCalled();
       expect(text).not.toHaveBeenCalled();
@@ -587,6 +588,7 @@ describe("FetchApiClient", () => {
   });
 
   describe("retry logic", () => {
+    beforeEach(() => vi.useFakeTimers());
     it("does not retry on 5xx errors (they are valid HTTP responses)", async () => {
       let attempts = 0;
       globalThis.fetch = vi.fn().mockImplementation(() => {
@@ -595,7 +597,7 @@ describe("FetchApiClient", () => {
           status: 503,
           statusText: "Service Unavailable",
           headers: new Headers({ "content-type": "application/json" }),
-          json: () => Promise.resolve({ error: "Service Unavailable" }),
+          text: () => Promise.resolve(JSON.stringify({ error: "Service Unavailable" })),
         });
       });
 
@@ -615,7 +617,7 @@ describe("FetchApiClient", () => {
           status: 400,
           statusText: "Bad Request",
           headers: new Headers({ "content-type": "application/json" }),
-          json: () => Promise.resolve({ code: "BAD_REQUEST", message: "Invalid request" }),
+          text: () => Promise.resolve(JSON.stringify({ code: "BAD_REQUEST", message: "Invalid request" })),
         });
       });
 
@@ -648,12 +650,14 @@ describe("FetchApiClient", () => {
           status: 200,
           statusText: "OK",
           headers: new Headers({ "content-type": "application/json" }),
-          json: () => Promise.resolve([{ id: "1", name: "John" }]),
+          text: () => Promise.resolve(JSON.stringify([{ id: "1", name: "John" }])),
         });
       });
 
       const client = createApiClient({ baseUrl: "https://api.example.com", Request, Response });
-      const result = await client.get("/users", { retries: 2 });
+      const request = client.get("/users", { retries: 2 });
+      await vi.runAllTimersAsync();
+      const result = await request;
 
       expect(attempts).toBe(2);
       expect(result.success).toBe(true);
@@ -664,12 +668,15 @@ describe("FetchApiClient", () => {
 
       const client = createApiClient({ baseUrl: "https://api.example.com", Request, Response });
 
-      await expect(client.get("/users", { retries: 2 })).rejects.toThrow(UnexpectedApiClientError);
+      const assertion = expect(client.get("/users", { retries: 2 })).rejects.toThrow(UnexpectedApiClientError);
+      await vi.runAllTimersAsync();
+      await assertion;
       expect(globalThis.fetch).toHaveBeenCalledTimes(3);
     });
   });
 
   describe("shouldRetry option", () => {
+    beforeEach(() => vi.useFakeTimers());
     it("retries on 5xx when shouldRetry returns true", async () => {
       let attempts = 0;
       globalThis.fetch = vi.fn().mockImplementation(() => {
@@ -679,22 +686,24 @@ describe("FetchApiClient", () => {
             status: 503,
             statusText: "Service Unavailable",
             headers: new Headers({ "content-type": "application/json" }),
-            json: () => Promise.resolve({ error: "Service Unavailable" }),
+            text: () => Promise.resolve(JSON.stringify({ error: "Service Unavailable" })),
           });
         }
         return Promise.resolve({
           status: 200,
           statusText: "OK",
           headers: new Headers({ "content-type": "application/json" }),
-          json: () => Promise.resolve([{ id: "1", name: "John" }]),
+          text: () => Promise.resolve(JSON.stringify([{ id: "1", name: "John" }])),
         });
       });
 
       const client = createApiClient({ baseUrl: "https://api.example.com", Request, Response });
-      const result = await client.get("/users", {
+      const request = client.get("/users", {
         retries: 3,
         shouldRetry: ({ response }) => response !== undefined && response.status >= 500,
       });
+      await vi.runAllTimersAsync();
+      const result = await request;
 
       expect(attempts).toBe(3);
       expect(result.success).toBe(true);
@@ -709,12 +718,14 @@ describe("FetchApiClient", () => {
 
       const client = createApiClient({ baseUrl: "https://api.example.com", Request, Response });
 
-      await expect(
+      const assertion = expect(
         client.get("/users", {
           retries: 5,
           shouldRetry: ({ attempt }) => attempt < 1, // Only retry once
         }),
       ).rejects.toThrow(UnexpectedApiClientError);
+      await vi.runAllTimersAsync();
+      await assertion;
 
       expect(attempts).toBe(2); // Initial + 1 retry
     });
@@ -730,11 +741,13 @@ describe("FetchApiClient", () => {
         status: 500,
         statusText: "Internal Server Error",
         headers: new Headers({ "content-type": "application/json" }),
-        json: () => Promise.resolve({ error: "Server error" }),
+        text: () => Promise.resolve(JSON.stringify({ error: "Server error" })),
       });
 
       const client = createApiClient({ baseUrl: "https://api.example.com", Request, Response });
-      await client.get("/users", { retries: 3, shouldRetry });
+      const request = client.get("/users", { retries: 3, shouldRetry });
+      await vi.runAllTimersAsync();
+      await request;
 
       expect(shouldRetry).toHaveBeenCalledTimes(2);
       expect(contexts[0]).toEqual({
@@ -780,15 +793,17 @@ describe("FetchApiClient", () => {
           status: 503,
           statusText: "Service Unavailable",
           headers: new Headers({ "content-type": "application/json" }),
-          json: () => Promise.resolve({ error: "Still unavailable" }),
+          text: () => Promise.resolve(JSON.stringify({ error: "Still unavailable" })),
         });
       });
 
       const client = createApiClient({ baseUrl: "https://api.example.com", Request, Response });
-      const result = await client.get("/users", {
+      const request = client.get("/users", {
         retries: 2,
         shouldRetry: ({ response }) => response !== undefined && response.status >= 500,
       });
+      await vi.runAllTimersAsync();
+      const result = await request;
 
       // 1 initial + 2 retries = 3 total attempts
       expect(attempts).toBe(3);
@@ -852,9 +867,8 @@ describe("FetchApiClient", () => {
       });
       const result = await client.get("/untyped", {});
 
-      // When no response schema, success responses still return body
-      expect(result.success).toBe(true);
-      expect("body" in result && result.body).toEqual(mockData);
+      expect(result.success).toBe(false);
+      expect(result.code).toBe(200);
     });
 
     it("handles endpoints without request schema but with path params", async () => {
@@ -872,7 +886,7 @@ describe("FetchApiClient", () => {
         "https://api.example.com/items/123",
         expect.any(Object),
       );
-      expect(result.success).toBe(true);
+      expect(result.success).toBe(false);
     });
   });
 

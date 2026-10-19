@@ -32,6 +32,37 @@ const Response = {
 } as const;
 
 describe("HTTP client request types", () => {
+  it("requires branded path identifiers while preserving codec, query and body inputs", () => {
+    const userId = z.string().brand<"UserId">();
+    const schemas = {
+      "/v1/users/{user_id}": { POST: {
+        params: z.object({
+          user_id: userId,
+          at: isoDate,
+          empty: z.codec(z.literal("none"), z.null(), {
+            decode: () => null,
+            encode: () => "none" as const,
+          }),
+        }),
+        query: z.object({ user_id: userId }),
+        body: z.object({ user_id: userId }),
+      } },
+    } as const;
+    type Options = RequestOptions<typeof schemas, "/v1/users/{user_id}", "POST">;
+    const options = {
+      params: { user_id: userId.parse("u_1"), at: "2026-07-28T00:00:00.000Z", empty: "none" },
+      query: { user_id: "u_1" },
+      body: { user_id: "u_1" },
+    } satisfies Options;
+    expectTypeOf(options).toExtend<Options>();
+    const invalid: Options = { ...options, params: {
+      ...options.params,
+      // @ts-expect-error Path identifiers must carry the schema's brand.
+      user_id: "u_1",
+    } };
+    expectTypeOf(invalid).toExtend<Options>();
+  });
+
   it("exposes schema inputs to callers and preserves response outputs", () => {
     expectTypeOf<
       ExtractRequestParams<typeof Request, "/events/{at}", "POST">

@@ -83,7 +83,7 @@ See [Choose your packages](https://altstack-docs.vercel.app/start/package-map) f
 3. At HTTP boundaries, return tagged `Result` errors for declared failures. In the current Kafka and worker runtimes, throw when processing must fail or retry; a returned `Err` is not interpreted as a provider failure.
 4. Generate OpenAPI or AsyncAPI from the owning router.
 5. Generate TypeScript/Zod, Python/Pydantic, or Rust SDK artifacts.
-6. Use generated client types and each adapter's available runtime validation. TypeScript HTTP clients validate declared path/query/body inputs and declared response statuses, but not headers or undeclared 2xx bodies. Generated Rust HTTP clients rely on Rust types and Serde rather than an OpenAPI validation pass.
+6. Use generated client types and each adapter's available runtime validation. TypeScript HTTP clients validate declared path/query/body inputs and declared response statuses, reject undeclared statuses, and do not validate headers. Generated Rust HTTP clients rely on Rust types and Serde rather than an OpenAPI validation pass.
 
 The pieces remain independently useful: generators accept compatible documents from non-Altstack servers, and server/worker packages do not require generated clients.
 

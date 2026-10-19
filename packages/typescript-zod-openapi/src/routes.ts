@@ -14,7 +14,7 @@ export interface RouteInfo {
   method: HttpMethod;
   parameters: RouteParameter[];
   requestBody?: AnySchema;
-  responses: Record<string, AnySchema>;
+  responses: Record<string, AnySchema | undefined>;
 }
 
 export interface RouteSchemaNames {
@@ -99,7 +99,7 @@ export function parseOpenApiPaths(
       if (!operation) continue;
 
       const parameters: RouteParameter[] = [];
-      const responses: Record<string, AnySchema> = {};
+      const responses: Record<string, AnySchema | undefined> = {};
 
       if (Array.isArray(pathItem["parameters"])) {
         for (const param of pathItem["parameters"]) {
@@ -148,6 +148,13 @@ export function parseOpenApiPaths(
           if (response && typeof response === "object") {
             const responseSchema = response as AnySchema;
             const content = responseSchema["content"];
+            if (
+              statusCode.startsWith("2") &&
+              !responseSchema["$ref"] &&
+              (!content || Object.keys(content).length === 0)
+            ) {
+              responses[statusCode] = undefined;
+            }
             if (content && typeof content === "object") {
               const jsonContent = content["application/json"];
               if (jsonContent && typeof jsonContent === "object") {

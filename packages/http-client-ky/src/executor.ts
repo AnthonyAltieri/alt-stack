@@ -40,15 +40,18 @@ export class KyExecutor implements HttpExecutor<KyResponse> {
       });
 
       let data: unknown;
-      const contentType = response.headers.get("content-type");
-      if (contentType?.includes("application/json")) {
-        try {
-          data = await response.json();
-        } catch {
-          data = await response.text();
+      if (response.status !== 204 && response.status !== 205 && response.headers.get("content-length")?.trim() !== "0") {
+        const text = await response.text();
+        if (text !== "") {
+          data = text;
+          if (response.headers.get("content-type")?.includes("application/json")) {
+            try {
+              data = JSON.parse(text) as unknown;
+            } catch {
+              // Preserve non-JSON text for response-schema validation.
+            }
+          }
         }
-      } else {
-        data = await response.text();
       }
 
       return {
@@ -60,18 +63,17 @@ export class KyExecutor implements HttpExecutor<KyResponse> {
     } catch (error: unknown) {
       // Handle ky timeout errors
       if (error instanceof Error && error.name === "TimeoutError") {
-        throw new TimeoutError(request.timeout ?? 0, request.url, request.method, error);
+        throw new TimeoutError(request.timeout ?? 0, undefined, request.method);
       }
       // Handle abort errors (manual timeout via AbortController)
       if (error instanceof Error && error.name === "AbortError") {
-        throw new TimeoutError(request.timeout ?? 0, request.url, request.method, error);
+        throw new TimeoutError(request.timeout ?? 0, undefined, request.method);
       }
       throw new UnexpectedApiClientError(
-        `Network error: ${error instanceof Error ? error.message : String(error)}`,
+        "Network request failed",
         undefined,
-        request.url,
+        undefined,
         request.method,
-        error,
       );
     }
   }
