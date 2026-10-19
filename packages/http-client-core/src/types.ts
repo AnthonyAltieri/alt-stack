@@ -76,9 +76,11 @@ export type ExtractPathParams<T extends string> = T extends `${string}{${infer P
 /** Preserve output-only brands without changing codec input types. */
 type PathParamsInput<TInput, TOutput> = {
   [K in keyof TInput]: K extends keyof TOutput
-    ? NonNullable<TOutput[K]> extends z.$brand<infer _Brand>
-      ? TOutput[K]
-      : TInput[K]
+    ? TOutput[K] extends null | undefined
+      ? TInput[K]
+      : NonNullable<TOutput[K]> extends z.$brand<infer _Brand>
+        ? TOutput[K]
+        : TInput[K]
     : TInput[K];
 };
 

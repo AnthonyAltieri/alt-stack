@@ -36,14 +36,21 @@ describe("HTTP client request types", () => {
     const userId = z.string().brand<"UserId">();
     const schemas = {
       "/v1/users/{user_id}": { POST: {
-        params: z.object({ user_id: userId, at: isoDate }),
+        params: z.object({
+          user_id: userId,
+          at: isoDate,
+          empty: z.codec(z.literal("none"), z.null(), {
+            decode: () => null,
+            encode: () => "none" as const,
+          }),
+        }),
         query: z.object({ user_id: userId }),
         body: z.object({ user_id: userId }),
       } },
     } as const;
     type Options = RequestOptions<typeof schemas, "/v1/users/{user_id}", "POST">;
     const options = {
-      params: { user_id: userId.parse("u_1"), at: "2026-07-28T00:00:00.000Z" },
+      params: { user_id: userId.parse("u_1"), at: "2026-07-28T00:00:00.000Z", empty: "none" },
       query: { user_id: "u_1" },
       body: { user_id: "u_1" },
     } satisfies Options;
