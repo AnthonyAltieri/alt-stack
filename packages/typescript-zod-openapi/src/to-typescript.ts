@@ -154,8 +154,6 @@ function generateRouteSchemas(
     for (const [statusCode, responseSchema] of Object.entries(
       route.responses,
     )) {
-      if (!responseSchema) continue;
-
       const isSuccess = statusCode.startsWith("2");
       const suffix = isSuccess
         ? `${statusCode}Response`
@@ -165,6 +163,11 @@ function generateRouteSchemas(
         route.method,
         suffix,
       );
+
+      if (!responseSchema) {
+        declarations.push(`export const ${responseSchemaName} = z.undefined();`);
+        continue;
+      }
 
       registerAndDeclare(
         responseSchemaName,
@@ -241,11 +244,7 @@ function generateRequestResponseObjects(
       responseMethodObj[route.method] = {};
     }
 
-    for (const [statusCode, responseSchema] of Object.entries(
-      route.responses,
-    )) {
-      if (!responseSchema) continue;
-
+    for (const statusCode of Object.keys(route.responses)) {
       const isSuccess = statusCode.startsWith("2");
       const suffix = isSuccess
         ? `${statusCode}Response`

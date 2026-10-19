@@ -12,21 +12,19 @@ export interface FetchExecutorOptions {
 }
 
 async function parseResponseData(response: Response): Promise<unknown> {
-  const contentLength = response.headers.get("content-length")?.trim();
-  if (contentLength === "0") {
-    return null;
+  if (response.status === 204 || response.status === 205 || response.headers.get("content-length")?.trim() === "0") {
+    return undefined;
   }
-
-  const contentType = response.headers.get("content-type")?.trim();
-  if (contentType?.includes("application/json")) {
+  const text = await response.text();
+  if (text === "") return undefined;
+  if (response.headers.get("content-type")?.includes("application/json")) {
     try {
-      return await response.json();
+      return JSON.parse(text) as unknown;
     } catch {
-      return await response.text();
+      return text;
     }
   }
-
-  return await response.text();
+  return text;
 }
 
 /**
@@ -68,14 +66,13 @@ export class FetchExecutor implements HttpExecutor<Response> {
       };
     } catch (error: unknown) {
       if (error instanceof Error && error.name === "AbortError") {
-        throw new TimeoutError(request.timeout!, request.url, request.method, error);
+        throw new TimeoutError(request.timeout ?? 0, undefined, request.method);
       }
       throw new UnexpectedApiClientError(
-        `Network error: ${error instanceof Error ? error.message : String(error)}`,
+        "Network request failed",
         undefined,
-        request.url,
+        undefined,
         request.method,
-        error,
       );
     } finally {
       if (timeoutId) {

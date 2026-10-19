@@ -630,15 +630,6 @@ export class ApiClient<
         : undefined;
 
     if (!responseSchema) {
-      // No schema defined for this status code
-      if (statusCode.startsWith("2")) {
-        return {
-          success: true,
-          body: data,
-          code: statusCode,
-          raw,
-        } as SuccessResponse<unknown, string, TRawResponse>;
-      }
       this.log("error", "HTTP error response", {
         method,
         endpoint,
@@ -648,7 +639,7 @@ export class ApiClient<
       return {
         success: false,
         error: new UnexpectedApiClientError(
-          `Unexpected error response: ${statusText}`,
+          `Unexpected response status: ${status}`,
           status,
           endpoint,
           method,

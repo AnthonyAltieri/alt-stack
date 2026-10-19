@@ -36,13 +36,13 @@ if (result.code === "404") {
   return null;
 }
 
-// Numeric codes identify undocumented non-2xx responses.
+// Numeric codes identify undocumented statuses and validation failures.
 if (typeof result.code === "number") {
   console.error("Undocumented HTTP status", result.code, result.error);
 }
 ```
 
-Documented codes are strings because they are keys in the generated response map. An undocumented non-2xx status uses a numeric `code` and an `UnexpectedApiClientError`. An undocumented 2xx status is returned as a successful response with unvalidated `body` and a string code.
+Documented codes are strings because they are keys in the generated response map. Every undocumented status, including 2xx, returns `success: false` with a numeric `code` and an `UnexpectedApiClientError`. Declare content-free successes with `z.undefined()`; their body is `undefined` in both adapters.
 
 ### Request validation and transport failures throw
 
@@ -152,7 +152,7 @@ Ky clients accept the same `headers` providers through core. To refresh tokens o
 - Path values replace the matching `{name}` with `String(value)`; they are not URL-encoded.
 - Query values become `String(value)` and `URLSearchParams` encodes the result. `undefined` and `null` are omitted. Arrays and nested objects are not expanded; they stringify as a single value.
 - Only `POST`, `PUT`, and `PATCH` bodies are JSON-stringified and forwarded. `GET` and `DELETE` bodies are not sent.
-- Callers provide each request schema's `z.input` type. Params, query, and body are parsed to `z.output`, then encoded through the same schema before transport, so defaults, stripping, codecs, and other encodable transforms affect wire values consistently.
+- Callers provide each request schema's `z.input` type, except branded path fields require the branded output type. Query and body brands remain output-only; unbranded path codecs keep their input types. Params, query, and body are parsed to `z.output`, then encoded through the same schema before transport, so defaults, stripping, codecs, and other encodable transforms affect wire values consistently.
 
 Pre-encode path values and flatten complex query objects at your application boundary when those defaults are not the API's wire format.
 Use `z.codec` for bidirectional domain transformations. Zod's `z.transform` is one-way and cannot be used by `z.encode`.

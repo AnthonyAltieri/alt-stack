@@ -60,16 +60,16 @@ The executor spreads `fetchOptions` first. It then owns `method`, `headers`, `si
 
 ### Response decoding
 
-- `content-length: 0` becomes `null` without reading the body.
-- A content type containing `application/json` is decoded with `response.json()`.
-- If JSON decoding throws, the executor then calls `response.text()`.
-- Every other content type is returned as text.
+- Status 204 or 205, and `content-length: 0`, become `undefined` without reading the body.
+- Other bodies are read once as text; a zero-length body becomes `undefined`.
+- A nonempty body whose content type contains `application/json` is parsed as JSON; invalid JSON remains text for schema validation.
+- Every other nonempty content type is returned as text. JSON `null` remains `null`.
 
 The raw native `Response` is returned alongside decoded `data`. Because body readers consume the stream, callers should not assume `result.raw.json()` or `.text()` remains usable; headers, status, URL, and other metadata remain available.
 
 ### Timeouts and errors
 
-When `ExecuteRequest.timeout` is defined, the executor creates an `AbortController` and aborts after that many milliseconds. An `AbortError` becomes `TimeoutError(timeout, url, method, cause)`. Every other thrown value becomes `UnexpectedApiClientError` with message `Network error: ...` and the original value as `cause`. The timer is cleared in `finally`.
+When `ExecuteRequest.timeout` is defined, the executor creates an `AbortController` and aborts after that many milliseconds. An `AbortError` becomes `TimeoutError` with the configured timeout (or zero when absent) and method. Every other thrown value becomes `UnexpectedApiClientError` with the fixed message `Network request failed`. Original exception fields, the original cause, and the request URL are discarded; they are unavailable programmatically and cannot enter error serialization or internal logs. The timer is cleared in `finally`.
 
 A caller-supplied signal cannot be passed through `fetchOptions`; the executor reserves `signal` for timeout handling.
 

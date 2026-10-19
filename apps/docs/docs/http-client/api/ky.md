@@ -79,11 +79,11 @@ Be careful with `prefixUrl`: the core passes an already-concatenated URL (`baseU
 
 ### Response decoding
 
-Content types containing `application/json` use `response.json()` and fall back to `response.text()` if parsing throws. All other content types use text. Unlike the Fetch executor, there is no special `content-length: 0` branch; an empty body therefore becomes an empty string through the text path. `result.raw` is the `KyResponse`, whose body stream has already been consumed by decoding.
+Status 204 or 205, and `content-length: 0`, become `undefined` without reading the body. Other bodies are read once as text; a zero-length body becomes `undefined`. Nonempty `application/json` content is parsed as JSON, with malformed JSON retained as text for schema validation. Other nonempty content remains text, and JSON `null` remains `null`. `result.raw` is the `KyResponse`, whose body stream has already been consumed by decoding.
 
 ### Timeouts and errors
 
-An error named `TimeoutError` or `AbortError` becomes the core `TimeoutError`. All other thrown values become `UnexpectedApiClientError` with a `Network error: ...` message and the original value as `cause`.
+An error named `TimeoutError` or `AbortError` becomes the core `TimeoutError`. All other thrown values become `UnexpectedApiClientError` with the fixed message `Network request failed`. Both wrappers discard original exception fields, the original cause, and the request URL; these are unavailable programmatically and cannot enter error serialization or internal logs.
 
 Ky may have its own retry configuration in `kyOptions`, and the Altstack core separately supports `RequestOptions.retries`. Enabling both creates two retry layers; choose one policy deliberately to avoid multiplying attempts.
 
