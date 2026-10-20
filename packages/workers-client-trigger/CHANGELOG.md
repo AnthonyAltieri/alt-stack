@@ -1,5 +1,11 @@
 # @alt-stack/workers-client-trigger
 
+## 1.8.2
+
+### Patch Changes
+
+- @alt-stack/workers-client-core@1.8.2
+
 ## 1.8.1
 
 ### Patch Changes
