@@ -108,7 +108,13 @@ Expected output:
 4. validates a documented response body;
 5. returns a union discriminated by `success` and then by `code`.
 
-For `POST`, `PUT`, and `PATCH`, pass a `body`; the client validates it and sends JSON. `DELETE` has the same options shape as `GET`.
+For `POST`, `PUT`, and `PATCH`, a supplied `body` is validated and sent as JSON. All methods derive body requirements from the request schema: required bodies must be supplied, schemas accepting `undefined` allow omission, and routes without a body schema reject payloads. Requests without a body send no default `Content-Type` header.
+
+For example, when `POST /v1/jobs/{id}/cancel` has no OpenAPI `requestBody`, both Fetch and Ky clients accept:
+
+```typescript
+await client.post("/v1/jobs/{id}/cancel", { params: { id: "job-1" } });
+```
 
 ## 4. Use generated maps
 

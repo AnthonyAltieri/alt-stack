@@ -198,7 +198,6 @@ describe("FetchApiClient", () => {
         expect.any(String),
         expect.objectContaining({
           headers: expect.objectContaining({
-            "Content-Type": "application/json",
             Authorization: "Bearer token",
             "X-Custom": "value",
           }),

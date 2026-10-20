@@ -124,10 +124,9 @@ function formatLogError(error: unknown): Record<string, unknown> {
 function buildHeaders(
   clientHeaders: Record<string, unknown> | undefined,
   requestHeaders: Record<string, unknown>,
+  hasBody: boolean,
 ): Record<string, string> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
+  const headers: Record<string, string> = hasBody ? { "Content-Type": "application/json" } : {};
 
   for (const headerSet of [clientHeaders, requestHeaders]) {
     if (!headerSet) continue;
@@ -247,9 +246,7 @@ export class ApiClient<
    */
   async post<TEndpoint extends EndpointsWithMethod<TRequest, "POST">>(
     endpoint: TEndpoint,
-    options: RequestOptions<TRequest, TEndpoint, "POST"> & {
-      body: ExtractRequestBody<TRequest, TEndpoint, "POST">;
-    },
+    options: RequestOptions<TRequest, TEndpoint, "POST">,
   ): Promise<ApiResponse<TResponse, TEndpoint, "POST", TRawResponse>> {
     return this.request("POST", endpoint, options);
   }
@@ -259,9 +256,7 @@ export class ApiClient<
    */
   async put<TEndpoint extends EndpointsWithMethod<TRequest, "PUT">>(
     endpoint: TEndpoint,
-    options: RequestOptions<TRequest, TEndpoint, "PUT"> & {
-      body: ExtractRequestBody<TRequest, TEndpoint, "PUT">;
-    },
+    options: RequestOptions<TRequest, TEndpoint, "PUT">,
   ): Promise<ApiResponse<TResponse, TEndpoint, "PUT", TRawResponse>> {
     return this.request("PUT", endpoint, options);
   }
@@ -271,9 +266,7 @@ export class ApiClient<
    */
   async patch<TEndpoint extends EndpointsWithMethod<TRequest, "PATCH">>(
     endpoint: TEndpoint,
-    options: RequestOptions<TRequest, TEndpoint, "PATCH"> & {
-      body: ExtractRequestBody<TRequest, TEndpoint, "PATCH">;
-    },
+    options: RequestOptions<TRequest, TEndpoint, "PATCH">,
   ): Promise<ApiResponse<TResponse, TEndpoint, "PATCH", TRawResponse>> {
     return this.request("PATCH", endpoint, options);
   }
@@ -343,15 +336,16 @@ export class ApiClient<
             throw new UnexpectedApiClientError("Header provider failed", undefined, endpoint, method);
           }
         }
-        const headers = buildHeaders(clientHeaders, requestHeaders);
+        const serializedBody = wireBody !== undefined && (method === "POST" || method === "PUT" || method === "PATCH")
+          ? JSON.stringify(wireBody)
+          : undefined;
+        const headers = buildHeaders(clientHeaders, requestHeaders, serializedBody !== undefined);
 
         const result = await this.options.executor.execute({
           method,
           url,
           headers,
-          body: wireBody !== undefined && (method === "POST" || method === "PUT" || method === "PATCH")
-            ? JSON.stringify(wireBody)
-            : undefined,
+          body: serializedBody,
           timeout,
         });
 
