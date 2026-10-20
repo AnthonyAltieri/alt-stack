@@ -1,5 +1,6 @@
 import { describe, expectTypeOf, it } from "vitest";
 import { z } from "zod";
+import type { ApiClient } from "./index.js";
 import type {
   ExtractRequestBody,
   ExtractRequestParams,
@@ -32,6 +33,32 @@ const Response = {
 } as const;
 
 describe("HTTP client request types", () => {
+  it("derives body requirements from the schema for every write method", () => {
+    const bodyless = { params: z.object({ id: z.string() }) };
+    const required = { body: z.object({ reason: z.string() }) };
+    const optional = { body: required.body.optional() };
+    const schemas = {
+      "/v1/jobs/{id}/cancel": { POST: bodyless, PUT: bodyless, PATCH: bodyless, DELETE: bodyless },
+      "/required": { POST: required, PUT: required, PATCH: required, DELETE: required },
+      "/optional": { POST: optional, PUT: optional, PATCH: optional, DELETE: optional },
+    } as const;
+
+    function checkCalls(client: ApiClient<typeof schemas, {}>) {
+      for (const method of ["post", "put", "patch", "delete"] as const) {
+        void client[method]("/v1/jobs/{id}/cancel", { params: { id: "job-1" } });
+        // @ts-expect-error Operations without a body schema reject payloads.
+        void client[method]("/v1/jobs/{id}/cancel", { params: { id: "job-1" }, body: {} });
+        void client[method]("/required", { body: { reason: "cancelled" } });
+        // @ts-expect-error Required body schemas still require a payload.
+        void client[method]("/required", {});
+        void client[method]("/optional", {});
+        void client[method]("/optional", { body: { reason: "cancelled" } });
+      }
+    }
+
+    expectTypeOf(checkCalls).toBeFunction();
+  });
+
   it("requires branded path identifiers while preserving codec, query and body inputs", () => {
     const userId = z.string().brand<"UserId">();
     const schemas = {

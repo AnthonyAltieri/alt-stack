@@ -114,7 +114,7 @@ await api.get("/users/{id}", {
 });
 ```
 
-Header values are converted with `String`; `undefined` and `null` are omitted. The client always begins with `Content-Type: application/json`, even for requests without a body. Header keys are merged as ordinary JavaScript object keys, so differently cased names are not normalized before the executor receives them.
+Header values are converted with `String`; `undefined` and `null` are omitted. The client adds a default `Content-Type: application/json` only when sending a JSON body. Requests without a body have no default `Content-Type`; explicitly supplied headers are preserved. Header keys are merged as ordinary JavaScript object keys, so differently cased names are not normalized before the executor receives them.
 
 The generated OpenAPI map can contain a `headers` schema, but the current `RequestOptions` and runtime validate only `params`, `query`, and `body`. Send HTTP headers through the top-level `headers` option.
 

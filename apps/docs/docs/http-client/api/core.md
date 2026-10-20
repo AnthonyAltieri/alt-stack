@@ -20,14 +20,14 @@ class ApiClient<
   readonly options: ApiClientOptions<TRequest, TResponse, TRawResponse>;
 
   get(endpoint, options): Promise<ApiResponse<...>>;
-  post(endpoint, options & { body: ... }): Promise<ApiResponse<...>>;
-  put(endpoint, options & { body: ... }): Promise<ApiResponse<...>>;
-  patch(endpoint, options & { body: ... }): Promise<ApiResponse<...>>;
+  post(endpoint, options): Promise<ApiResponse<...>>;
+  put(endpoint, options): Promise<ApiResponse<...>>;
+  patch(endpoint, options): Promise<ApiResponse<...>>;
   delete(endpoint, options): Promise<ApiResponse<...>>;
 }
 ```
 
-The endpoint generic is restricted to routes that contain the selected uppercase method in `TRequest`. All five methods require an options object; use `{}` when a route has no input. `post`, `put`, and `patch` require `body` in their public method signatures. Request/response behavior is described under [`RequestOptions`](#request-methods-and-requestoptions) and [`ApiResponse`](#apiresponse).
+The endpoint generic is restricted to routes that contain the selected uppercase method in `TRequest`. All five methods require an options object; use `{}` when a route has no input. A required body schema requires `body`; a schema accepting `undefined` makes it optional. Routes without a body schema accept omitted `body` and reject payloads. These rules are shared by Fetch and Ky. Request/response behavior is described under [`RequestOptions`](#request-methods-and-requestoptions) and [`ApiResponse`](#apiresponse).
 
 ### `ApiClientOptions`
 
@@ -47,7 +47,7 @@ The endpoint generic is restricted to routes that contain the selected uppercase
 
 Client `headers` can be a record or a zero-argument function returning a record or a `Promise` of one. A provider runs after request validation, once per attempt, including retries controlled by core. Its resolved headers are not cached between requests or attempts.
 
-Headers merge in order: `Content-Type: application/json`, client headers, then per-request headers. Non-nullish values are converted with `String`; `null` and `undefined` are skipped without removing an earlier value. Keys merge as ordinary case-sensitive object keys. Only records are supported; convert `Headers` or tuple lists to a record before supplying them.
+Headers merge in order: `Content-Type: application/json` when a JSON body is sent, client headers, then per-request headers. Requests without a body have no default `Content-Type`; explicitly supplied headers are preserved. Non-nullish values are converted with `String`; `null` and `undefined` are skipped without removing an earlier value. Keys merge as ordinary case-sensitive object keys. Only records are supported; convert `Headers` or tuple lists to a record before supplying them.
 
 Provider throws and rejections enter the existing thrown-error retry path as `UnexpectedApiClientError("Header provider failed")`, with endpoint and method context. The original thrown value is discarded, including its message and cause, so it cannot expose credentials through the returned error, retry callbacks or internal logs. The failed attempt does not invoke the executor. The executor's `timeout` starts after headers resolve and does not bound provider execution.
 
@@ -133,7 +133,7 @@ An undocumented status, including 2xx, returns `{ success: false, code: number, 
 | `ExtractRequestQuery<...>` | infers a declared query schema or `never` |
 | `ExtractRequestBody<...>` | infers a declared body schema or `never` |
 | `ParamsRequired<...>` | `true` for a params schema or a path containing tokens |
-| `BodyRequired<...>` | `true` when the method entry has a Zod `body` schema |
+| `BodyRequired<...>` | `true` when the method entry has a Zod `body` schema whose input excludes `undefined` |
 | `EndpointsWithMethod<TRequest, TMethod>` | endpoint-key union containing the requested method |
 
 Path parameter fields whose schema output is branded require the branded output type. Parse identifiers with their schema before passing them to the client. Unbranded path fields retain schema input types, preserving codec inputs. Query and body types always use `z.input`, so output-only brands do not tighten those call sites.

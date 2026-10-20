@@ -5,6 +5,30 @@ import { createApiClient, FetchExecutor, UnexpectedApiClientError } from "./inde
 const schemas = { Request: { "/health": { GET: {} } }, Response: { "/health": { GET: { "200": z.string() } } } } as const;
 const baseUrl = "https://api.example.test";
 
+it("sends no body or content-type for operations without a request body", async () => {
+  const operation = { params: z.object({ id: z.string() }) };
+  const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response("ok"));
+  const client = createApiClient({
+    baseUrl,
+    Request: {
+      "/v1/jobs/{id}/cancel": { POST: operation, PUT: operation, PATCH: operation, DELETE: operation },
+    },
+    Response: {},
+    fetch,
+  });
+
+  for (const method of ["post", "put", "patch", "delete"] as const) {
+    await client[method]("/v1/jobs/{id}/cancel", { params: { id: "job-1" } });
+  }
+
+  expect(fetch).toHaveBeenCalledTimes(4);
+  for (const [url, init] of fetch.mock.calls) {
+    expect(url).toBe(`${baseUrl}/v1/jobs/job-1/cancel`);
+    expect(init?.body).toBeUndefined();
+    expect(new Headers(init?.headers).has("Content-Type")).toBe(false);
+  }
+});
+
 const entrypoints = [
   {
     name: "client",
@@ -83,7 +107,6 @@ describe("client header providers", () => {
     expect(headers).toHaveBeenCalledOnce();
     expect(fetch).toHaveBeenCalledWith(`${baseUrl}/health`, expect.objectContaining({
       headers: {
-        "Content-Type": "application/json",
         Authorization: "Bearer client-token",
         "X-Request-Id": "request-id",
         "X-Count": "2",
@@ -119,8 +142,8 @@ describe("client header providers", () => {
     expect(headers).toHaveBeenCalledTimes(2);
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(fetch.mock.calls.map(([, init]) => init?.headers)).toEqual([
-      { "Content-Type": "application/json", Authorization: "Bearer first-token", "X-Request-Id": "request-id" },
-      { "Content-Type": "application/json", Authorization: "Bearer second-token", "X-Request-Id": "request-id" },
+      { Authorization: "Bearer first-token", "X-Request-Id": "request-id" },
+      { Authorization: "Bearer second-token", "X-Request-Id": "request-id" },
     ]);
     expect(globalFetch).not.toHaveBeenCalled();
   });

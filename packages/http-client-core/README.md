@@ -62,7 +62,7 @@ const client = new ApiClient({
 await client.get("/health", { headers: { "X-Request-Id": "request-123" } });
 ```
 
-Supply your application's `getToken` function. The provider runs once per attempt, including core retries, after request validation. Headers merge in this order: the default `Content-Type: application/json`, client headers, then request headers. Values are stringified; `null` and `undefined` are omitted without removing earlier values. Keys retain their existing case-sensitive merge behavior.
+Supply your application's `getToken` function. The provider runs once per attempt, including core retries, after request validation. Headers merge in this order: the default `Content-Type: application/json` when a JSON body is sent, client headers, then request headers. Requests without a body have no default `Content-Type`. Values are stringified; `null` and `undefined` are omitted without removing earlier values. Keys retain their existing case-sensitive merge behavior.
 
 A thrown or rejected provider error becomes an `UnexpectedApiClientError` with message `Header provider failed`. Its original message and cause are discarded to keep credentials out of errors and logs. Existing retry rules apply. Providers are not covered by the executor's request timeout.
 

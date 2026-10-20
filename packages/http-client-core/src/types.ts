@@ -145,7 +145,11 @@ export type BodyRequired<
   TRequest extends ApiRequestSchema,
   TEndpoint extends keyof TRequest,
   TMethod extends keyof TRequest[TEndpoint],
-> = TRequest[TEndpoint][TMethod] extends { body: z.ZodTypeAny } ? true : false;
+> = TRequest[TEndpoint][TMethod] extends { body: z.ZodTypeAny }
+  ? undefined extends ExtractRequestBody<TRequest, TEndpoint, TMethod>
+    ? false
+    : true
+  : false;
 
 /**
  * Extracts endpoints that have a specific HTTP method
