@@ -9,14 +9,22 @@ import {
   getSchemaExportedVariableNameForPrimitiveType,
   getSchemaExportedVariableNameForStringFormat,
 } from "./registry";
-import type { AnySchema } from "./types/types";
+import type { AnySchema, ConversionOptions } from "./types/types";
 import { brandBaseSchema, getBrandName } from "./brands";
 
 const validIdentifierRegex = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/;
 
-type SchemaToTypeOptions = {
+type SchemaToTypeOptions = ConversionOptions & {
   outputSchemaNames?: Set<string>;
 };
+
+function allowsExtraKeys(
+  additionalProperties: unknown,
+  options?: SchemaToTypeOptions,
+): boolean {
+  if (additionalProperties === true) return true;
+  return additionalProperties === undefined && options?.unspecifiedAdditionalProperties !== "strip";
+}
 
 function quotePropertyName(name: string): string {
   return validIdentifierRegex.test(name) ? name : `'${name}'`;
@@ -256,7 +264,7 @@ function objectSchemaToTypeString(
   }
 
   // Handle additionalProperties
-  if (additionalProperties === true || additionalProperties === undefined) {
+  if (allowsExtraKeys(additionalProperties, options)) {
     propertyStrings.push("[key: string]: unknown");
   } else if (
     typeof additionalProperties === "object" &&
@@ -322,7 +330,7 @@ export function generateInterface(
     lines.push("  [key: string]: never;");
   } else if (!hasProperties && additionalProperties === undefined) {
     lines.push("  [key: string]: unknown;");
-  } else if (additionalProperties === true || additionalProperties === undefined) {
+  } else if (allowsExtraKeys(additionalProperties, options)) {
     lines.push("  [key: string]: unknown;");
   } else if (
     typeof additionalProperties === "object" &&

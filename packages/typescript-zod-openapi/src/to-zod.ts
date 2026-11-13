@@ -5,15 +5,17 @@ import { convertOpenAPIArrayToZod } from "./types/array";
 import { convertOpenAPIObjectToZod } from "./types/object";
 import { convertOpenAPIUnionToZod } from "./types/union";
 import { convertOpenAPIIntersectionToZod } from "./types/intersection";
-import type { AnySchema } from "./types/types";
+import type { AnySchema, ConversionOptions } from "./types/types";
 import { brandBaseSchema, getBrandName } from "./brands";
 
-export function convertSchemaToZodString(schema: AnySchema): string {
+export function convertSchemaToZodString(schema: AnySchema, options?: ConversionOptions): string {
   if (!schema || typeof schema !== "object") return "z.unknown()";
+
+  const convert = (nested: AnySchema): string => convertSchemaToZodString(nested, options);
 
   const brand = getBrandName(schema);
   if (brand) {
-    const base = convertSchemaToZodString(brandBaseSchema(schema));
+    const base = convert(brandBaseSchema(schema));
     const branded = `${base}.brand<${JSON.stringify(brand)}>().meta(${JSON.stringify({ "x-altstack-brand": brand })})`;
     return schema["nullable"] === true ? `${branded}.nullable()` : branded;
   }
@@ -42,17 +44,17 @@ export function convertSchemaToZodString(schema: AnySchema): string {
   if ("oneOf" in schema && Array.isArray(schema["oneOf"])) {
     result = convertOpenAPIUnionToZod(
       schema as { oneOf: AnySchema[] },
-      convertSchemaToZodString,
+      convert,
     );
   } else if ("anyOf" in schema && Array.isArray(schema["anyOf"])) {
     result = convertOpenAPIUnionToZod(
       schema as { anyOf: AnySchema[] },
-      convertSchemaToZodString,
+      convert,
     );
   } else if ("allOf" in schema && Array.isArray(schema["allOf"])) {
     result = convertOpenAPIIntersectionToZod(
       schema as { allOf: AnySchema[] },
-      convertSchemaToZodString,
+      convert,
     );
   } else {
     switch (schema["type"]) {
@@ -100,7 +102,7 @@ export function convertSchemaToZodString(schema: AnySchema): string {
             minItems: schema["minItems"],
             type: "array",
           },
-          convertSchemaToZodString,
+          convert,
         );
         break;
       case "object":
@@ -111,7 +113,8 @@ export function convertSchemaToZodString(schema: AnySchema): string {
             required: schema["required"],
             type: "object",
           },
-          convertSchemaToZodString,
+          convert,
+          options,
         );
         break;
       default:
@@ -123,7 +126,8 @@ export function convertSchemaToZodString(schema: AnySchema): string {
               required: schema["required"],
               type: "object",
             },
-            convertSchemaToZodString,
+            convert,
+            options,
           );
         } else {
           result = schema["type"] === undefined ? "z.json()" : "z.unknown()";

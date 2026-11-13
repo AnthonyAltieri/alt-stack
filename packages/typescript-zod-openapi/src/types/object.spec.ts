@@ -359,4 +359,44 @@ describe("convertOpenAPIObjectToZod", () => {
       expect(result).toBe("z.object({ name: z.string() }).loose()");
     });
   });
+
+  describe("unspecified additionalProperties", () => {
+    const schema = {
+      type: "object" as const,
+      properties: { name: { type: "string" } },
+      required: ["name"],
+    };
+
+    it("should keep extra keys by default", () => {
+      expect(convertOpenAPIObjectToZod(schema, mockConvertSchema)).toBe(
+        "z.object({ name: z.string() }).loose()",
+      );
+    });
+
+    it("should strip extra keys when configured to strip", () => {
+      expect(
+        convertOpenAPIObjectToZod(schema, mockConvertSchema, {
+          unspecifiedAdditionalProperties: "strip",
+        }),
+      ).toBe("z.object({ name: z.string() })");
+    });
+
+    it("should keep extra keys for explicit additionalProperties true when configured to strip", () => {
+      expect(
+        convertOpenAPIObjectToZod(
+          { ...schema, additionalProperties: true },
+          mockConvertSchema,
+          { unspecifiedAdditionalProperties: "strip" },
+        ),
+      ).toBe("z.object({ name: z.string() }).loose()");
+    });
+
+    it("should keep a propertyless object as a record when configured to strip", () => {
+      expect(
+        convertOpenAPIObjectToZod({ type: "object" }, mockConvertSchema, {
+          unspecifiedAdditionalProperties: "strip",
+        }),
+      ).toBe("z.record(z.string(), z.unknown())");
+    });
+  });
 });

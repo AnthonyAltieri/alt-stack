@@ -25,6 +25,8 @@ const source = openApiToZodTsCode(document, undefined, {
 });
 ```
 
+An object schema that has properties but omits `additionalProperties` keeps extra keys by default, as JSON Schema allows: the generator emits `.loose()` and a `[key: string]: unknown` index signature. Pass `unspecifiedAdditionalProperties: "strip"` (CLI: `--unspecified-additional-properties strip`) to emit a plain `z.object()` that drops extra keys and a closed type. Explicit `additionalProperties` values are honoured in both modes.
+
 Generated files begin with a do-not-edit banner. Change the OpenAPI source, registry/include files, or generator options and regenerate the whole file.
 
 ## Branded types

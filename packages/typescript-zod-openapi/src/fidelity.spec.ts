@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { convertSchemaToZodString } from "./to-zod";
 import { schemaToTypeString } from "./interface-generator";
-import type { AnySchema } from "./types/types";
+import type { AnySchema, ConversionOptions } from "./types/types";
 
-function schemaFrom(schema: AnySchema): z.ZodType {
-  return new Function("z", `return ${convertSchemaToZodString(schema)}`)(z);
+function schemaFrom(schema: AnySchema, options?: ConversionOptions): z.ZodType {
+  return new Function("z", `return ${convertSchemaToZodString(schema, options)}`)(z);
 }
 
 describe("OpenAPI fidelity", () => {
@@ -47,5 +47,14 @@ describe("OpenAPI fidelity", () => {
     const typed = schemaFrom({ ...base, additionalProperties: { type: "number" } });
     expect(typed.parse({ name: "Ada", score: 5 })).toEqual({ name: "Ada", score: 5 });
     expect(typed.safeParse({ name: "Ada", score: "invalid" }).success).toBe(false);
+  });
+
+  it("strips extra keys from objects without additionalProperties when configured to strip", () => {
+    const strip = { unspecifiedAdditionalProperties: "strip" } as const;
+    const base = { type: "object", properties: { name: { type: "string" } }, required: ["name"] };
+    const value = { name: "Ada", extra: { enabled: true } };
+    expect(schemaFrom(base, strip).parse(value)).toEqual({ name: "Ada" });
+    expect(schemaFrom({ ...base, additionalProperties: true }, strip).parse(value)).toEqual(value);
+    expect(schemaFrom({ type: "array", items: base }, strip).parse([value])).toEqual([{ name: "Ada" }]);
   });
 });
