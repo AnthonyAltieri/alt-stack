@@ -1,5 +1,11 @@
 # @alt-stack/workers-client-warpstream
 
+## 1.9.0
+
+### Patch Changes
+
+- @alt-stack/workers-client-core@1.9.0
+
 ## 1.8.2
 
 ### Patch Changes

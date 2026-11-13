@@ -1,5 +1,12 @@
 # @alt-stack/server-nestjs
 
+## 1.9.0
+
+### Patch Changes
+
+- @alt-stack/server-core@1.9.0
+- @alt-stack/server-express@1.9.0
+
 ## 1.8.2
 
 ### Patch Changes
