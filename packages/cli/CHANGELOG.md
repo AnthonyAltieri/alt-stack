@@ -1,5 +1,11 @@
 # @alt-stack/cli
 
+## 1.9.0
+
+### Patch Changes
+
+- @alt-stack/result@1.9.0
+
 ## 1.8.2
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @alt-stack/server-hono
 
+## 1.9.0
+
+### Patch Changes
+
+- @alt-stack/server-core@1.9.0
+
 ## 1.8.2
 
 ### Patch Changes

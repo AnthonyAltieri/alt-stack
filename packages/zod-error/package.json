@@ -1,6 +1,6 @@
 {
   "name": "@alt-stack/zod-error",
-  "version": "1.8.2",
+  "version": "1.9.0",
   "description": "Utilities for formatting ZodError for structured logging",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

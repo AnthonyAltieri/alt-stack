@@ -1,6 +1,6 @@
 {
   "name": "@alt-stack/http-client-core",
-  "version": "1.8.2",
+  "version": "1.9.0",
   "description": "Core types, errors, and logic for type-safe HTTP clients",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

@@ -1,6 +1,6 @@
 {
   "name": "@alt-stack/server-bun",
-  "version": "1.8.2",
+  "version": "1.9.0",
   "description": "Type-safe server framework built on Bun with Zod validation",
   "type": "module",
   "main": "./src/index.ts",
