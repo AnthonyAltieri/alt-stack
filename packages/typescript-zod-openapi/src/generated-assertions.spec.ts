@@ -207,6 +207,43 @@ const plain: UserId = "unparsed";
     expect(formatDiagnostics(compileGeneratedCode(code))).toBe("");
   });
 
+  it("compiles objects without additionalProperties as closed interfaces when configured to strip", () => {
+    const code = openApiToZodTsCode(
+      { components: { schemas: {
+        Validation: {
+          oneOf: [
+            { $ref: "#/components/schemas/MissingCode" },
+            { $ref: "#/components/schemas/Locked" },
+          ],
+        },
+        MissingCode: { type: "object", properties: {
+          errorCode: { type: "string", enum: ["missing-code"] },
+          codeType: { type: "object", properties: { name: { type: "string" } }, required: ["name"] },
+        }, required: ["errorCode", "codeType"] },
+        Locked: { type: "object", properties: { errorCode: { type: "string", enum: ["locked"] } }, required: ["errorCode"] },
+        Metadata: { type: "object", properties: { id: { type: "string" } }, required: ["id"], additionalProperties: true },
+      } } },
+      undefined,
+      { includeRoutes: true, unspecifiedAdditionalProperties: "strip" },
+    );
+
+    expect(code).toContain(`export interface MissingCode {
+  errorCode: "missing-code";
+  codeType: { name: string };
+}`);
+    expect(code).toContain("export const LockedSchema = z.object({ errorCode: z.enum(['locked']) });");
+    expect(code).toContain(`export interface Metadata {
+  id: string;
+  [key: string]: unknown;
+}`);
+    expect(code).toContain("export const MetadataSchema = z.object({ id: z.string() }).loose();");
+    expect(formatDiagnostics(compileGeneratedCode(`${code}
+declare const validation: Validation;
+if (validation.errorCode === "missing-code") {
+  const name: string = validation.codeType.name;
+}`))).toBe("");
+  });
+
   it("compiles schema-valued propertyless records", () => {
     const code = openApiToZodTsCode(typedRecordFixture);
 

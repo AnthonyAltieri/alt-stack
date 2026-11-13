@@ -1,4 +1,4 @@
-import { AnySchema, OpenAPIObjectSchema } from "./types";
+import { AnySchema, ConversionOptions, OpenAPIObjectSchema } from "./types";
 
 const validIdentifierRegex = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/;
 
@@ -9,6 +9,7 @@ function quotePropertyName(name: string): string {
 export function convertOpenAPIObjectToZod(
   schema: OpenAPIObjectSchema,
   convertSchema: (schema: AnySchema) => string,
+  options?: ConversionOptions,
 ): string {
   const properties = schema.properties || {};
   const propertyNames = Object.keys(properties);
@@ -49,7 +50,7 @@ export function convertOpenAPIObjectToZod(
     result += ".strict()";
   } else if (typeof schema.additionalProperties === "object" && schema.additionalProperties !== null) {
     result += `.catchall(${convertSchema(schema.additionalProperties)})`;
-  } else {
+  } else if (schema.additionalProperties === true || options?.unspecifiedAdditionalProperties !== "strip") {
     result += ".loose()";
   }
 

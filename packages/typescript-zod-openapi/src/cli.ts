@@ -3,6 +3,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { openApiToZodTsCode } from "./to-typescript.js";
+import type { UnspecifiedAdditionalProperties } from "./types/types.js";
 
 const args = process.argv.slice(2);
 
@@ -19,6 +20,9 @@ Options:
   -o, --output <file>      Output file path (default: generated-types.ts)
   -r, --registry <file>    Registry file that registers custom schemas
   -i, --include <file>     TypeScript file to include at top of generated output
+  --unspecified-additional-properties <loose|strip>
+                           Objects that omit additionalProperties keep extra keys
+                           (loose, default) or drop them (strip)
   -h, --help               Show this help message
 
 Examples:
@@ -46,6 +50,15 @@ function getArgValue(shortFlag: string, longFlag: string): string | undefined {
   let idx = args.indexOf(shortFlag);
   if (idx === -1) idx = args.indexOf(longFlag);
   return idx !== -1 && idx + 1 < args.length ? args[idx + 1] : undefined;
+}
+
+function getUnspecifiedAdditionalProperties(): UnspecifiedAdditionalProperties | undefined {
+  const flag = "--unspecified-additional-properties";
+  if (!args.includes(flag)) return undefined;
+  const value = getArgValue(flag, flag);
+  if (value === "loose" || value === "strip") return value;
+  console.error(`Error: ${flag} must be loose or strip`);
+  process.exit(1);
 }
 
 async function fetchSchema(url: string): Promise<Record<string, unknown>> {
@@ -85,6 +98,7 @@ async function main() {
   const output = getArgValue("-o", "--output") ?? "generated-types.ts";
   const registryFile = getArgValue("-r", "--registry");
   const includeFile = getArgValue("-i", "--include");
+  const unspecifiedAdditionalProperties = getUnspecifiedAdditionalProperties();
 
   try {
     // Load registry file if provided (populates global schema registry)
@@ -114,6 +128,7 @@ async function main() {
     const customImportLines = includeContent ? [includeContent] : undefined;
     const tsCode = openApiToZodTsCode(schema, customImportLines, {
       includeRoutes: true,
+      unspecifiedAdditionalProperties,
     });
 
     writeFileSync(output, tsCode);

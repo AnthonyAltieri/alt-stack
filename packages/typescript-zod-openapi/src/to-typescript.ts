@@ -8,7 +8,7 @@ import {
   type SchemaRegistry,
 } from "./schema-dedup";
 import { convertSchemaToZodString } from "./to-zod";
-import type { AnySchema } from "./types/types";
+import type { AnySchema, UnspecifiedAdditionalProperties } from "./types/types";
 import {
   parseOpenApiPaths,
   generateRouteSchemaNames,
@@ -342,7 +342,10 @@ function collectRouteSchemas(
 export const openApiToZodTsCode = (
   openapi: Record<string, unknown>,
   customImportLines?: string[],
-  options?: { includeRoutes?: boolean },
+  options?: {
+    includeRoutes?: boolean;
+    unspecifiedAdditionalProperties?: UnspecifiedAdditionalProperties | undefined;
+  },
 ): string => {
   const components = (openapi as AnySchema)["components"] as
     | AnySchema
@@ -368,6 +371,9 @@ export const openApiToZodTsCode = (
   lines.push("type _AssertTrue<T extends true> = T;");
   lines.push("");
 
+  const conversionOptions = { unspecifiedAdditionalProperties: options?.unspecifiedAdditionalProperties };
+  const convertSchema = (schema: AnySchema): string => convertSchemaToZodString(schema, conversionOptions);
+
   // Create registry for schema deduplication
   const registry = createSchemaRegistry();
 
@@ -376,6 +382,7 @@ export const openApiToZodTsCode = (
   // Collect all type assertions to emit after all schemas
   const typeAssertions: string[] = [];
   const outputSchemaNames = new Set<string>();
+  const typeOptions = { ...conversionOptions, outputSchemaNames };
   const schemaBlocks: string[] = [];
   const routes = options?.includeRoutes ? parseOpenApiPaths(openapi) : [];
   const roots = [
@@ -386,7 +393,7 @@ export const openApiToZodTsCode = (
       ...Object.values(route.responses).filter((schema): schema is AnySchema => !!schema),
     ]),
   ];
-  const brands = collectBrands({ schemas, roots, toType: (schema) => schemaToTypeString(schema, { outputSchemaNames }) });
+  const brands = collectBrands({ schemas, roots, toType: (schema) => schemaToTypeString(schema, typeOptions) });
   for (const [name, baseType] of brands) {
     schemaBlocks.push(`export type ${name} = (${baseType}) & z.$brand<${JSON.stringify(name)}>;`);
   }
@@ -395,13 +402,13 @@ export const openApiToZodTsCode = (
   for (const name of sortedSchemaNames) {
     const schema = schemas[name];
     if (schema) {
-      const zodExpr = convertSchemaToZodString(schema);
+      const zodExpr = convertSchema(schema);
       const schemaName = `${name}Schema`;
       const typeName = name;
 
       // Generate interface (concrete type in .d.ts)
       if (!brands.has(typeName)) {
-        schemaBlocks.push(generateInterface(typeName, schema, { outputSchemaNames }));
+        schemaBlocks.push(generateInterface(typeName, schema, typeOptions));
       }
 
       // Generate schema with ZodType<T> annotation (simple type in .d.ts)
@@ -409,7 +416,7 @@ export const openApiToZodTsCode = (
       schemaBlocks.push("");
 
       // Add type assertion to verify interface matches schema
-      const assertedType = brands.has(typeName) ? schemaToTypeString(schema, { outputSchemaNames }) : typeName;
+      const assertedType = brands.has(typeName) ? schemaToTypeString(schema, typeOptions) : typeName;
       typeAssertions.push(`type _Assert${typeName} = _AssertTrue<_AssertEqual<${assertedType}, z.output<typeof ${schemaName}>>>;`);
 
       // Register component schemas so they can be referenced by route schemas
@@ -446,7 +453,7 @@ export const openApiToZodTsCode = (
       if (commonSchemas.length > 0) {
         lines.push("// Common Error Schemas (deduplicated)");
         for (const common of commonSchemas) {
-          const zodExpr = convertSchemaToZodString(common.schema);
+          const zodExpr = convertSchema(common.schema);
           lines.push(`export const ${common.name} = ${zodExpr};`);
           // Pre-register so route schemas reference this instead of duplicating
           preRegisterSchema(registry, common.name, common.fingerprint);
@@ -457,7 +464,7 @@ export const openApiToZodTsCode = (
       // Generate route schemas with deduplication
       const { declarations, schemaNameToCanonical } = generateRouteSchemas(
         routes,
-        convertSchemaToZodString,
+        convertSchema,
         registry,
       );
 

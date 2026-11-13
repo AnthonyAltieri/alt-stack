@@ -25,5 +25,5 @@ export type {
   RouteInfo,
   RouteSchemaNames,
 } from "./routes.js";
-export type { AnySchema, OpenAPIObjectSchema } from "./types/types.js";
+export type { AnySchema, OpenAPIObjectSchema, UnspecifiedAdditionalProperties } from "./types/types.js";
 

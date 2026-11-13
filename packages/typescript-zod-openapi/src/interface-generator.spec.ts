@@ -420,6 +420,27 @@ describe("generateInterface", () => {
 }`);
   });
 
+  it("should omit the index signature for unspecified additionalProperties when configured to strip", () => {
+    const strip = { unspecifiedAdditionalProperties: "strip" } as const;
+    const schema = {
+      type: "object",
+      properties: { id: { type: "string" } },
+      required: ["id"],
+    };
+
+    expect(generateInterface("User", schema, strip)).toBe(`export interface User {
+  id: string;
+}`);
+    expect(schemaToTypeString({ type: "array", items: schema }, strip)).toBe("Array<{ id: string }>");
+    expect(generateInterface("Open", { ...schema, additionalProperties: true }, strip)).toBe(`export interface Open {
+  id: string;
+  [key: string]: unknown;
+}`);
+    expect(generateInterface("Freeform", { type: "object" }, strip)).toBe(`export interface Freeform {
+  [key: string]: unknown;
+}`);
+  });
+
   it("should generate type alias for non-object schema", () => {
     const result = generateInterface("Status", {
       type: "string",
